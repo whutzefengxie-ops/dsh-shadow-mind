@@ -68,7 +68,11 @@ Review the completed task. If there is a concrete defect or missing requirement,
 
 只有包含至少一个持久化工具结果的已完成 root 轮次才会触发调度。在新会话中明确要求主 agent 读取一个仓库文件再分析。`/shadow status` 会显示等待调度数、活动运行数、累计准入运行数和最近结果。
 
-被接受的报告会成为 root Session 中持久化的用户消息并触发 follow-up。Web 会话在该回传消息的位置显示 Shadow 报告卡片，卡片位于被审查的 root 回复与对应 follow-up 之间。每个报告批次各有一张卡片，包含定义名称、报告正文、捕获序号和可跳转的 child Session，因此多轮 Shadow 审查仍按时间顺序展示。静默、无关、失败、取消或已陈旧的运行不会注入不完整文本。
+Shadow 进入调度后，被审查的 root 回复下方会立即出现运行占位卡片；卡片会明确提示此时发送新消息会取消本轮审查。完成后，同一位置原位更新为报告、静默、无关、中断或失败终态，多轮审查不会合并到会话末尾。报告正文复用 DSH 的 Markdown 渲染，支持 GFM、表格、代码块和 TeX，并保留官方的不安全内容过滤。
+
+被接受的报告会成为 root Session 中持久化的用户消息并触发 follow-up，但该 relay 只更新触发位置的既有卡片，不再生成尾部卡片。`silent`、`not_relevant`、`aborted` 和 `failed` 都有可见卡片，但不会注入主 agent，因此不会由展示状态形成 Shadow 循环。
+
+需要分析生产问题时，在对应定义中设置 `debug: true`。`$DSH_HOME/shadow-minds/logs/<shadow-id>.jsonl` 会按 run 记录准入、child 启动、取消请求、终态和报告投递，包含阶段、稳定原因码、取消来源与 provider stop reason。日志不记录 prompt、报告正文、工具参数、凭据、绝对路径或 stack；例如用户新消息取消为 `USER_MESSAGE_RECEIVED`，Shadow 超时为 `SHADOW_TIMEOUT`，无法归因给插件的 provider 中断为 `PROVIDER_ABORTED`。
 
 ## 安全与限制
 

@@ -58,11 +58,31 @@ Child 必须返回对象根结构：`status` 为 `not_relevant`、`silent` 或 `
 
 被接受的报告进入固定窗口的有序批次，并作为来源 `{ kind: 'shadow-report', form: 'relay' }` 的持久化 `user/message` 写入 root。来源记录每个 Shadow id、run id、child Session id 和捕获水位。运行中的 root 使用 `steer()`，空闲 root 使用 `followup()`；模型可见报告能够从 Session 日志重建。
 
-### 2.4 Web 设置与会话展示
+运行状态不写成仓库外自定义 Session 事件。当前 DSH 不提供为这类事件设置 `ignorable: true` 的公开写入接口，持久化未知事件会使未加载本插件的 Harness 拒绝恢复会话。插件改为通过只读 Remote 暴露按捕获水位分组的审查周期快照；报告仍由已知的 `user/message` 事件持久化，运行中、`silent`、`not_relevant`、取消和失败状态只用于 Web 展示和诊断，不进入主 agent 的模型历史。
+
+### 2.4 运行状态与调试日志
+
+每次准入运行按以下状态推进：
+
+```text
+scheduling -> running -> report | silent | not_relevant | aborted | failed
+```
+
+审查周期以触发它的 root `turn/end` 序号为 `capturedThroughSeq`。周期快照包含调度是否完成、每个 run 的 id、Shadow id 与名称、child Session id、阶段、终态、provider stop reason、稳定原因码和安全错误摘要。客户端在新周期出现时立即读取快照；仅当周期仍在调度或存在运行项时继续短轮询，终态后停止轮询。
+
+取消必须先在插件内记录结构化来源，再触发 AbortSignal。原因码至少区分新用户消息、用户终止 turn、暂停、root 释放、插件释放、Shadow 超时、headless drain 超时、headless maintenance 取消和无法归因的 provider abort。失败原因码至少区分轨迹或模型选择准备、subagent 启动、结果等待、dispose、结构化输出验证、报告验证和报告回传。阶段固定为 `prepare`、`start`、`run`、`dispose`、`validate` 或 `relay`。
+
+启用定义的 `debug` 后，每个 run 的 JSONL 至少记录 `run-admitted`、`child-started` 和 `run-finished`；收到取消时另记 `run-cancellation-requested`，报告回传另记成功或失败。记录包含 schema 版本、时间、root/run/child 标识、捕获水位、阶段、稳定原因码、取消发起者和 provider stop reason。日志不记录 prompt、轨迹、工具参数、报告正文、凭据或 stack；错误只保留长度受限且已过滤令牌和绝对路径的名称、错误码与消息摘要。日志写入失败不改变 Shadow 结果。
+
+### 2.5 Web 设置与会话展示
 
 “设置 → 插件 → Shadow Mind”通过 settings namespace 和生成的 Remote 管理全局设置、Markdown 定义和当前 root 状态。每项定义可配置启用、激活概率、模型过滤、child 模型、reasoning effort、超时、工具与提示词。
 
-插件通过 `conversation.chat.node` 把每条持久化 Shadow relay 投影为专属会话节点，并以 relay 的事件序号作为显示锚点。Web 会话用完整 Shadow 卡片替代同一消息的通用 Context 行；卡片位于被审查的 root 回复与对应 follow-up 之间，包含报告正文、child Session 跳转和捕获序号。每个 relay 独立投影，因此多轮审查不会合并到最后一条 root 回复。
+插件通过 `conversation.chat.node` 为每个正常完成的 root `turn/end` 建立候选审查节点，并以该事件序号作为固定显示锚点。没有进入 Shadow 调度的节点不渲染；一旦周期准入，节点立即显示运行占位卡片，并明确提示“此时发送新消息会取消本轮审查”。同一节点随后原位更新为报告、`silent`、`not_relevant`、取消或失败终态，因此多轮审查各自停留在实际发生的位置。
+
+持久化 Shadow relay 通过其 provenance 中的 `capturedThroughSeq` 更新对应审查节点，并隐藏 relay 自身的通用 Context 行。报告正文使用 DSH 的 `MarkdownText` 渲染 GFM、表格、代码块和 TeX；原始 HTML、相对链接和不安全协议继续由官方组件过滤。运行快照可先显示刚完成但尚在批处理窗口内的报告，relay 到达后以持久化内容为准。
+
+`report` 是唯一可以进入 batcher 并 relay 给主 agent 的终态。`silent`、`not_relevant`、`aborted` 和 `failed` 只更新卡片、状态和调试日志，不调用 `steer()` 或 `followup()`；Shadow relay 的来源类型也不匹配“真实用户输入”取消监听。两项约束共同保证状态卡片不会再次触发主 agent 或 Shadow 调度。
 
 `/shadow status|pause|resume|toggle` 只控制当前 root。状态包含活动数、待调度数、累计准入运行数和最近终态；活动数恢复为零后，最近结果仍可证明本进程内发生过运行。
 
@@ -84,4 +104,6 @@ DSH 默认不公开工具参数和结果预览；Pi 会保留工具参数并为�
 
 安装层验收要求 `dsh --profile web --dump-config` 同时出现 `shadow-mind-runtime` 和 `tool-shadow-mind`，客户端启动清单出现根包，Web 启动无 Typert、Remote 或客户端注入错误。
 
-功能验收使用新 Session，把 heartbeat 与定义激活概率都设为 `1`，启用匹配全部模型的审查定义，再让 root 明确使用至少一个工具。`/shadow status` 应先后显示准入运行和最近终态；当终态为 `report` 时，Session 日志必须包含带来源信息的持久化 relay，root 自动完成 follow-up，报告卡片显示在 relay 的会话位置并可跳转 child Session。`not_relevant`、`silent`、取消和失败路径不得生成伪报告。
+功能验收使用新 Session，把 heartbeat 与定义激活概率都设为 `1`，启用匹配全部模型的审查定义，再让 root 明确使用至少一个工具。`/shadow status` 应先后显示准入运行和最近终态；运行开始后，被审查回复下方应立即出现占位卡片和新消息取消提示，并在完成后保持锚点不变。
+
+`report` 验收要求 Session 日志包含带来源信息的持久化 relay，root 自动完成 follow-up，卡片正文正确渲染标题、列表、表格和代码块，并可跳转 child Session。`silent` 必须显示明确终态卡片且 Session 中没有 Shadow relay；`not_relevant`、取消和失败同样不得生成伪报告。新用户消息取消用例必须显示 `USER_MESSAGE_RECEIVED`，Shadow 超时必须显示 `SHADOW_TIMEOUT`，调试 JSONL 能从 `run-admitted` 还原到 `run-finished` 且不包含提示词、报告、绝对路径、stack 或凭据。

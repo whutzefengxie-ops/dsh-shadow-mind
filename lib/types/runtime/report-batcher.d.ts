@@ -38,7 +38,7 @@ export declare class ReportBatcher {
      * Add one accepted report in acceptance order.
      * @param report Accepted report to buffer.
      */
-    add(report: AcceptedShadowReport): void;
+    add(report: AcceptedShadowReport): boolean;
     /** Resolve after every admitted batch delivery settles. */
     drain(): Promise<void>;
     /** Deliver the current timer-backed batch immediately without stopping later admission. */

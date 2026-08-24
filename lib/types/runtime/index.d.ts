@@ -8,7 +8,7 @@ import { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 import { ShadowRegistry } from './registry.ts';
-import type { CreateShadowDefinition, ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, UpdateShadowDefinition } from './types.ts';
+import type { CreateShadowDefinition, ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowReviewCycle, UpdateShadowDefinition } from './types.ts';
 export { Config } from './config.ts';
 export * from './types.ts';
 export * from './protocol.ts';
@@ -116,6 +116,12 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
      */
     status(agent: Agent): ShadowMindStatus;
     /**
+     * Return model-invisible review cycles for conversation cards.
+     * @param agent Root agent whose turns own the cycles.
+     * @returns Current process-lifetime lifecycle snapshots in trigger order.
+     */
+    reviewCycles(agent: Agent): readonly ShadowReviewCycle[];
+    /**
      * Pause scheduling for a root and cancel its admitted work.
      * @param agent Root agent to pause.
      * @returns Status after the transition.
@@ -141,9 +147,11 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     private launch;
     /** Execute, dispose, validate, and optionally accept one Shadow result. */
     private runShadow;
-    /** Publish the terminal summary retained by status after active work disappears. */
-    private recordOutcome;
-    /** Append an opt-in debug record without letting diagnostics fail a run. */
+    /** Publish one terminal view and its redacted debug record. */
+    private finishRun;
+    /** Refresh the compact status record from one terminal run view. */
+    private updateLastRun;
+    /** Append an opt-in lifecycle record without model inputs, report content, paths, or stacks. */
     private debug;
     /** Get or create root-owned mutable state. */
     private owner;
@@ -153,8 +161,18 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     private startHeadlessMaintenance;
     /** Await every schedule, active lifecycle, and report batch for one owner. */
     private drainOwner;
+    /** Record and request cancellation for one active run exactly once. */
+    private requestCancellation;
     /** Cancel admitted work and advance the stale-result epoch. */
     private cancelOwner;
+    /** Find one retained run record by its opaque id. */
+    private findRun;
+    /** Replace a not-yet-relayed report with its cancellation outcome. */
+    private discardPendingReport;
+    /** Apply cancellation to one retained pending report and record the delivery decision. */
+    private discardPendingEntry;
+    /** Surface an admitted report that could not enter the root inbox. */
+    private failReportDelivery;
     /** Drain and remove one owner state exactly once. */
     private releaseOwner;
     /** Whether an asynchronous run may still affect this exact root. */

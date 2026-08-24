@@ -10,6 +10,7 @@ const CLIENT_EXTERNALS = new Set([
   'react',
   'react/jsx-runtime',
   '@deepseek-ai/dsh-client-runtime/client',
+  '@deepseek-ai/dsh-client-ui-primitives',
 ])
 const CSS_VIRTUAL_PREFIX = '\0shadow-mind-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'

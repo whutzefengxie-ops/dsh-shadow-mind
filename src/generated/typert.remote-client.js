@@ -67,7 +67,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_pause_result$schema = z.ob
   'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
   'capturedThroughSeq': z.number().readonly(),
   'finishedAt': z.string().readonly(),
-  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("discarded")]).readonly(),
+  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("aborted")]).readonly(),
 }).readonly().optional(),
 })
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_resume_parameter_0$schema = z.intersection(z.string(), z.unknown())
@@ -86,7 +86,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_resume_result$schema = z.o
   'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
   'capturedThroughSeq': z.number().readonly(),
   'finishedAt': z.string().readonly(),
-  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("discarded")]).readonly(),
+  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("aborted")]).readonly(),
 }).readonly().optional(),
 })
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_parameter_0$schema = z.string()
@@ -121,7 +121,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_status_result$schema = z.o
   'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
   'capturedThroughSeq': z.number().readonly(),
   'finishedAt': z.string().readonly(),
-  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("discarded")]).readonly(),
+  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("aborted")]).readonly(),
 }).readonly().optional(),
 })
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_toggle_parameter_0$schema = z.intersection(z.string(), z.unknown())
@@ -140,7 +140,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_toggle_result$schema = z.o
   'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
   'capturedThroughSeq': z.number().readonly(),
   'finishedAt': z.string().readonly(),
-  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("discarded")]).readonly(),
+  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("aborted")]).readonly(),
 }).readonly().optional(),
 })
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_update_parameter_0$schema = z.object({
@@ -170,6 +170,106 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_update_result$schema = z.o
   'prompt': z.string().readonly(),
   'sourcePath': z.string().readonly(),
 })
+const _shadowMindStage$schema = z.enum(['prepare', 'start', 'run', 'dispose', 'validate', 'relay'])
+const _shadowMindReason$schema = z.enum([
+  'USER_MESSAGE_RECEIVED',
+  'USER_TURN_ABORTED',
+  'SHADOW_PAUSED',
+  'ROOT_DISPOSED',
+  'PLUGIN_DISPOSED',
+  'SHADOW_TIMEOUT',
+  'HEADLESS_DRAIN_TIMEOUT',
+  'HEADLESS_MAINTENANCE_ABORTED',
+  'STALE_EPOCH',
+  'PROVIDER_ABORTED',
+  'SCHEDULING_FAILED',
+  'TRAJECTORY_BUILD_FAILED',
+  'MODEL_SELECTION_INVALID',
+  'SUBAGENT_START_FAILED',
+  'SUBAGENT_RESULT_FAILED',
+  'SUBAGENT_DISPOSE_FAILED',
+  'PROVIDER_ERROR',
+  'PROVIDER_MAX_TOKENS',
+  'PROVIDER_REFUSAL',
+  'PROVIDER_STOPPED',
+  'INVALID_STRUCTURED_OUTPUT',
+  'INVALID_REPORT',
+  'REPORT_DELIVERY_FAILED',
+  'UNKNOWN_FAILURE',
+])
+const _shadowMindCancellationSource$schema = z.enum([
+  'user-input',
+  'user-command',
+  'root-lifecycle',
+  'plugin-lifecycle',
+  'timeout',
+  'headless',
+  'provider',
+  'runtime',
+])
+const _shadowMindSafeError$schema = z.object({
+  'name': z.string().readonly(),
+  'message': z.string().readonly(),
+  'code': z.string().readonly().optional(),
+  'causes': z.array(z.lazy(() => _shadowMindSafeError$schema)).readonly().optional(),
+})
+const _shadowMindRun$schema = z.object({
+  'runId': z.string().readonly(),
+  'shadowId': z.string().readonly(),
+  'shadowName': z.string().readonly(),
+  'capturedThroughSeq': z.number().readonly(),
+  'phase': z.enum(['running', 'report', 'silent', 'not_relevant', 'aborted', 'failed']).readonly(),
+  'stage': _shadowMindStage$schema.readonly(),
+  'startedAt': z.string().readonly(),
+  'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
+  'finishedAt': z.string().readonly().optional(),
+  'reasonCode': _shadowMindReason$schema.readonly().optional(),
+  'cancellationSource': _shadowMindCancellationSource$schema.readonly().optional(),
+  'providerStopReason': z.string().readonly().optional(),
+  'error': _shadowMindSafeError$schema.readonly().optional(),
+  'content': z.string().readonly().optional(),
+  'relayed': z.boolean().readonly().optional(),
+})
+const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_cycles_parameter_0$schema = z.intersection(z.string(), z.unknown())
+const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_cycles_result$schema = z.array(z.object({
+  'capturedThroughSeq': z.number().readonly(),
+  'scheduling': z.boolean().readonly(),
+  'runs': z.array(_shadowMindRun$schema).readonly(),
+  'failure': z.object({
+    'reasonCode': z.literal('SCHEDULING_FAILED').readonly(),
+    'stage': z.literal('prepare').readonly(),
+    'error': _shadowMindSafeError$schema.readonly(),
+  }).readonly().optional(),
+})).readonly()
+const _shadowMindStatusV2$schema = z.object({
+  'paused': z.boolean().readonly(),
+  'active': z.array(z.object({
+    'runId': z.string().readonly(),
+    'shadowId': z.string().readonly(),
+    'shadowName': z.string().readonly(),
+    'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
+    'capturedThroughSeq': z.number().readonly(),
+    'stage': _shadowMindStage$schema.readonly(),
+  })).readonly(),
+  'pendingSchedules': z.number().readonly(),
+  'epoch': z.number().readonly(),
+  'totalRuns': z.number().readonly(),
+  'lastRun': z.object({
+    'runId': z.string().readonly(),
+    'shadowId': z.string().readonly(),
+    'shadowName': z.string().readonly(),
+    'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
+    'capturedThroughSeq': z.number().readonly(),
+    'finishedAt': z.string().readonly(),
+    'outcome': z.enum(['report', 'silent', 'not_relevant', 'aborted', 'failed']).readonly(),
+    'stage': _shadowMindStage$schema.readonly(),
+    'reasonCode': _shadowMindReason$schema.readonly().optional(),
+    'cancellationSource': _shadowMindCancellationSource$schema.readonly().optional(),
+    'providerStopReason': z.string().readonly().optional(),
+    'error': _shadowMindSafeError$schema.readonly().optional(),
+  }).readonly().optional(),
+})
+
 
 export const TYPERT_REMOTE = {
   package: '@whutzefengxie-ops/dsh-shadow-mind',
@@ -189,6 +289,37 @@ export const TYPERT_REMOTE = {
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_catalog_result$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":254,"column":9},
+    },
+    {
+      id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/cycles',
+      service: 'shadowMind',
+      namespace: 'shadowMind',
+      method: 'cycles',
+      implementation: 'reviewCycles',
+      invocation: { kind: 'direct' },
+      scope: {
+        context: 'agent',
+        wire: 'agentId',
+      },
+      parameters: [
+        {
+          name: 'agent',
+          wire: 'agentId',
+          source: 'lookup',
+          lookup: 'agent',
+          codec: {
+            mode: 'strict',
+            typeSymbol: '@deepseek-ai/dsh-session/types#SessionId',
+            schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_cycles_parameter_0$schema,
+          },
+        },
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowReviewCycle[]',
+        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_cycles_result$schema,
+      },
+      sourceLocation: {"file":"src/runtime/index.ts","line":421,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/create',
@@ -268,7 +399,7 @@ export const TYPERT_REMOTE = {
       result: {
         mode: 'strict',
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_pause_result$schema,
+        schema: _shadowMindStatusV2$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":384,"column":3},
     },
@@ -298,7 +429,7 @@ export const TYPERT_REMOTE = {
       result: {
         mode: 'strict',
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_resume_result$schema,
+        schema: _shadowMindStatusV2$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":400,"column":3},
     },
@@ -364,7 +495,7 @@ export const TYPERT_REMOTE = {
       result: {
         mode: 'strict',
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_status_result$schema,
+        schema: _shadowMindStatusV2$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":358,"column":3},
     },
@@ -394,7 +525,7 @@ export const TYPERT_REMOTE = {
       result: {
         mode: 'strict',
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_toggle_result$schema,
+        schema: _shadowMindStatusV2$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":412,"column":3},
     },
