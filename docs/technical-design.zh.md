@@ -62,7 +62,7 @@ Child 必须返回对象根结构：`status` 为 `not_relevant`、`silent` 或 `
 
 “设置 → 插件 → Shadow Mind”通过 settings namespace 和生成的 Remote 管理全局设置、Markdown 定义和当前 root 状态。每项定义可配置启用、激活概率、模型过滤、child 模型、reasoning effort、超时、工具与提示词。
 
-当前 upstream master 没有独立插件可用的 `conversation.chat.contextview` 扩展点，因此报告正文仍由通用 Context 行持久化显示；插件同时使用官方 `conversation.chat.turnTail`，在消费报告的 root follow-up 下显示完整 Shadow 卡片、child Session 跳转、捕获序号和“由 Shadow Mind 报告触发”标记。这让用户能够区分“Shadow 运行过”和“报告实际影响了哪次主回复”。
+插件通过 `conversation.chat.node` 把每条持久化 Shadow relay 投影为专属会话节点，并以 relay 的事件序号作为显示锚点。Web 会话用完整 Shadow 卡片替代同一消息的通用 Context 行；卡片位于被审查的 root 回复与对应 follow-up 之间，包含报告正文、child Session 跳转和捕获序号。每个 relay 独立投影，因此多轮审查不会合并到最后一条 root 回复。
 
 `/shadow status|pause|resume|toggle` 只控制当前 root。状态包含活动数、待调度数、累计准入运行数和最近终态；活动数恢复为零后，最近结果仍可证明本进程内发生过运行。
 
@@ -84,4 +84,4 @@ DSH 默认不公开工具参数和结果预览；Pi 会保留工具参数并为�
 
 安装层验收要求 `dsh --profile web --dump-config` 同时出现 `shadow-mind-runtime` 和 `tool-shadow-mind`，客户端启动清单出现根包，Web 启动无 Typert、Remote 或客户端注入错误。
 
-功能验收使用新 Session，把 heartbeat 与定义激活概率都设为 `1`，启用匹配全部模型的审查定义，再让 root 明确使用至少一个工具。`/shadow status` 应先后显示准入运行和最近终态；当终态为 `report` 时，Session 日志必须包含带来源信息的持久化 relay，root 自动完成 follow-up，回复下方显示报告卡片并可跳转 child Session。`not_relevant`、`silent`、取消和失败路径不得生成伪报告。
+功能验收使用新 Session，把 heartbeat 与定义激活概率都设为 `1`，启用匹配全部模型的审查定义，再让 root 明确使用至少一个工具。`/shadow status` 应先后显示准入运行和最近终态；当终态为 `report` 时，Session 日志必须包含带来源信息的持久化 relay，root 自动完成 follow-up，报告卡片显示在 relay 的会话位置并可跳转 child Session。`not_relevant`、`silent`、取消和失败路径不得生成伪报告。

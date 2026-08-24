@@ -68,7 +68,7 @@ Review the completed task. If there is a concrete defect or missing requirement,
 
 只有包含至少一个持久化工具结果的已完成 root 轮次才会触发调度。在新会话中明确要求主 agent 读取一个仓库文件再分析。`/shadow status` 会显示等待调度数、活动运行数、累计准入运行数和最近结果。
 
-被接受的报告会成为 root Session 中持久化的用户消息并触发 follow-up。结束该 follow-up 的 root 回复下方会显示 Shadow 报告卡片，包含定义名称、报告正文、捕获序号和可跳转的 child Session。静默、无关、失败、取消或已陈旧的运行不会注入不完整文本。
+被接受的报告会成为 root Session 中持久化的用户消息并触发 follow-up。Web 会话在该回传消息的位置显示 Shadow 报告卡片，卡片位于被审查的 root 回复与对应 follow-up 之间。每个报告批次各有一张卡片，包含定义名称、报告正文、捕获序号和可跳转的 child Session，因此多轮 Shadow 审查仍按时间顺序展示。静默、无关、失败、取消或已陈旧的运行不会注入不完整文本。
 
 ## 安全与限制
 

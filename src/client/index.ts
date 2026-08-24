@@ -20,16 +20,16 @@ import {
   type ShadowMindSettingsTabInjected,
 } from './ShadowMindSettingsTab.tsx'
 import {
-  ShadowTriggeredTail, type ShadowTriggeredTailInjected,
-} from './ShadowTriggeredTail.tsx'
+  ShadowReportCard, type ShadowReportCardInjected,
+} from './ShadowReportCard.tsx'
 import {
-  selectShadowTriggered, shadowReportStepDefinition,
+  shadowReportDefinition,
 } from './shadow-report-conversation.ts'
 import { en, zh, type ShadowMindLocaleKey } from './locales.ts'
 
 export type { ShadowMindSettingsTabInjected, ShadowMindSettingsTabProps } from './ShadowMindSettingsTab.tsx'
-export type { ShadowTriggeredTailProps } from './ShadowTriggeredTail.tsx'
-export type { ShadowMindReportStepData } from './shadow-report-conversation.ts'
+export type { ShadowReportCardProps } from './ShadowReportCard.tsx'
+export type { ShadowMindReportChatData } from './shadow-report-projection.ts'
 export type { ShadowMindLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -102,15 +102,15 @@ export async function apply(ctx: ClientContext): Promise<void> {
   const t = ctx.locale.bind(NS)
   const settings = ctx.settingsScope.bind<ShadowMindSettings>({ namespace: SETTINGS_NAMESPACE })
 
-  ctx.conversationEvents.register(shadowReportStepDefinition)
-  ctx.slots.inject('conversation.chat.turnTail', () => ctx.slots.register({
-    name: 'conversation.chat.turnTail',
-    select: selectShadowTriggered,
+  ctx.conversationEvents.register(shadowReportDefinition)
+  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
+    name: 'conversation.chat.node',
+    key: 'shadow-mind-report',
     locale: NS,
-    inject: (): ShadowTriggeredTailInjected => ({
+    inject: (): ShadowReportCardInjected => ({
       openSession: sessionId => { ctx.sessions.open(sessionId) },
     }),
-  }, ShadowTriggeredTail))
+  }, ShadowReportCard))
 
   ctx.on('command/executed', (sessionId, name, result) => {
     if (name !== 'shadow' || result.text === undefined) return

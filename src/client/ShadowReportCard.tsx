@@ -1,33 +1,32 @@
-import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ShadowMindReportStepData } from './shadow-report-conversation.ts'
 import type { NS } from './index.ts'
-import css from './ShadowTriggeredTail.module.css'
+import css from './ShadowReportCard.module.css'
 
-/** Selector-matched Shadow report trigger marker props. */
-export type ShadowTriggeredTailProps = {
-  matched: ShadowMindReportStepData
-} & PropsLocale<typeof NS> & InjectFace<ShadowTriggeredTailInjected>
+/** Props for one Shadow report Chat row. */
+export type ShadowReportCardProps = PropsRuntime<'conversation.chat.node', 'shadow-mind-report'>
+  & PropsLocale<typeof NS> & InjectFace<ShadowReportCardInjected>
 
-/** Browser actions injected into the report tail. */
-export interface ShadowTriggeredTailInjected {
+/** Browser actions injected into the report card. */
+export interface ShadowReportCardInjected {
   readonly openSession: (sessionId: SessionId) => void
 }
 
-/** Mark a completed root response as caused by durable Shadow report input. */
-export function ShadowTriggeredTail({ matched, openSession, t }: ShadowTriggeredTailProps) {
-  const countKey = matched.reports.length === 1 ? 'reportCountOne' : 'reportCountOther'
+/** Display accepted Shadow reports where they entered the root conversation. */
+export function ShadowReportCard({ node, openSession, t }: ShadowReportCardProps) {
+  const data = node.data
+  const countKey = data.reports.length === 1 ? 'reportCountOne' : 'reportCountOther'
   return (
     <section className={css.card} data-shadow-report-card>
       <header className={css.header}>
         <span className={css.mark} aria-hidden>S</span>
         <div>
           <strong>{t('reportCardTitle')}</strong>
-          <span>{t(countKey, { count: matched.reports.length })}</span>
+          <span>{t(countKey, { count: data.reports.length })}</span>
         </div>
       </header>
       <div className={css.reports}>
-        {matched.reports.map(report => (
+        {data.reports.map(report => (
           <article className={css.report} key={report.runId}>
             <div className={css.reportHeader}>
               <strong>{report.name}</strong>
@@ -48,10 +47,10 @@ export function ShadowTriggeredTail({ matched, openSession, t }: ShadowTriggered
           </article>
         ))}
       </div>
-      <footer className={css.root} data-shadow-triggered>
+      <footer className={css.relay} data-shadow-relayed>
         <span className={css.dot} aria-hidden />
-        <span>{t('triggeredReply')}</span>
-        <span className={css.count}>{t(countKey, { count: matched.reports.length })}</span>
+        <span>{t('relayedToRoot')}</span>
+        <span className={css.count}>{t(countKey, { count: data.reports.length })}</span>
       </footer>
     </section>
   )
