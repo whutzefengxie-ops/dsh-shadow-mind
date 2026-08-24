@@ -4,6 +4,10 @@
 
 这是一个独立版本化的 DeepSeek Harness 组合包。符合条件的 root agent 工具轮次结束后，它会启动全新的后台 Shadow agent，校验结构化发现，把被接受的报告持久化转发给 root，并在 Web 界面中提供配置和执行证据。
 
+## 思路来源
+
+本项目的核心设计思路来源于 [pi-shadow-mind](https://github.com/liuzhengdongfortest/pi-shadow-mind.git)。本仓库是面向 DeepSeek Harness 插件体系的独立实现，并非该项目的官方分支；运行时、Session、subagent、权限、持久化和 Web 界面均基于 DeepSeek Harness 的扩展机制实现。
+
 ## 安装
 
 插件要求 DeepSeek Harness `0.1.1-rc.2` 或兼容的 master 构建。从 GitHub 安装时应固定已经审查的 commit：
