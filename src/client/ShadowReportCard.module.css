@@ -1,9 +1,13 @@
 .card {
   overflow: hidden;
-  margin-top: 14px;
   border: 1px solid color-mix(in srgb, #7c3aed 28%, var(--dsw-alias-border-l3, #d1d5db));
   border-radius: 12px;
   background: color-mix(in srgb, #7c3aed 4%, var(--dsw-alias-bg-base, #fff));
+}
+
+/* The dedicated report row owns presentation of its immediately preceding generic Context projection. */
+:global([data-chat-flow-kind='context']:has(+ [data-chat-flow-kind='shadow-mind-report'])) {
+  display: none;
 }
 
 .header {
@@ -118,7 +122,7 @@
   outline-offset: 2px;
 }
 
-.root {
+.relay {
   display: flex;
   align-items: center;
   gap: 7px;

@@ -68,7 +68,7 @@ Set the global heartbeat probability to `1` for deterministic acceptance. If `ru
 
 Shadow scheduling requires a completed root turn containing at least one durable tool result. In a new session, ask the root agent to read a repository file and analyze it. `/shadow status` reports pending schedules, active runs, total admitted runs, and the last outcome.
 
-An accepted report becomes a durable root user message and triggers a follow-up. The closing root response displays a Shadow report card with the definition, report text, captured sequence, and child Session link. Silent, not-relevant, failed, cancelled, and stale runs do not inject partial text.
+An accepted report becomes a durable root user message and triggers a follow-up. The Web transcript renders a Shadow report card at that relay message, between the reviewed root response and the resulting follow-up. Each batch has its own card with the definition, report text, captured sequence, and child Session link, so repeated Shadow reviews remain in chronological order. Silent, not-relevant, failed, cancelled, and stale runs do not inject partial text.
 
 ## Security and limitations
 
