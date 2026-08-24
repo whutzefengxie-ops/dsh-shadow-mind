@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2024"],
+    "declaration": false,
+    "sourceMap": true,
+    "outDir": ".build",
+    "rootDir": "src"
+  },
+  "include": [
+    "src/index.ts",
+    "src/runtime/**/*.ts",
+    "src/tool/**/*.ts"
+  ]
+}
