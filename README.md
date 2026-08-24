@@ -4,6 +4,10 @@
 
 An independently versioned DeepSeek Harness bundle that starts fresh background Shadow agents after eligible tool-using root turns, validates their structured findings, relays accepted reports into the root session, and exposes configuration and evidence in the Web UI.
 
+## Inspiration
+
+The core design idea for this project comes from [pi-shadow-mind](https://github.com/liuzhengdongfortest/pi-shadow-mind.git). This repository is an independent implementation for the DeepSeek Harness plugin system, not an official fork of that project. Its runtime, Sessions, subagents, permissions, persistence, and Web UI use DeepSeek Harness extension mechanisms.
+
 ## Install
 
 The plugin requires DeepSeek Harness `0.1.1-rc.2` or a compatible master build. Pin a reviewed commit when installing from GitHub:
