@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "declaration": true,
+    "declarationMap": false,
+    "emitDeclarationOnly": true,
+    "outDir": "lib/types",
+    "rootDir": "src"
+  },
+  "include": [
+    "src/index.ts",
+    "src/runtime/**/*.ts",
+    "src/tool/**/*.ts"
+  ]
+}

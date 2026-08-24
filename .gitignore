@@ -1,0 +1,34 @@
+# Dependencies and test/build scratch
+node_modules/
+.build/
+coverage/
+.vitest/
+.playwright-mcp/
+*.tsbuildinfo
+
+# Credentials and machine-local configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Harness state, sessions, and acceptance artifacts
+.dsh/
+.acceptance/
+shadow-minds/logs/
+sessions/
+*.jsonl
+*.zstd
+
+# Local logs and operating-system/editor files
+*.log
+logs/
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# lib/ is intentionally committed for build-script-free GitHub installation.

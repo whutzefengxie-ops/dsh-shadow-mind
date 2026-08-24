@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rewriteRelativeImportExtensions": false,
+    "types": ["node", "react"]
+  },
+  "include": [
+    "src/client/**/*.ts",
+    "src/client/**/*.tsx",
+    "src/generated/typert.remote-client.js",
+    "src/css-modules.d.ts",
+    "src/runtime/types.ts",
+    "src/runtime/protocol.ts"
+  ]
+}

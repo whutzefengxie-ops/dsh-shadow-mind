@@ -1,0 +1,8 @@
+# Installable Shadow Mind layer for DeepSeek Harness profiles.
+
+- insert:
+    - id: shadow-mind-runtime
+      name: '@whutzefengxie-ops/dsh-shadow-mind'
+
+    - id: tool-shadow-mind
+      name: '@whutzefengxie-ops/dsh-shadow-mind/tool'
