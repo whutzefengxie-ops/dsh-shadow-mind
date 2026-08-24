@@ -10,21 +10,17 @@ import {
 } from '../src/client/shadow-report-projection.ts'
 import type { ShadowReportMessageSource } from '../src/runtime/protocol.ts'
 
-function source(runId: string, capturedThroughSeq: number): ShadowReportMessageSource {
-  return {
+function context(seq: number, messageId: string, runId: string) {
+  const reportSource: ShadowReportMessageSource = {
     kind: 'shadow-report',
     form: 'relay',
     reports: [{
       shadowId: 'reviewer',
       runId,
       childSessionId: `child-${runId}` as SessionId,
-      capturedThroughSeq,
+      capturedThroughSeq: seq - 1,
     }],
   }
-}
-
-function context(seq: number, messageId: string, runId: string) {
-  const reportSource = source(runId, seq - 1)
   const content = [{
     type: 'text' as const,
     text: `Background Shadow reports follow.\n\n### Reviewer (reviewer)\nFinding from ${runId}.`,

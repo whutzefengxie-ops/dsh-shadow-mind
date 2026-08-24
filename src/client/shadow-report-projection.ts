@@ -37,8 +37,12 @@ function escapeRegExp(value: string): string {
 }
 
 function modelText(content: ContextMessageNode['content']): string | null {
-  if (content.some(block => block.type !== 'text')) return null
-  return content.map(block => block.type === 'text' ? block.text : '').join('')
+  let result = ''
+  for (const block of content) {
+    if (block.type !== 'text') return null
+    result += block.text
+  }
+  return result
 }
 
 /**
@@ -65,17 +69,19 @@ export function projectShadowReport(
     markers.push({ name: match[1].trim(), markerStart: match.index, bodyStart: pattern.lastIndex })
     cursor = pattern.lastIndex
   }
-  const reports = source.reports.map((report, index) => {
-    const marker = markers[index]
-    if (marker === undefined) throw new Error('Shadow report marker projection lost ordering')
-    const next = markers[index + 1]
-    return {
-      ...report,
-      name: marker.name,
-      content: text.slice(marker.bodyStart, next?.markerStart ?? text.length).trim(),
-    }
-  })
-  return { reportSeq, reports }
+  return {
+    reportSeq,
+    reports: source.reports.map((report, index) => {
+      const marker = markers[index]
+      if (marker === undefined) throw new Error('Shadow report marker projection lost ordering')
+      const next = markers[index + 1]
+      return {
+        ...report,
+        name: marker.name,
+        content: text.slice(marker.bodyStart, next?.markerStart ?? text.length).trim(),
+      }
+    }),
+  }
 }
 
 /**
