@@ -6,11 +6,13 @@ import type {
   ShadowDefinition,
   ShadowDefinitionInput,
   ShadowMindStatus,
+  ShadowReviewCycle,
 } from '../runtime/types.ts'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespace$736861646f774D696e64 {
     catalog: () => Promise<RemoteResult<ShadowAdministrationSnapshot>>
+    cycles: (agentId: SessionId) => Promise<RemoteResult<readonly ShadowReviewCycle[]>>
     create: (input: ShadowDefinitionInput) => Promise<RemoteResult<ShadowDefinition>>
     delete: (id: string) => Promise<RemoteResult<void>>
     pause: (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
@@ -23,6 +25,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
 
   interface TypertRemoteMap {
     'shadowMind/catalog': () => Promise<RemoteResult<ShadowAdministrationSnapshot>>
+    'shadowMind/cycles': (agentId: SessionId) => Promise<RemoteResult<readonly ShadowReviewCycle[]>>
     'shadowMind/create': (input: ShadowDefinitionInput) => Promise<RemoteResult<ShadowDefinition>>
     'shadowMind/delete': (id: string) => Promise<RemoteResult<void>>
     'shadowMind/pause': (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
@@ -38,6 +41,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
   }
 
   interface TypertRemoteScopeMap {
+    'agent:shadowMind/cycles': () => Promise<RemoteResult<readonly ShadowReviewCycle[]>>
     'agent:shadowMind/pause': () => Promise<RemoteResult<ShadowMindStatus>>
     'agent:shadowMind/resume': () => Promise<RemoteResult<ShadowMindStatus>>
     'agent:shadowMind/status': () => Promise<RemoteResult<ShadowMindStatus>>

@@ -67,7 +67,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_pause_result$schema = z.ob
   'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
   'capturedThroughSeq': z.number().readonly(),
   'finishedAt': z.string().readonly(),
-  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("discarded")]).readonly(),
+  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("aborted")]).readonly(),
 }).readonly().optional(),
 })
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_resume_parameter_0$schema = z.intersection(z.string(), z.unknown())
@@ -86,7 +86,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_resume_result$schema = z.o
   'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
   'capturedThroughSeq': z.number().readonly(),
   'finishedAt': z.string().readonly(),
-  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("discarded")]).readonly(),
+  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("aborted")]).readonly(),
 }).readonly().optional(),
 })
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_parameter_0$schema = z.string()
@@ -121,7 +121,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_status_result$schema = z.o
   'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
   'capturedThroughSeq': z.number().readonly(),
   'finishedAt': z.string().readonly(),
-  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("discarded")]).readonly(),
+  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("aborted")]).readonly(),
 }).readonly().optional(),
 })
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_toggle_parameter_0$schema = z.intersection(z.string(), z.unknown())
@@ -140,7 +140,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_toggle_result$schema = z.o
   'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
   'capturedThroughSeq': z.number().readonly(),
   'finishedAt': z.string().readonly(),
-  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("discarded")]).readonly(),
+  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("aborted")]).readonly(),
 }).readonly().optional(),
 })
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_update_parameter_0$schema = z.object({
@@ -170,6 +170,106 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_update_result$schema = z.o
   'prompt': z.string().readonly(),
   'sourcePath': z.string().readonly(),
 })
+const _shadowMindStage$schema = z.enum(['prepare', 'start', 'run', 'dispose', 'validate', 'relay'])
+const _shadowMindReason$schema = z.enum([
+  'USER_MESSAGE_RECEIVED',
+  'USER_TURN_ABORTED',
+  'SHADOW_PAUSED',
+  'ROOT_DISPOSED',
+  'PLUGIN_DISPOSED',
+  'SHADOW_TIMEOUT',
+  'HEADLESS_DRAIN_TIMEOUT',
+  'HEADLESS_MAINTENANCE_ABORTED',
+  'STALE_EPOCH',
+  'PROVIDER_ABORTED',
+  'SCHEDULING_FAILED',
+  'TRAJECTORY_BUILD_FAILED',
+  'MODEL_SELECTION_INVALID',
+  'SUBAGENT_START_FAILED',
+  'SUBAGENT_RESULT_FAILED',
+  'SUBAGENT_DISPOSE_FAILED',
+  'PROVIDER_ERROR',
+  'PROVIDER_MAX_TOKENS',
+  'PROVIDER_REFUSAL',
+  'PROVIDER_STOPPED',
+  'INVALID_STRUCTURED_OUTPUT',
+  'INVALID_REPORT',
+  'REPORT_DELIVERY_FAILED',
+  'UNKNOWN_FAILURE',
+])
+const _shadowMindCancellationSource$schema = z.enum([
+  'user-input',
+  'user-command',
+  'root-lifecycle',
+  'plugin-lifecycle',
+  'timeout',
+  'headless',
+  'provider',
+  'runtime',
+])
+const _shadowMindSafeError$schema = z.object({
+  'name': z.string().readonly(),
+  'message': z.string().readonly(),
+  'code': z.string().readonly().optional(),
+  'causes': z.array(z.lazy(() => _shadowMindSafeError$schema)).readonly().optional(),
+})
+const _shadowMindRun$schema = z.object({
+  'runId': z.string().readonly(),
+  'shadowId': z.string().readonly(),
+  'shadowName': z.string().readonly(),
+  'capturedThroughSeq': z.number().readonly(),
+  'phase': z.enum(['running', 'report', 'silent', 'not_relevant', 'aborted', 'failed']).readonly(),
+  'stage': _shadowMindStage$schema.readonly(),
+  'startedAt': z.string().readonly(),
+  'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
+  'finishedAt': z.string().readonly().optional(),
+  'reasonCode': _shadowMindReason$schema.readonly().optional(),
+  'cancellationSource': _shadowMindCancellationSource$schema.readonly().optional(),
+  'providerStopReason': z.string().readonly().optional(),
+  'error': _shadowMindSafeError$schema.readonly().optional(),
+  'content': z.string().readonly().optional(),
+  'relayed': z.boolean().readonly().optional(),
+})
+const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_cycles_parameter_0$schema = z.intersection(z.string(), z.unknown())
+const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_cycles_result$schema = z.array(z.object({
+  'capturedThroughSeq': z.number().readonly(),
+  'scheduling': z.boolean().readonly(),
+  'runs': z.array(_shadowMindRun$schema).readonly(),
+  'failure': z.object({
+    'reasonCode': z.literal('SCHEDULING_FAILED').readonly(),
+    'stage': z.literal('prepare').readonly(),
+    'error': _shadowMindSafeError$schema.readonly(),
+  }).readonly().optional(),
+})).readonly()
+const _shadowMindStatusV2$schema = z.object({
+  'paused': z.boolean().readonly(),
+  'active': z.array(z.object({
+    'runId': z.string().readonly(),
+    'shadowId': z.string().readonly(),
+    'shadowName': z.string().readonly(),
+    'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
+    'capturedThroughSeq': z.number().readonly(),
+    'stage': _shadowMindStage$schema.readonly(),
+  })).readonly(),
+  'pendingSchedules': z.number().readonly(),
+  'epoch': z.number().readonly(),
+  'totalRuns': z.number().readonly(),
+  'lastRun': z.object({
+    'runId': z.string().readonly(),
+    'shadowId': z.string().readonly(),
+    'shadowName': z.string().readonly(),
+    'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
+    'capturedThroughSeq': z.number().readonly(),
+    'finishedAt': z.string().readonly(),
+    'outcome': z.enum(['report', 'silent', 'not_relevant', 'aborted', 'failed']).readonly(),
+    'stage': _shadowMindStage$schema.readonly(),
+    'reasonCode': _shadowMindReason$schema.readonly().optional(),
+    'cancellationSource': _shadowMindCancellationSource$schema.readonly().optional(),
+    'providerStopReason': z.string().readonly().optional(),
+    'error': _shadowMindSafeError$schema.readonly().optional(),
+  }).readonly().optional(),
+})
+
 
 export const TYPERT = {
   package: '@whutzefengxie-ops/dsh-shadow-mind',
@@ -192,6 +292,37 @@ export const TYPERT = {
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_catalog_result$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":254,"column":9},
+    },
+    {
+      id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/cycles',
+      service: 'shadowMind',
+      namespace: 'shadowMind',
+      method: 'cycles',
+      implementation: 'reviewCycles',
+      invocation: { kind: 'direct' },
+      scope: {
+        context: 'agent',
+        wire: 'agentId',
+      },
+      parameters: [
+        {
+          name: 'agent',
+          wire: 'agentId',
+          source: 'lookup',
+          lookup: 'agent',
+          codec: {
+            mode: 'strict',
+            typeSymbol: '@deepseek-ai/dsh-session/types#SessionId',
+            schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_cycles_parameter_0$schema,
+          },
+        },
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowReviewCycle[]',
+        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_cycles_result$schema,
+      },
+      sourceLocation: {"file":"src/runtime/index.ts","line":421,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/create',
@@ -271,7 +402,7 @@ export const TYPERT = {
       result: {
         mode: 'strict',
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_pause_result$schema,
+        schema: _shadowMindStatusV2$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":384,"column":3},
     },
@@ -301,7 +432,7 @@ export const TYPERT = {
       result: {
         mode: 'strict',
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_resume_result$schema,
+        schema: _shadowMindStatusV2$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":400,"column":3},
     },
@@ -367,7 +498,7 @@ export const TYPERT = {
       result: {
         mode: 'strict',
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_status_result$schema,
+        schema: _shadowMindStatusV2$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":358,"column":3},
     },
@@ -397,7 +528,7 @@ export const TYPERT = {
       result: {
         mode: 'strict',
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_toggle_result$schema,
+        schema: _shadowMindStatusV2$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":412,"column":3},
     },
@@ -561,7 +692,7 @@ export const TYPERT = {
         "types": [
           {
             "name": "ActiveShadowStatus",
-            "declaration": "export interface ActiveShadowStatus {\n    readonly shadowId: string;\n    readonly childSessionId?: SessionId;\n    readonly capturedThroughSeq: number;\n}"
+            "declaration": "export interface ActiveShadowStatus {\n    readonly runId: string;\n    readonly shadowId: string;\n    readonly shadowName: string;\n    readonly childSessionId?: SessionId;\n    readonly capturedThroughSeq: number;\n    readonly stage: ShadowRunStage;\n}"
           },
           {
             "name": "Agent",
@@ -749,7 +880,7 @@ export const TYPERT = {
           },
           {
             "name": "LastShadowRunStatus",
-            "declaration": "export interface LastShadowRunStatus {\n    readonly shadowId: string;\n    readonly childSessionId?: SessionId;\n    readonly capturedThroughSeq: number;\n    readonly finishedAt: string;\n    readonly outcome: ShadowRunOutcome;\n}"
+            "declaration": "export interface LastShadowRunStatus {\n    readonly runId: string;\n    readonly shadowId: string;\n    readonly shadowName: string;\n    readonly childSessionId?: SessionId;\n    readonly capturedThroughSeq: number;\n    readonly finishedAt: string;\n    readonly outcome: ShadowRunOutcome;\n    readonly stage: ShadowRunStage;\n    readonly reasonCode?: ShadowRunReasonCode;\n    readonly cancellationSource?: ShadowCancellationSource;\n    readonly providerStopReason?: string;\n    readonly error?: ShadowSafeError;\n}"
           },
           {
             "name": "LlmCallConfig",
@@ -872,6 +1003,10 @@ export const TYPERT = {
             "declaration": "export interface ShadowCatalog {\n    readonly definitions: readonly ShadowDefinition[];\n    readonly diagnostics: readonly ShadowDiagnostic[];\n}"
           },
           {
+            "name": "ShadowCancellationSource",
+            "declaration": "export type ShadowCancellationSource = 'user-input' | 'user-command' | 'root-lifecycle' | 'plugin-lifecycle' | 'timeout' | 'headless' | 'provider' | 'runtime';"
+          },
+          {
             "name": "ShadowDefinition",
             "declaration": "export interface ShadowDefinition {\n    readonly id: string;\n    readonly name: string;\n    readonly enabled: boolean;\n    readonly debug: boolean;\n    readonly activationProbability: number;\n    readonly activeForModels: readonly string[];\n    readonly runWithModel?: string;\n    readonly reasoningEffort?: string;\n    readonly timeoutSeconds?: number;\n    readonly tools: readonly string[];\n    readonly prompt: string;\n    readonly sourcePath: string;\n}"
           },
@@ -892,6 +1027,14 @@ export const TYPERT = {
             "declaration": "export interface ShadowMindStatus {\n    readonly paused: boolean;\n    readonly active: readonly ActiveShadowStatus[];\n    readonly pendingSchedules: number;\n    readonly epoch: number;\n    readonly totalRuns: number;\n    readonly lastRun?: LastShadowRunStatus;\n}"
           },
           {
+            "name": "ShadowReviewCycle",
+            "declaration": "export interface ShadowReviewCycle {\n    readonly capturedThroughSeq: number;\n    readonly scheduling: boolean;\n    readonly runs: readonly ShadowRunView[];\n    readonly failure?: ShadowReviewCycleFailure;\n}"
+          },
+          {
+            "name": "ShadowReviewCycleFailure",
+            "declaration": "export interface ShadowReviewCycleFailure {\n    readonly reasonCode: 'SCHEDULING_FAILED';\n    readonly stage: 'prepare';\n    readonly error: ShadowSafeError;\n}"
+          },
+          {
             "name": "ShadowRegistry",
             "declaration": "export class ShadowRegistry {\n    readonly root: string;\n    readonly logRoot: string;\n    list(): Promise<ShadowCatalog>;\n    create(input: CreateShadowDefinition): Promise<ShadowDefinition>;\n    update(id: string, patch: UpdateShadowDefinition): Promise<ShadowDefinition>;\n    setEnabled(id: string, enabled: boolean): Promise<ShadowDefinition>;\n    delete(id: string): Promise<void>;\n    appendDebug(id: string, record: Record<string, unknown>): Promise<void>;\n}"
           },
@@ -905,7 +1048,27 @@ export const TYPERT = {
           },
           {
             "name": "ShadowRunOutcome",
-            "declaration": "export type ShadowRunOutcome = 'report' | 'silent' | 'not_relevant' | 'discarded' | 'failed';"
+            "declaration": "export type ShadowRunOutcome = 'report' | 'silent' | 'not_relevant' | 'aborted' | 'failed';"
+          },
+          {
+            "name": "ShadowRunPhase",
+            "declaration": "export type ShadowRunPhase = 'running' | ShadowRunOutcome;"
+          },
+          {
+            "name": "ShadowRunReasonCode",
+            "declaration": "export type ShadowRunReasonCode = 'USER_MESSAGE_RECEIVED' | 'USER_TURN_ABORTED' | 'SHADOW_PAUSED' | 'ROOT_DISPOSED' | 'PLUGIN_DISPOSED' | 'SHADOW_TIMEOUT' | 'HEADLESS_DRAIN_TIMEOUT' | 'HEADLESS_MAINTENANCE_ABORTED' | 'STALE_EPOCH' | 'PROVIDER_ABORTED' | 'SCHEDULING_FAILED' | 'TRAJECTORY_BUILD_FAILED' | 'MODEL_SELECTION_INVALID' | 'SUBAGENT_START_FAILED' | 'SUBAGENT_RESULT_FAILED' | 'SUBAGENT_DISPOSE_FAILED' | 'PROVIDER_ERROR' | 'PROVIDER_MAX_TOKENS' | 'PROVIDER_REFUSAL' | 'PROVIDER_STOPPED' | 'INVALID_STRUCTURED_OUTPUT' | 'INVALID_REPORT' | 'REPORT_DELIVERY_FAILED' | 'UNKNOWN_FAILURE';"
+          },
+          {
+            "name": "ShadowRunStage",
+            "declaration": "export type ShadowRunStage = 'prepare' | 'start' | 'run' | 'dispose' | 'validate' | 'relay';"
+          },
+          {
+            "name": "ShadowRunView",
+            "declaration": "export interface ShadowRunView {\n    readonly runId: string;\n    readonly shadowId: string;\n    readonly shadowName: string;\n    readonly capturedThroughSeq: number;\n    readonly phase: ShadowRunPhase;\n    readonly stage: ShadowRunStage;\n    readonly startedAt: string;\n    readonly childSessionId?: SessionId;\n    readonly finishedAt?: string;\n    readonly reasonCode?: ShadowRunReasonCode;\n    readonly cancellationSource?: ShadowCancellationSource;\n    readonly providerStopReason?: string;\n    readonly error?: ShadowSafeError;\n    readonly content?: string;\n    readonly relayed?: boolean;\n}"
+          },
+          {
+            "name": "ShadowSafeError",
+            "declaration": "export interface ShadowSafeError {\n    readonly name: string;\n    readonly message: string;\n    readonly code?: string;\n    readonly causes?: readonly ShadowSafeError[];\n}"
           },
           {
             "name": "StreamChunk",

@@ -8,7 +8,7 @@ export interface ShadowDefinition {
     readonly name: string;
     /** Whether scheduling may select this Shadow. */
     readonly enabled: boolean;
-    /** Whether completed runs append local diagnostic records. */
+    /** Whether lifecycle transitions append local diagnostic records. */
     readonly debug: boolean;
     /** Independent activation probability after the heartbeat gate passes. */
     readonly activationProbability: number;
@@ -54,7 +54,7 @@ export interface ShadowDefinitionInput {
     readonly name: string;
     /** Whether automatic scheduling may select this Shadow. */
     readonly enabled: boolean;
-    /** Whether completed runs append local diagnostic records. */
+    /** Whether lifecycle transitions append local diagnostic records. */
     readonly debug: boolean;
     /** Independent activation probability from zero through one. */
     readonly activationProbability: number;
@@ -111,27 +111,116 @@ export type UpdateShadowDefinition = Partial<Omit<CreateShadowDefinition, 'id' |
 };
 /** One active Shadow run shown in runtime status. */
 export interface ActiveShadowStatus {
+    /** Runtime-generated run id. */
+    readonly runId: string;
     /** Shadow definition id. */
     readonly shadowId: string;
+    /** Shadow display name. */
+    readonly shadowName: string;
     /** Child session id when the provider has published it. */
     readonly childSessionId?: SessionId;
     /** Session sequence captured for the prompt. */
     readonly capturedThroughSeq: number;
+    /** Current execution stage. */
+    readonly stage: ShadowRunStage;
 }
 /** User-facing terminal classification for one admitted Shadow run. */
-export type ShadowRunOutcome = 'report' | 'silent' | 'not_relevant' | 'discarded' | 'failed';
-/** Most recently finished Shadow run for one root. */
-export interface LastShadowRunStatus {
+export type ShadowRunOutcome = 'report' | 'silent' | 'not_relevant' | 'aborted' | 'failed';
+/** Runtime phase displayed by the conversation card. */
+export type ShadowRunPhase = 'running' | ShadowRunOutcome;
+/** Stage at which one run is active or stopped. */
+export type ShadowRunStage = 'prepare' | 'start' | 'run' | 'dispose' | 'validate' | 'relay';
+/** Stable machine-readable explanation for cancellation or failure. */
+export type ShadowRunReasonCode = 'USER_MESSAGE_RECEIVED' | 'USER_TURN_ABORTED' | 'SHADOW_PAUSED' | 'ROOT_DISPOSED' | 'PLUGIN_DISPOSED' | 'SHADOW_TIMEOUT' | 'HEADLESS_DRAIN_TIMEOUT' | 'HEADLESS_MAINTENANCE_ABORTED' | 'STALE_EPOCH' | 'PROVIDER_ABORTED' | 'SCHEDULING_FAILED' | 'TRAJECTORY_BUILD_FAILED' | 'MODEL_SELECTION_INVALID' | 'SUBAGENT_START_FAILED' | 'SUBAGENT_RESULT_FAILED' | 'SUBAGENT_DISPOSE_FAILED' | 'PROVIDER_ERROR' | 'PROVIDER_MAX_TOKENS' | 'PROVIDER_REFUSAL' | 'PROVIDER_STOPPED' | 'INVALID_STRUCTURED_OUTPUT' | 'INVALID_REPORT' | 'REPORT_DELIVERY_FAILED' | 'UNKNOWN_FAILURE';
+/** Actor or lifecycle source that requested cancellation. */
+export type ShadowCancellationSource = 'user-input' | 'user-command' | 'root-lifecycle' | 'plugin-lifecycle' | 'timeout' | 'headless' | 'provider' | 'runtime';
+/** Redacted error fields safe for Remote responses and debug JSONL. */
+export interface ShadowSafeError {
+    /** JavaScript error class name. */
+    readonly name: string;
+    /** Length-bounded message with credentials and absolute paths removed. */
+    readonly message: string;
+    /** Optional platform or provider error code. */
+    readonly code?: string;
+    /** Redacted nested error causes. */
+    readonly causes?: readonly ShadowSafeError[];
+}
+/** One Shadow run as exposed to the browser without model inputs or credentials. */
+export interface ShadowRunView {
+    /** Runtime-generated run id. */
+    readonly runId: string;
     /** Shadow definition id. */
     readonly shadowId: string;
+    /** Shadow display name. */
+    readonly shadowName: string;
+    /** Session sequence captured for the prompt. */
+    readonly capturedThroughSeq: number;
+    /** Current or terminal phase. */
+    readonly phase: ShadowRunPhase;
+    /** Current or terminal execution stage. */
+    readonly stage: ShadowRunStage;
+    /** Admission time in ISO 8601 format. */
+    readonly startedAt: string;
+    /** Child session id when the provider has published it. */
+    readonly childSessionId?: SessionId;
+    /** Terminal time in ISO 8601 format. */
+    readonly finishedAt?: string;
+    /** Stable cancellation or failure explanation. */
+    readonly reasonCode?: ShadowRunReasonCode;
+    /** Cancellation initiator when applicable. */
+    readonly cancellationSource?: ShadowCancellationSource;
+    /** Provider-owned terminal classification. */
+    readonly providerStopReason?: string;
+    /** Redacted failure detail. */
+    readonly error?: ShadowSafeError;
+    /** Validated report Markdown while delivery is pending or complete. */
+    readonly content?: string;
+    /** Whether a report reached the root inbox. */
+    readonly relayed?: boolean;
+}
+/** Scheduling failure before any definition could be admitted. */
+export interface ShadowReviewCycleFailure {
+    readonly reasonCode: 'SCHEDULING_FAILED';
+    readonly stage: 'prepare';
+    readonly error: ShadowSafeError;
+}
+/** Browser snapshot for the review opportunity attached to one root turn. */
+export interface ShadowReviewCycle {
+    /** Root event sequence that anchors the card. */
+    readonly capturedThroughSeq: number;
+    /** Whether definition loading and selection are unsettled. */
+    readonly scheduling: boolean;
+    /** Admitted runs in launch order. */
+    readonly runs: readonly ShadowRunView[];
+    /** Scheduling failure when no run could be selected safely. */
+    readonly failure?: ShadowReviewCycleFailure;
+}
+/** Most recently finished Shadow run for one root. */
+export interface LastShadowRunStatus {
+    /** Runtime-generated run id. */
+    readonly runId: string;
+    /** Shadow definition id. */
+    readonly shadowId: string;
+    /** Shadow display name. */
+    readonly shadowName: string;
     /** Child session id when the provider published it. */
     readonly childSessionId?: SessionId;
     /** Session sequence captured for the prompt. */
     readonly capturedThroughSeq: number;
     /** Completion time in ISO 8601 format. */
     readonly finishedAt: string;
-    /** Whether the run reported, stayed silent, was discarded, or failed. */
+    /** Whether the run reported, stayed silent, was irrelevant, was aborted, or failed. */
     readonly outcome: ShadowRunOutcome;
+    /** Stage at which the terminal outcome was decided. */
+    readonly stage: ShadowRunStage;
+    /** Stable cancellation or failure explanation. */
+    readonly reasonCode?: ShadowRunReasonCode;
+    /** Cancellation initiator when applicable. */
+    readonly cancellationSource?: ShadowCancellationSource;
+    /** Provider-owned terminal classification. */
+    readonly providerStopReason?: string;
+    /** Redacted failure detail. */
+    readonly error?: ShadowSafeError;
 }
 /** Per-root runtime status. */
 export interface ShadowMindStatus {

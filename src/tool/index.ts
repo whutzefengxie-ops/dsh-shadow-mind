@@ -76,7 +76,7 @@ function shadowId(value: unknown): string {
 const DEFINITION_PARAMETERS = {
   name: { type: 'string' as const, description: 'Human-readable Shadow name.' },
   enabled: { type: 'boolean' as const, description: 'Whether automatic scheduling may select this Shadow.' },
-  debug: { type: 'boolean' as const, description: 'Whether completed runs append local JSONL diagnostics.' },
+  debug: { type: 'boolean' as const, description: 'Whether run lifecycle transitions append local JSONL diagnostics.' },
   activation_probability: { type: 'number' as const, description: 'Independent probability from 0 through 1.' },
   active_for_models: {
     type: 'array' as const,
@@ -123,7 +123,12 @@ export function apply(ctx: Context): void {
       if (status === undefined) return { kind: 'error', text: 'Usage: /shadow [status|pause|resume|toggle]' }
       const lastRun = status.lastRun === undefined
         ? 'no completed runs'
-        : `last ${status.lastRun.shadowId} ${status.lastRun.outcome} at ${status.lastRun.finishedAt}`
+        : [
+            `last ${status.lastRun.shadowId} ${status.lastRun.outcome}`,
+            `at ${status.lastRun.finishedAt}`,
+            `stage ${status.lastRun.stage}`,
+            ...status.lastRun.reasonCode === undefined ? [] : [`reason ${status.lastRun.reasonCode}`],
+          ].join(', ')
       return {
         kind: 'success',
         text: `Shadow Mind ${status.paused ? 'paused' : 'active'}; ${String(status.active.length)} running; ${String(status.pendingSchedules)} pending schedules; ${String(status.totalRuns)} total runs; ${lastRun}.`,

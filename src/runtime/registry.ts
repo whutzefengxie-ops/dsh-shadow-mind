@@ -301,9 +301,14 @@ export class ShadowRegistry {
    * @param record Diagnostic record to append.
    */
   async appendDebug(id: string, record: Record<string, unknown>): Promise<void> {
-    if (!SHADOW_ID_PATTERN.test(id)) throw new Error(`shadow id must match ${String(SHADOW_ID_PATTERN)}`)
-    await mkdir(this.logRoot, { recursive: true, mode: 0o700 })
-    await appendFile(join(this.logRoot, `${id}.jsonl`), `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: 0o600 })
+    await this.mutate(id, async () => {
+      await mkdir(this.logRoot, { recursive: true, mode: 0o700 })
+      await appendFile(
+        join(this.logRoot, `${id}.jsonl`),
+        `${JSON.stringify(record)}\n`,
+        { encoding: 'utf8', mode: 0o600 },
+      )
+    })
   }
 
   /** Find one current winning definition or fail loud. */

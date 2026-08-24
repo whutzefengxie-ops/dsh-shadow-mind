@@ -14,22 +14,27 @@ import type {
   ShadowDefinitionInput,
   ShadowMindSettings,
   ShadowMindStatus,
+  ShadowReviewCycle,
 } from '../runtime/types.ts'
 import {
   ShadowMindSettingsTab,
   type ShadowMindSettingsTabInjected,
 } from './ShadowMindSettingsTab.tsx'
 import {
-  ShadowReportCard, type ShadowReportCardInjected,
+  ShadowRelayMarker,
+  ShadowReportCard,
+  type ShadowReportCardInjected,
 } from './ShadowReportCard.tsx'
 import {
-  shadowReportDefinition,
+  shadowRelayMarkerDefinition,
+  shadowReviewDefinition,
 } from './shadow-report-conversation.ts'
+import { ShadowReviewStore, useShadowReviewCycle } from './shadow-review-store.ts'
 import { en, zh, type ShadowMindLocaleKey } from './locales.ts'
 
 export type { ShadowMindSettingsTabInjected, ShadowMindSettingsTabProps } from './ShadowMindSettingsTab.tsx'
 export type { ShadowReportCardProps } from './ShadowReportCard.tsx'
-export type { ShadowMindReportChatData } from './shadow-report-projection.ts'
+export type { ShadowMindReviewChatData } from './shadow-report-projection.ts'
 export type { ShadowMindLocaleKey } from './locales.ts'
 
 declare module '@deepseek-ai/dsh-client-ui-slots' {
@@ -102,16 +107,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
   const t = ctx.locale.bind(NS)
   const settings = ctx.settingsScope.bind<ShadowMindSettings>({ namespace: SETTINGS_NAMESPACE })
 
-  ctx.conversationEvents.register(shadowReportDefinition)
-  ctx.slots.inject('conversation.chat.node', () => ctx.slots.register({
-    name: 'conversation.chat.node',
-    key: 'shadow-mind-report',
-    locale: NS,
-    inject: (): ShadowReportCardInjected => ({
-      openSession: sessionId => { ctx.sessions.open(sessionId) },
-    }),
-  }, ShadowReportCard))
-
   ctx.on('command/executed', (sessionId, name, result) => {
     if (name !== 'shadow' || result.text === undefined) return
     const sessionContext = ctx.sessions.scope(sessionId)
@@ -122,6 +117,33 @@ export async function apply(ctx: ClientContext): Promise<void> {
 
   ctx.inject(['slots', 'remote.shadowMind'], (scope: ClientContext) => {
     const remote = scope.remote.shadowMind
+    const reviewStore = new ShadowReviewStore(sessionId => remoteValue<readonly ShadowReviewCycle[]>(
+      'shadowMind.cycles',
+      remote.cycles(sessionId),
+    ))
+    scope.effect(() => () => { reviewStore.dispose() }, 'ui-shadow-mind: review lifecycle store')
+    scope.effect(() => scope.conversationEvents.register(shadowReviewDefinition), 'ui-shadow-mind: review projection')
+    scope.effect(
+      () => scope.conversationEvents.register(shadowRelayMarkerDefinition),
+      'ui-shadow-mind: relay marker projection',
+    )
+    scope.slots.inject('conversation.chat.node', () => scope.slots.register({
+      name: 'conversation.chat.node',
+      key: 'shadow-mind-review',
+      locale: NS,
+      inject: (): ShadowReportCardInjected => ({
+        openSession: sessionId => { scope.sessions.open(sessionId) },
+        useCycle: (sessionId, capturedThroughSeq) => useShadowReviewCycle(
+          reviewStore,
+          sessionId,
+          capturedThroughSeq,
+        ),
+      }),
+    }, ShadowReportCard))
+    scope.slots.inject('conversation.chat.node', () => scope.slots.register({
+      name: 'conversation.chat.node',
+      key: 'shadow-mind-relay-marker',
+    }, ShadowRelayMarker))
     const injected = (): ShadowMindSettingsTabInjected => ({
       hooks: { settings },
       saveSettings: next => saveSettings(settings, next),

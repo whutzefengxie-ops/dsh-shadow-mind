@@ -105,7 +105,7 @@ const OUTCOME_KEYS = {
   report: 'outcomeReport',
   silent: 'outcomeSilent',
   not_relevant: 'outcomeNotRelevant',
-  discarded: 'outcomeDiscarded',
+  aborted: 'outcomeAborted',
   failed: 'outcomeFailed',
 } as const satisfies Record<ShadowRunOutcome, ShadowMindLocaleKey>
 
@@ -375,6 +375,10 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                 <div><dt>{t('outcome')}</dt><dd>{t(OUTCOME_KEYS[status.lastRun.outcome])}</dd></div>
                 <div><dt>{t('finishedAt')}</dt><dd><time dateTime={status.lastRun.finishedAt}>{status.lastRun.finishedAt}</time></dd></div>
                 <div><dt>{t('capturedThroughSeq')}</dt><dd>{status.lastRun.capturedThroughSeq}</dd></div>
+                <div><dt>{t('reviewStage')}</dt><dd><code>{status.lastRun.stage}</code></dd></div>
+                {status.lastRun.reasonCode === undefined ? null : (
+                  <div><dt>{t('reviewReason')}</dt><dd><code>{status.lastRun.reasonCode}</code></dd></div>
+                )}
                 {status.lastRun.childSessionId === undefined ? null : (
                   <div><dt>{t('childSession')}</dt><dd><code>{status.lastRun.childSessionId}</code></dd></div>
                 )}

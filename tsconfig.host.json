@@ -8,6 +8,7 @@
     "src/index.ts",
     "src/runtime/**/*.ts",
     "src/tool/**/*.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "vitest.config.ts"
   ]
 }

@@ -9,7 +9,7 @@ interface Manifest {
   readonly exports: Record<string, unknown>
   readonly dsh?: {
     readonly bundle?: { readonly patch?: string }
-    readonly client?: { readonly platform?: string }
+    readonly client?: { readonly platform?: string; readonly external?: readonly string[] }
   }
 }
 
@@ -26,7 +26,10 @@ describe('installable bundle', () => {
     })
     expect(manifest.dsh).toMatchObject({
       bundle: { patch: './cordis.patch.yml' },
-      client: { platform: 'web' },
+      client: {
+        platform: 'web',
+        external: expect.arrayContaining(['@deepseek-ai/dsh-client-ui-primitives']),
+      },
     })
   })
 

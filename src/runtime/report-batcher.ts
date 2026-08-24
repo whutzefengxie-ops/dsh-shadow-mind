@@ -47,10 +47,10 @@ export class ReportBatcher {
    * Add one accepted report in acceptance order.
    * @param report Accepted report to buffer.
    */
-  add(report: AcceptedShadowReport): void {
-    if (this.stopped) return
+  add(report: AcceptedShadowReport): boolean {
+    if (this.stopped) return false
     this.reports.push(report)
-    if (this.timer !== undefined) return
+    if (this.timer !== undefined) return true
     let settle!: () => void
     const pending = new Promise<void>((resolve) => { settle = resolve })
     this.pending.add(pending)
@@ -58,6 +58,7 @@ export class ReportBatcher {
     this.timer = setTimeout(() => {
       void this.fire()
     }, this.windowMs())
+    return true
   }
 
   /** Resolve after every admitted batch delivery settles. */
