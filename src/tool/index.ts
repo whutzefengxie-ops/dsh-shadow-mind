@@ -1,4 +1,4 @@
-/** Model management tools and the `/shadow` root-agent command. @module @deepseek-ai/dsh-tool-shadow-mind */
+/** Model management tools and the `/shadow` root-agent command. @module @whutzefengxie-ops/dsh-shadow-mind/tool */
 
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -8,8 +8,8 @@ import type {} from '@deepseek-ai/dsh-user-approval'
 import type {
   CreateShadowDefinition,
   ShadowDefinition,
-  ShadowMindSettings,
   UpdateShadowDefinition,
+  UpdateShadowMindSettings,
 } from '../runtime/index.ts'
 
 /** Cordis plugin name. */
@@ -58,6 +58,13 @@ function definitionView(definition: ShadowDefinition): Record<string, unknown> {
     reasoning_effort: definition.reasoningEffort ?? null,
     timeout_seconds: definition.timeoutSeconds ?? null,
     tools: definition.tools,
+    capture: definition.capture,
+    context: definition.context,
+    think_first: definition.thinkFirst,
+    pre_filter: definition.preFilters,
+    boost_filter: definition.boostFilters,
+    boost_factor: definition.boostFactor,
+    holdout: definition.holdout,
     prompt: definition.prompt,
   }
 }
@@ -100,6 +107,44 @@ const DEFINITION_PARAMETERS = {
     description: 'Extra tools added to read, grep, and glob.',
     items: { type: 'string' as const },
   },
+  capture: {
+    type: 'string' as const,
+    enum: ['full', 'since-compaction'] as const,
+    description: 'Root trajectory window captured by the Shadow.',
+  },
+  context: {
+    type: 'string' as const,
+    enum: ['standard', 'minimal'] as const,
+    description: 'Whether model-visible dynamic runtime context is inherited.',
+  },
+  think_first: {
+    type: 'boolean' as const,
+    description: 'Require a tool-free planning request before investigation.',
+  },
+  pre_filter: {
+    type: 'array' as const,
+    description: 'Named deterministic predicates that skip a selected run before spawn.',
+    items: {
+      type: 'string' as const,
+      enum: ['last-report-covers', 'tool-failure', 'no-tool-calls'] as const,
+    },
+  },
+  boost_filter: {
+    type: 'array' as const,
+    description: 'Named deterministic predicates that multiply activation probability.',
+    items: {
+      type: 'string' as const,
+      enum: ['misleading-success', 'repeated-failure', 'long-output'] as const,
+    },
+  },
+  boost_factor: {
+    type: 'number' as const,
+    description: 'Probability multiplier applied when any boost predicate matches.',
+  },
+  holdout: {
+    type: 'boolean' as const,
+    description: 'Apply owner-side literal redaction using the local holdout sidecar.',
+  },
   prompt: { type: 'string' as const, description: 'Non-empty Shadow instructions.' },
 }
 
@@ -124,14 +169,13 @@ export function apply(ctx: Context): void {
       const lastRun = status.lastRun === undefined
         ? 'no completed runs'
         : [
-            `last ${status.lastRun.shadowId} ${status.lastRun.outcome}`,
-            `at ${status.lastRun.finishedAt}`,
+            `last ${status.lastRun.shadowId} ${status.lastRun.outcome} at ${status.lastRun.finishedAt}`,
             `stage ${status.lastRun.stage}`,
             ...status.lastRun.reasonCode === undefined ? [] : [`reason ${status.lastRun.reasonCode}`],
           ].join(', ')
       return {
         kind: 'success',
-        text: `Shadow Mind ${status.paused ? 'paused' : 'active'}; ${String(status.active.length)} running; ${String(status.pendingSchedules)} pending schedules; ${String(status.totalRuns)} total runs; ${lastRun}.`,
+        text: `Shadow Mind ${status.paused ? 'paused' : 'active'}; ${String(status.active.length)} running; ${String(status.pendingSchedules)} pending schedules; ${String(status.totalRuns)} total runs; ${String(status.prefilterSkips)} prefilter skips; ${status.budgetTier} budget (${String(status.spentChars)} chars); ${String(status.synthesisRuns)} syntheses/${String(status.synthesisFailures)} failed; ${String(status.recentReviews.length)} recent reports; ${lastRun}.`,
       }
     },
   })
@@ -175,6 +219,13 @@ export function apply(ctx: Context): void {
         ...args.reasoning_effort == null ? {} : { reasoningEffort: args.reasoning_effort },
         ...args.timeout_seconds == null ? {} : { timeoutSeconds: args.timeout_seconds },
         tools: args.tools ?? [],
+        capture: args.capture ?? 'full',
+        context: args.context ?? 'standard',
+        thinkFirst: args.think_first ?? false,
+        preFilters: args.pre_filter ?? [],
+        boostFilters: args.boost_filter ?? [],
+        boostFactor: args.boost_factor ?? 1,
+        holdout: args.holdout ?? false,
         prompt: args.prompt,
       }
       return result(definitionView(await ctx.shadowMind.createDefinition(input)))
@@ -205,6 +256,13 @@ export function apply(ctx: Context): void {
         ...args.reasoning_effort === undefined ? {} : { reasoningEffort: args.reasoning_effort ?? undefined },
         ...args.timeout_seconds === undefined ? {} : { timeoutSeconds: args.timeout_seconds ?? undefined },
         ...args.tools === undefined ? {} : { tools: args.tools },
+        ...args.capture === undefined ? {} : { capture: args.capture },
+        ...args.context === undefined ? {} : { context: args.context },
+        ...args.think_first === undefined ? {} : { thinkFirst: args.think_first },
+        ...args.pre_filter === undefined ? {} : { preFilters: args.pre_filter },
+        ...args.boost_filter === undefined ? {} : { boostFilters: args.boost_filter },
+        ...args.boost_factor === undefined ? {} : { boostFactor: args.boost_factor },
+        ...args.holdout === undefined ? {} : { holdout: args.holdout },
         ...args.prompt === undefined ? {} : { prompt: args.prompt },
       }
       if (Object.keys(patch).length === 0) throw new Error('update_shadow requires at least one field to update')
@@ -275,17 +333,60 @@ export function apply(ctx: Context): void {
       defaultShadowTimeoutSeconds: { type: 'number', description: 'Positive default run deadline.' },
       headlessDrainTimeoutSeconds: { type: 'number', description: 'Positive headless convergence deadline.' },
       resultBatchWindowMs: { type: 'number', description: 'Non-negative report batching window.' },
-      defaultShadowModel: { type: 'string', description: 'Fallback provider/model route.' },
-      defaultReasoningEffort: { type: 'string', description: 'Fallback adapter-owned reasoning effort.' },
+      defaultShadowModel: {
+        oneOf: [{ type: 'string' }, { type: 'null' }],
+        description: 'Fallback provider/model route; null clears the user override.',
+      },
+      defaultReasoningEffort: {
+        oneOf: [{ type: 'string' }, { type: 'null' }],
+        description: 'Fallback adapter-owned reasoning effort; null clears the user override.',
+      },
       argumentDisclosure: { type: 'string', enum: ['redacted', 'full'], description: 'Tool-call argument projection policy.' },
-      randomSeed: { type: 'number', description: 'Deterministic scheduler seed.' },
+      randomSeed: {
+        oneOf: [{ type: 'number' }, { type: 'null' }],
+        description: 'Deterministic scheduler seed; null clears the user override.',
+      },
       maxPromptChars: { type: 'number', description: 'Positive complete prompt bound.' },
       maxReportChars: { type: 'number', description: 'Positive accepted report bound.' },
+      preferIndependentVendor: { type: 'boolean', description: 'Prefer independently-vendored candidate routes when at least two remain.' },
+      longOutputBoostChars: { type: 'number', description: 'Tool-result size that triggers the long-output boost.' },
+      lastReportCoversCount: { type: 'number', description: 'Repeated envelope count for last-report suppression.' },
+      repeatedFailureBoostThreshold: { type: 'number', description: 'Same-tool failure count that triggers a boost.' },
+      valueLoopEnabled: { type: 'boolean', description: 'Persist metadata-only challenge dispositions.' },
+      valueLoopWindowTurns: { type: 'number', description: 'Root turns observed before a challenge becomes ignored.' },
+      reviewWindowSize: { type: 'number', description: 'Accepted report entries retained per definition.' },
+      spinningRepeatCount: { type: 'number', description: 'Identical-envelope threshold for spinning.' },
+      oscillationPeriods: { type: 'number', description: 'Alternating verdict periods required for oscillation.' },
+      noDriftRepeatCount: { type: 'number', description: 'Unchanged confirmation threshold for no-drift.' },
+      diminishingWindowSize: { type: 'number', description: 'Suffix length for diminishing novelty.' },
+      diminishingNoveltyThreshold: { type: 'number', description: 'Minimum novel-envelope share from 0 through 1.' },
+      stagnationCooldownSeconds: { type: 'number', description: 'Wall-clock stagnation cooldown.' },
+      stagnationEscalationEnabled: { type: 'boolean', description: 'Escalate oscillating reviewers by one reasoning-effort rung.' },
+      reasoningEffortLadder: {
+        type: 'array',
+        description: 'Ordered unique reasoning-effort rung names.',
+        items: { type: 'string' },
+      },
+      sessionShadowSoftBudgetChars: {
+        oneOf: [{ type: 'number' }, { type: 'null' }],
+        description: 'Character spend that activates the frugal route; null clears the user override.',
+      },
+      sessionShadowHardBudgetChars: {
+        oneOf: [{ type: 'number' }, { type: 'null' }],
+        description: 'Character spend that stops new Shadow runs; null clears the user override.',
+      },
+      frugalShadowModel: {
+        oneOf: [{ type: 'string' }, { type: 'null' }],
+        description: 'Provider/model route used after the soft budget; null clears the user override.',
+      },
+      staleReportDecay: { type: 'number', description: 'Repeated-envelope probability decay from 0 through 1.' },
+      conflictSynthesisEnabled: { type: 'boolean', description: 'Replace one conflicting report pair with one synthesis.' },
+      conflictSynthesisTimeoutSeconds: { type: 'number', description: 'Positive synthesis deadline.' },
     },
     output: textOutput(),
     execute: async (args, exec) => {
       const entries = Object.entries(args as Record<string, unknown>).filter(([, value]) => value !== undefined)
-      const patch = Object.fromEntries(entries) as Partial<ShadowMindSettings>
+      const patch = Object.fromEntries(entries) as UpdateShadowMindSettings
       if (Object.keys(patch).length === 0) throw new Error('update_shadow_config requires at least one setting')
       await approve(ctx, exec, 'Update Shadow Mind scheduling configuration')
       await ctx.shadowMind.updateSettings(patch)

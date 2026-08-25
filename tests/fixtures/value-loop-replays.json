@@ -1,0 +1,22 @@
+[
+  { "name": "adopt explicit", "expected": "challenge_adopted", "responseText": "I adopted the Shadow report and updated the implementation.", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 1 },
+  { "name": "address finding", "expected": "challenge_adopted", "responseText": "The review finding was valid, so I addressed it.", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 1 },
+  { "name": "accept challenge", "expected": "challenge_adopted", "responseText": "I accepted the challenge and revised the validation.", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 1 },
+  { "name": "adopt Chinese", "expected": "challenge_adopted", "responseText": "已采纳审查报告，并已修改实现。", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 1 },
+  { "name": "fix shadow finding", "expected": "challenge_adopted", "responseText": "I fixed the Shadow finding before continuing.", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 1 },
+  { "name": "edit referenced source", "expected": "challenge_adopted", "responseText": "", "challengedArtifacts": ["src/runtime.ts"], "toolTargets": ["src/runtime.ts"], "completedTurns": 1 },
+  { "name": "edit referenced config", "expected": "challenge_adopted", "responseText": "", "challengedArtifacts": ["packages/app/config.ts"], "toolTargets": ["packages/app/config.ts"], "completedTurns": 1 },
+  { "name": "edit referenced docs", "expected": "challenge_adopted", "responseText": "", "challengedArtifacts": ["docs/guide.md"], "toolTargets": ["docs/guide.md"], "completedTurns": 1 },
+  { "name": "edit referenced test", "expected": "challenge_adopted", "responseText": "", "challengedArtifacts": ["tests/runtime.spec.ts"], "toolTargets": ["tests/runtime.spec.ts"], "completedTurns": 1 },
+  { "name": "edit Windows target", "expected": "challenge_adopted", "responseText": "", "challengedArtifacts": ["g:/repo/src/index.ts"], "toolTargets": ["g:/repo/src/index.ts"], "completedTurns": 1 },
+  { "name": "reject incorrect", "expected": "challenge_rejected", "responseText": "The Shadow report is incorrect because the invariant already covers this.", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 1 },
+  { "name": "reject not applicable", "expected": "challenge_rejected", "responseText": "This review finding is not applicable to the configured provider.", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 1 },
+  { "name": "reject challenge", "expected": "challenge_rejected", "responseText": "I rejected the challenge after checking the durable event.", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 1 },
+  { "name": "wrong report", "expected": "challenge_rejected", "responseText": "Wrong Shadow report: the referenced sequence describes another turn.", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 1 },
+  { "name": "reject Chinese", "expected": "challenge_rejected", "responseText": "这份审查报告不适用，因此不采纳。", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 1 },
+  { "name": "ignore unrelated response", "expected": "ignored", "responseText": "Completed the requested calculation.", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 2 },
+  { "name": "ignore silence", "expected": "ignored", "responseText": "", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 2 },
+  { "name": "ignore unrelated edit", "expected": "ignored", "responseText": "Updated another file.", "challengedArtifacts": ["src/a.ts"], "toolTargets": ["src/b.ts"], "completedTurns": 2 },
+  { "name": "ignore mention without action", "expected": "ignored", "responseText": "I read the Shadow report.", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 2 },
+  { "name": "ignore action without review", "expected": "ignored", "responseText": "I updated the output.", "challengedArtifacts": [], "toolTargets": [], "completedTurns": 2 }
+]

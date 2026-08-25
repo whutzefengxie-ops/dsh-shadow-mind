@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
+// @ts-expect-error The generated host contribution is bundled directly and has no declaration file.
+import { TYPERT } from '../src/generated/typert.host.js'
 import { TYPERT_REMOTE } from '../src/generated/typert.remote-client.js'
+
+const descriptorSets = [
+  TYPERT.invocations as typeof TYPERT_REMOTE.descriptors,
+  TYPERT_REMOTE.descriptors,
+]
 
 describe('Shadow Remote descriptors', () => {
   it('publishes the scoped lifecycle snapshot method', () => {
@@ -49,5 +56,106 @@ describe('Shadow Remote descriptors', () => {
         reasonCode: 'SOMETHING_HAPPENED',
       }],
     }])).toThrow()
+  })
+
+  it('preserves conditioning and quality telemetry across both status codecs', () => {
+    const status = {
+      paused: false,
+      active: [],
+      pendingSchedules: 0,
+      epoch: 0,
+      totalRuns: 1,
+      prefilterSkips: 2,
+      effectiveProbabilities: [{ shadowId: 'reviewer', probability: 1 }],
+      valueLoop: [{ shadowId: 'reviewer', challenges: 1, adopted: 0, rejected: 0, ignored: 1 }],
+      spentChars: 320,
+      budgetTier: 'frugal',
+      cooldowns: [{
+        shadowId: 'reviewer',
+        until: '2026-08-25T00:01:00.000Z',
+        patterns: ['no-drift'],
+      }],
+      pendingEscalations: ['reviewer'],
+      recentReviews: [{
+        shadowId: 'reviewer',
+        runId: 'run-1',
+        verdict: 'challenge',
+        refs: [20],
+        capturedThroughSeq: 20,
+        finishedAt: '2026-08-25T00:00:01.000Z',
+      }],
+      synthesisRuns: 1,
+      synthesisFailures: 1,
+      lastSynthesisFailure: 'timeout',
+      lastRun: {
+        runId: 'run-1',
+        shadowId: 'reviewer',
+        shadowName: 'Reviewer',
+        childSessionId: 'child-1',
+        capturedThroughSeq: 20,
+        finishedAt: '2026-08-25T00:00:01.000Z',
+        outcome: 'report',
+        stage: 'relay',
+        providerStopReason: 'completed',
+        deliberationChars: 128,
+        verdict: 'challenge',
+        independence: 'independent',
+        route: 'deepseek-official/deepseek-v4-flash',
+      },
+    }
+
+    for (const descriptors of descriptorSets) {
+      const descriptor = descriptors.find(candidate => candidate.method === 'status')
+      if (descriptor?.result.mode !== 'strict') throw new Error('status must use a strict result codec')
+      expect(descriptor.result.schema.parse(status)).toEqual(status)
+    }
+  })
+
+  it('preserves review conditioning across catalog and definition mutations', () => {
+    const shared = {
+      id: 'reviewer',
+      name: 'Reviewer',
+      enabled: true,
+      debug: false,
+      activationProbability: 1,
+      activeForModels: ['*'],
+      tools: ['read'],
+      capture: 'since-compaction',
+      context: 'minimal',
+      thinkFirst: true,
+      preFilters: ['low-signal'],
+      boostFilters: ['long-output'],
+      boostFactor: 1.5,
+      holdout: false,
+      prompt: 'Review the anchored turn.',
+    }
+    const input = {
+      ...shared,
+      runWithModel: null,
+      reasoningEffort: null,
+      timeoutSeconds: null,
+    }
+    const definition = { ...shared, sourcePath: '/definitions/reviewer.md' }
+    const catalog = { definitionRoot: '/definitions', definitions: [definition], diagnostics: [] }
+
+    for (const descriptors of descriptorSets) {
+      const catalogDescriptor = descriptors.find(candidate => candidate.method === 'catalog')
+      if (catalogDescriptor?.result.mode !== 'strict') throw new Error('catalog must use a strict result codec')
+      expect(catalogDescriptor.result.schema.parse(catalog)).toEqual(catalog)
+
+      for (const method of ['create', 'update'] as const) {
+        const descriptor = descriptors.find(candidate => candidate.method === method)
+        if (descriptor === undefined) throw new Error(`${method} descriptor is required`)
+        const parameter = descriptor.parameters[0]
+        if (parameter?.codec.mode !== 'strict') throw new Error(`${method} input must use a strict codec`)
+        if (descriptor.result.mode !== 'strict') throw new Error(`${method} result must use a strict codec`)
+        expect(parameter.codec.schema.parse(input)).toEqual(input)
+        expect(descriptor.result.schema.parse(definition)).toEqual(definition)
+      }
+
+      const setEnabled = descriptors.find(candidate => candidate.method === 'setEnabled')
+      if (setEnabled?.result.mode !== 'strict') throw new Error('setEnabled must use a strict result codec')
+      expect(setEnabled.result.schema.parse(definition)).toEqual(definition)
+    }
   })
 })

@@ -41,7 +41,7 @@ GitHub installation consumes the committed `lib/` directory. This package has no
 Open **Settings → Plugins → Shadow Mind**. The page owns:
 
 - live scheduling settings, including heartbeat probability, parallelism, timeouts, report batching, model route, reasoning effort, disclosure, and size limits;
-- Markdown-backed Shadow definitions, including name, activation probability, model filters, execution model, tools, and prompt;
+- Markdown-backed Shadow definitions, including name, activation probability, model filters, execution model, capture window, context inheritance, think-first execution, predicates, holdout mode, tools, and prompt;
 - pause, resume, and status controls for the currently selected root session;
 - catalog diagnostics and the local definition directory.
 
@@ -57,12 +57,15 @@ activation_probability: 1
 active_for_models:
   - '*'
 tools: []
+capture: since-compaction
+context: minimal
+think_first: true
 ---
 
-Review the completed task. If there is a concrete defect or missing requirement, return a concise report with evidence. Otherwise return not_relevant.
+Review the completed task. If there is a concrete defect or missing requirement, return a concise report with verdict `challenge` or `gap` and only rendered sequence numbers in `refs`. Return `silent` when the review applies but adds nothing actionable, or `not_relevant` when it does not apply.
 ```
 
-Set the global heartbeat probability to `1` for deterministic acceptance. If `run_with_model` is omitted, the child inherits the root route; set a complete `provider/model` route to use another model. The default Shadow tools are `read`, `grep`, and `glob`; definition tools extend that allowlist and may carry write authority if the inherited sandbox permits it.
+Set the global heartbeat probability to `1` for deterministic acceptance. If `run_with_model` is omitted, the child inherits the root route; set a complete `provider/model` route to use another model. The default Shadow tools are `read`, `grep`, and `glob`; definition tools extend that allowlist and may carry write authority if the inherited sandbox permits it. The disabled starter library under [`examples/shadow-minds/`](examples/shadow-minds/) demonstrates the anchored probe vocabulary and is never installed into `$DSH_HOME` automatically.
 
 ## Observe a run
 
@@ -80,7 +83,7 @@ The default trajectory projection omits reasoning, raw tool-result text, and too
 
 Definitions apply to one Harness home rather than one profile or workspace. Child Sessions follow the Harness persistence policy. Concurrent Shadows do not share a transaction, and write-capable tools can race with the root agent or other Shadows.
 
-See [the technical design](docs/technical-design.zh.md) for the Pi reference analysis, DSH architecture, lifecycle, and deliberate differences. See [SECURITY.md](SECURITY.md) before publishing logs or changing an installation pin.
+See the [target architecture](docs/target-architecture.md), [review conditioning](docs/review-conditioning.md), and [review-quality directions](docs/review-quality-directions.md) for current runtime contracts. [The Chinese technical design](docs/technical-design.zh.md) retains the Pi reference analysis and independent release topology. See [SECURITY.md](SECURITY.md) before publishing logs or changing an installation pin.
 
 ## Development
 

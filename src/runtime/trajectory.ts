@@ -5,6 +5,14 @@ import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-compaction'
 import type { ShadowDefinition, ShadowMindSettings } from './types.ts'
 
+/** One projected transcript plus the exact durable anchors visible in it. */
+export interface ProjectedTrajectory {
+  /** Model-visible trajectory text. */
+  readonly text: string
+  /** Sequence numbers rendered into the text. */
+  readonly seqs: ReadonlySet<number>
+}
+
 /** Count text characters recursively without retaining content. */
 function contentChars(blocks: readonly ContentBlock[]): number {
   let count = 0
@@ -93,41 +101,51 @@ export function summarizeToolResult(
  * @param events Complete root session events.
  * @param capturedThroughSeq Inclusive event sequence watermark.
  * @param argumentDisclosure Tool argument policy.
+ * @param capture Root trajectory window policy.
  * @returns Plain-text trajectory.
  */
-export function projectTrajectory(
+export function projectTrajectoryWithAnchors(
   events: readonly SessionEvent[],
   capturedThroughSeq: number,
   argumentDisclosure: ShadowMindSettings['argumentDisclosure'],
-): string {
+  capture: ShadowDefinition['capture'] = 'full',
+): ProjectedTrajectory {
   const lines: string[] = []
+  const seqs = new Set<number>()
   const calls = new Map<string, string>()
+  const boundary = capture === 'since-compaction'
+    ? events.findLast(event => event.seq <= capturedThroughSeq
+      && event.type === 'compaction/end'
+      && event.data.error === undefined)?.seq
+    : undefined
   for (const event of events) {
     if (event.seq > capturedThroughSeq) break
+    if (boundary !== undefined && event.seq < boundary && event.type !== 'compaction/summary') continue
+    const lineCount = lines.length
     switch (event.type) {
       case 'user/message': {
         const text = visibleText(event.data.content)
-        if (text !== '') lines.push(`[user:${event.data.source.kind}]\n${text}`)
+        if (text !== '') lines.push(`[seq=${String(event.seq)} user:${event.data.source.kind}]\n${text}`)
         break
       }
       case 'assistant/message': {
         const text = visibleText(event.data.message.content)
-        if (text !== '') lines.push(`[assistant]\n${text}`)
+        if (text !== '') lines.push(`[seq=${String(event.seq)} assistant]\n${text}`)
         break
       }
       case 'compaction/summary': {
         const text = visibleText(event.data.summary)
-        if (text !== '') lines.push(`[compaction summary]\n${text}`)
+        if (text !== '') lines.push(`[seq=${String(event.seq)} compaction summary]\n${text}`)
         break
       }
       case 'tool/call':
         calls.set(String(event.data.callId), event.data.name)
-        lines.push(`[tool call] ${event.data.name} arguments=${argumentDisclosure === 'full' ? event.data.arguments : '[redacted]'}`)
+        lines.push(`[seq=${String(event.seq)} tool call] ${event.data.name} arguments=${argumentDisclosure === 'full' ? event.data.arguments : '[redacted]'}`)
         break
       case 'tool/result': {
         const block = event.data.message.content[0]
         const toolName = calls.get(String(block.toolCallId)) ?? 'unknown-tool'
-        lines.push(`[tool result] ${summarizeToolResult(
+        lines.push(`[seq=${String(event.seq)} tool result] ${summarizeToolResult(
           toolName,
           block.content,
           block.isError === true || event.data.error !== undefined,
@@ -138,8 +156,26 @@ export function projectTrajectory(
       default:
         break
     }
+    if (lines.length > lineCount) seqs.add(event.seq)
   }
-  return lines.join('\n\n')
+  return { text: lines.join('\n\n'), seqs }
+}
+
+/**
+ * Project a session prefix into a stable, reasoning-free text transcript.
+ * @param events Complete root session events.
+ * @param capturedThroughSeq Inclusive event sequence watermark.
+ * @param argumentDisclosure Tool argument policy.
+ * @param capture Root-log range to project.
+ * @returns Plain-text trajectory.
+ */
+export function projectTrajectory(
+  events: readonly SessionEvent[],
+  capturedThroughSeq: number,
+  argumentDisclosure: ShadowMindSettings['argumentDisclosure'],
+  capture: ShadowDefinition['capture'] = 'full',
+): string {
+  return projectTrajectoryWithAnchors(events, capturedThroughSeq, argumentDisclosure, capture).text
 }
 
 /**
@@ -160,7 +196,11 @@ export function buildShadowPrompt(
     `You are the independent Shadow \"${definition.name}\" (${definition.id}).`,
     'Review the captured root-agent trajectory. Do not assume access to hidden reasoning or omitted tool output.',
     'Return status "not_relevant" when your specialty does not apply, "silent" when it applies but adds nothing actionable, or "report" with a concise self-contained finding.',
+    'Every report must set verdict to "challenge", "gap", "confirm", or "uncertain"; refs is an ascending unique list of at most eight rendered seq values, and optional severity is from 0 through 1.',
     'A report must help the root agent decide or act; do not narrate that you reviewed the trajectory.',
+    ...definition.thinkFirst
+      ? ['Before using tools, write a numbered plan naming the rendered seq values you intend to challenge or verify.']
+      : [],
     '',
     '## Shadow instructions',
     definition.prompt,

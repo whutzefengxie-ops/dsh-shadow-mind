@@ -1,5 +1,6 @@
 /** Durable attribution for batched Shadow reports relayed to a root agent. @module @whutzefengxie-ops/dsh-shadow-mind/protocol */
 import type { SessionId } from '@deepseek-ai/dsh-session';
+import type { ShadowVerdict } from './types.ts';
 /** Provenance of one report within a batched relay message. */
 export interface ShadowReportProvenance {
     /** Shadow definition id. */
@@ -10,6 +11,14 @@ export interface ShadowReportProvenance {
     readonly childSessionId: SessionId;
     /** Inclusive root sequence watermark used for the Shadow prompt. */
     readonly capturedThroughSeq: number;
+    /** Epistemic classification of the report. */
+    readonly verdict?: ShadowVerdict;
+    /** Optional within-relay priority from zero through one. */
+    readonly severity?: number;
+    /** Durable sequence anchors named by the report. */
+    readonly refs?: readonly number[];
+    /** Original report run ids replaced by this synthesized conclusion. */
+    readonly replacesRunIds?: readonly string[];
 }
 /** Durable source attached to one batched Shadow relay. */
 export interface ShadowReportMessageSource {
