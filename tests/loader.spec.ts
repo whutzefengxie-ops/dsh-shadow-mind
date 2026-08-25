@@ -7,22 +7,9 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import ApprovalService from '@deepseek-ai/dsh-user-approval'
-
-class MemorySettings extends SettingsProvider {
-  readonly writable = true
-
-  protected load(): Promise<Record<string, unknown>> {
-    return Promise.resolve({})
-  }
-
-  protected persist(_ns: SettingsNamespace, _section: Record<string, unknown>): Promise<void> {
-    return Promise.resolve()
-  }
-}
+import { MemorySettings } from './memory-settings.ts'
 
 describe('built plugin entry points', () => {
   it('activates the runtime and management tools through a real Loader', async () => {

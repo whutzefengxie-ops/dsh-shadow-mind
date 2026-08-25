@@ -12,8 +12,6 @@ import {
   createUserMessage,
 } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type {
   ResolvedSubagentStartRequest,
@@ -22,24 +20,13 @@ import type {
   SubagentRun,
 } from '@deepseek-ai/dsh-subagent'
 import ShadowMindRuntime from '../src/runtime/index.ts'
+import { MemorySettings } from './memory-settings.ts'
 
 const CAPABILITIES: SubagentCapabilities = {
   outputSchema: true,
   depthLimit: true,
   toolFilter: true,
   persona: true,
-}
-
-class MemorySettings extends SettingsProvider {
-  readonly writable = true
-
-  protected load(): Promise<Record<string, unknown>> {
-    return Promise.resolve({})
-  }
-
-  protected persist(_ns: SettingsNamespace, _section: Record<string, unknown>): Promise<void> {
-    return Promise.resolve()
-  }
 }
 
 class StubProvider implements SubagentProvider {

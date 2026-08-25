@@ -7,24 +7,11 @@ import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
-import { SettingsProvider } from '@deepseek-ai/dsh-settings'
-import type { SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import ShadowMindRuntime from '../src/runtime/index.ts'
+import { MemorySettings } from './memory-settings.ts'
 import { MockAdapter, textResponse, toolCallResponse } from './mock-adapter.ts'
-
-class MemorySettings extends SettingsProvider {
-  readonly writable = true
-
-  protected load(): Promise<Record<string, unknown>> {
-    return Promise.resolve({})
-  }
-
-  protected persist(_ns: SettingsNamespace, _section: Record<string, unknown>): Promise<void> {
-    return Promise.resolve()
-  }
-}
 
 describe('assembled Shadow Mind flow', () => {
   it('runs an anchored starter through root tool use, think-first, structured report, and durable relay', async () => {
