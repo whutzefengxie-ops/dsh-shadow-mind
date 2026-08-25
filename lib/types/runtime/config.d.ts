@@ -15,7 +15,29 @@ export declare const DEFAULT_RESULT_BATCH_WINDOW_MS = 400;
 export declare const DEFAULT_MAX_PROMPT_CHARS = 120000;
 /** Default maximum accepted report size. */
 export declare const DEFAULT_MAX_REPORT_CHARS = 20000;
-/** User-editable Shadow Mind settings schema. */
+/** Default result size that activates the long-output review boost. */
+export declare const DEFAULT_LONG_OUTPUT_BOOST_CHARS = 50000;
+/** Default identical-envelope count required for last-report suppression. */
+export declare const DEFAULT_LAST_REPORT_COVERS_COUNT = 2;
+/** Default same-tool failure count required for a review boost. */
+export declare const DEFAULT_REPEATED_FAILURE_BOOST_THRESHOLD = 3;
+/** Default root-turn observation window for challenge outcomes. */
+export declare const DEFAULT_VALUE_LOOP_WINDOW_TURNS = 2;
+/** Default accepted-entry retention per root. */
+export declare const DEFAULT_REVIEW_WINDOW_SIZE = 8;
+/** Default identical-envelope repeat count. */
+export declare const DEFAULT_SPINNING_REPEAT_COUNT = 3;
+/** Default alternating verdict period count. */
+export declare const DEFAULT_OSCILLATION_PERIODS = 2;
+/** Default unchanged confirmation repeat count. */
+export declare const DEFAULT_NO_DRIFT_REPEAT_COUNT = 3;
+/** Default diminishing-novelty suffix length. */
+export declare const DEFAULT_DIMINISHING_WINDOW_SIZE = 5;
+/** Default minimum novel-envelope share. */
+export declare const DEFAULT_DIMINISHING_NOVELTY_THRESHOLD = 0.4;
+/** Default wall-clock stagnation cooldown in seconds. */
+export declare const DEFAULT_STAGNATION_COOLDOWN_SECONDS = 300;
+/** User-editable settings plus cross-field budget and window validation. */
 export declare const SHADOW_MIND_SETTINGS_SCHEMA: Schema<ShadowMindSettings>;
 /** Cordis plugin configuration schema. */
 export declare const Config: Schema<ShadowMindConfig>;

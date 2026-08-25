@@ -8,6 +8,7 @@ import { basename, join, resolve } from 'node:path'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { optionalModelRoute } from './model-route.ts'
+import { boostPredicates, prefilterPredicates } from './prefilter.ts'
 import type {
   CreateShadowDefinition,
   ShadowCatalog,
@@ -30,6 +31,13 @@ const FRONTMATTER_KEYS = new Set([
   'reasoning_effort',
   'timeout_seconds',
   'tools',
+  'capture',
+  'context',
+  'think_first',
+  'pre_filter',
+  'boost_filter',
+  'boost_factor',
+  'holdout',
 ])
 
 /** Return whether a parsed YAML value is a plain mapping. */
@@ -70,6 +78,21 @@ function stringArray(record: Record<string, unknown>, key: string): string[] {
   return entries
 }
 
+/** Parse one optional closed string value. */
+function optionalChoice<const T extends string>(
+  record: Record<string, unknown>,
+  key: string,
+  values: readonly T[],
+  fallback: T,
+): T {
+  const value = record[key]
+  if (value === undefined) return fallback
+  if (typeof value !== 'string' || !values.includes(value as T)) {
+    throw new Error(`${key} must be one of ${values.join(', ')}`)
+  }
+  return value as T
+}
+
 /**
  * Parse one complete definition document.
  * @param source Markdown source.
@@ -98,6 +121,7 @@ export function parseShadowDefinition(source: string, sourcePath: string): Shado
   const id = optionalString(parsed, 'id') ?? stem
   if (!SHADOW_ID_PATTERN.test(id)) throw new Error(`id must match ${String(SHADOW_ID_PATTERN)}`)
   const name = optionalString(parsed, 'name') ?? id
+  if (/\r|\n/u.test(name)) throw new Error('name must be a single line')
   const prompt = normalized.slice(closing + '\n---\n'.length).trim()
   if (prompt === '') throw new Error('Markdown body must be non-empty')
 
@@ -116,6 +140,16 @@ export function parseShadowDefinition(source: string, sourcePath: string): Shado
 
   const runWithModel = optionalModelRoute(optionalString(parsed, 'run_with_model'), 'run_with_model')
   const reasoningEffort = optionalString(parsed, 'reasoning_effort')
+  const preFilters = stringArray(parsed, 'pre_filter')
+  const unknownPreFilters = preFilters.filter(name => !prefilterPredicates.has(name))
+  if (unknownPreFilters.length > 0) throw new Error(`unknown pre_filter predicate(s): ${unknownPreFilters.join(', ')}`)
+  const boostFilters = stringArray(parsed, 'boost_filter')
+  const unknownBoostFilters = boostFilters.filter(name => !boostPredicates.has(name))
+  if (unknownBoostFilters.length > 0) throw new Error(`unknown boost_filter predicate(s): ${unknownBoostFilters.join(', ')}`)
+  const boostFactor = parsed['boost_factor'] ?? 1
+  if (typeof boostFactor !== 'number' || !Number.isFinite(boostFactor) || boostFactor < 1) {
+    throw new Error('boost_factor must be a finite number greater than or equal to 1')
+  }
   return Object.freeze({
     id,
     name,
@@ -127,6 +161,13 @@ export function parseShadowDefinition(source: string, sourcePath: string): Shado
     ...reasoningEffort === undefined ? {} : { reasoningEffort },
     ...timeout === undefined ? {} : { timeoutSeconds: timeout },
     tools: Object.freeze(tools),
+    capture: optionalChoice(parsed, 'capture', ['full', 'since-compaction'] as const, 'full'),
+    context: optionalChoice(parsed, 'context', ['standard', 'minimal'] as const, 'standard'),
+    thinkFirst: optionalBoolean(parsed, 'think_first', false),
+    preFilters: Object.freeze(preFilters),
+    boostFilters: Object.freeze(boostFilters),
+    boostFactor,
+    holdout: optionalBoolean(parsed, 'holdout', false),
     prompt,
     sourcePath: resolve(sourcePath),
   })
@@ -146,6 +187,17 @@ function serializeDefinition(definition: CreateShadowDefinition): string {
   if (definition.reasoningEffort !== undefined) metadata['reasoning_effort'] = definition.reasoningEffort
   if (definition.timeoutSeconds !== undefined) metadata['timeout_seconds'] = definition.timeoutSeconds
   if (definition.tools.length > 0) metadata['tools'] = [...definition.tools]
+  if (definition.capture !== undefined && definition.capture !== 'full') metadata['capture'] = definition.capture
+  if (definition.context !== undefined && definition.context !== 'standard') metadata['context'] = definition.context
+  if (definition.thinkFirst === true) metadata['think_first'] = true
+  if (definition.preFilters !== undefined && definition.preFilters.length > 0) {
+    metadata['pre_filter'] = [...definition.preFilters]
+  }
+  if (definition.boostFilters !== undefined && definition.boostFilters.length > 0) {
+    metadata['boost_filter'] = [...definition.boostFilters]
+  }
+  if (definition.boostFactor !== undefined && definition.boostFactor !== 1) metadata['boost_factor'] = definition.boostFactor
+  if (definition.holdout === true) metadata['holdout'] = true
   return `---\n${stringifyYaml(metadata, { sortMapEntries: true }).trimEnd()}\n---\n\n${definition.prompt.trim()}\n`
 }
 
@@ -162,6 +214,13 @@ function editable(definition: ShadowDefinition): CreateShadowDefinition {
     ...definition.reasoningEffort === undefined ? {} : { reasoningEffort: definition.reasoningEffort },
     ...definition.timeoutSeconds === undefined ? {} : { timeoutSeconds: definition.timeoutSeconds },
     tools: [...definition.tools],
+    capture: definition.capture,
+    context: definition.context,
+    thinkFirst: definition.thinkFirst,
+    preFilters: [...definition.preFilters],
+    boostFilters: [...definition.boostFilters],
+    boostFactor: definition.boostFactor,
+    holdout: definition.holdout,
     prompt: definition.prompt,
   }
 }
@@ -180,6 +239,13 @@ function updatedDefinition(current: ShadowDefinition, patch: UpdateShadowDefinit
     ...merged.reasoningEffort === undefined ? {} : { reasoningEffort: merged.reasoningEffort },
     ...merged.timeoutSeconds === undefined ? {} : { timeoutSeconds: merged.timeoutSeconds },
     tools: merged.tools,
+    capture: patch.capture ?? current.capture,
+    context: patch.context ?? current.context,
+    thinkFirst: patch.thinkFirst ?? current.thinkFirst,
+    preFilters: patch.preFilters ?? current.preFilters,
+    boostFilters: patch.boostFilters ?? current.boostFilters,
+    boostFactor: patch.boostFactor ?? current.boostFactor,
+    holdout: patch.holdout ?? current.holdout,
     prompt: merged.prompt,
   }
 }
@@ -190,12 +256,58 @@ export class ShadowRegistry {
   readonly root: string
   /** Debug-log directory preserved when definitions are deleted. */
   readonly logRoot: string
+  /** Metadata-only value-loop journal shared across sessions. */
+  readonly valueLoopPath: string
+  /** Owner-only literal sidecar for holdout definitions. */
+  readonly holdoutKeysPath: string
   private readonly mutations = new Map<string, Promise<void>>()
 
   /** @param dshHome Resolved Harness home. */
   constructor(dshHome: string) {
     this.root = resolve(dshHome, 'shadow-minds')
     this.logRoot = join(this.root, 'logs')
+    this.valueLoopPath = join(this.root, 'value-loop.jsonl')
+    this.holdoutKeysPath = join(this.root, 'holdout-keys.json')
+  }
+
+  /**
+   * Append one metadata-only challenge outcome.
+   * @param record Classification metadata without trajectory or report text.
+   */
+  async appendValueLoop(record: Record<string, unknown>): Promise<void> {
+    await mkdir(this.root, { recursive: true, mode: 0o700 })
+    await appendFile(this.valueLoopPath, `${JSON.stringify(record)}\n`, { encoding: 'utf8', mode: 0o600 })
+  }
+
+  /**
+   * Load and validate operator-managed literal keys for one holdout definition.
+   * @param id Definition id.
+   * @returns Non-empty unique literal keys.
+   */
+  async holdoutKeys(id: string): Promise<readonly string[]> {
+    let source: string
+    try {
+      source = await readFile(this.holdoutKeysPath, 'utf8')
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error(`holdout definition ${JSON.stringify(id)} needs ${this.holdoutKeysPath}`)
+      }
+      throw error
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(source)
+    } catch (cause: unknown) {
+      throw new Error('invalid holdout key sidecar JSON', { cause })
+    }
+    if (!isRecord(parsed)) throw new Error('holdout key sidecar must be a JSON object')
+    const keys = parsed[id]
+    if (!Array.isArray(keys) || keys.length === 0
+      || keys.some(key => typeof key !== 'string' || key.trim() === '')
+      || new Set(keys).size !== keys.length) {
+      throw new Error(`holdout definition ${JSON.stringify(id)} needs unique non-empty literal keys`)
+    }
+    return Object.freeze([...(keys as string[])])
   }
 
   /**
@@ -218,6 +330,7 @@ export class ShadowRegistry {
       const path = join(this.root, name)
       try {
         const definition = parseShadowDefinition(await readFile(path, 'utf8'), path)
+        if (definition.holdout) await this.holdoutKeys(definition.id)
         const first = ids.get(definition.id)
         if (first !== undefined) {
           diagnostics.push({ path, error: `duplicate id ${JSON.stringify(definition.id)}; first valid source is ${first}` })
@@ -241,6 +354,7 @@ export class ShadowRegistry {
    */
   async create(input: CreateShadowDefinition): Promise<ShadowDefinition> {
     return this.mutate(input.id, async () => {
+      if (input.holdout === true) await this.holdoutKeys(input.id)
       const path = join(this.root, `${input.id}.md`)
       const catalog = await this.list()
       if (catalog.definitions.some(definition => definition.id === input.id)) {
@@ -268,6 +382,7 @@ export class ShadowRegistry {
     return this.mutate(id, async () => {
       const current = await this.expect(id)
       const next = updatedDefinition(current, patch)
+      if (next.holdout === true) await this.holdoutKeys(id)
       const parsed = parseShadowDefinition(serializeDefinition(next), current.sourcePath)
       await writeFileAtomic(current.sourcePath, serializeDefinition(parsed), { mode: 0o600, dirMode: 0o700 })
       return parsed

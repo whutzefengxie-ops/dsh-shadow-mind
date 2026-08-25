@@ -42,6 +42,7 @@ export function selectShadows(
     readonly provider?: string
     readonly model?: string
     readonly random: RandomSource
+    readonly probabilityFor?: (definition: ShadowDefinition) => number
   },
 ): ShadowDefinition[] {
   const heartbeatRoll = options.random()
@@ -50,7 +51,9 @@ export function selectShadows(
   for (const definition of definitions) {
     if (!definition.enabled || options.activeIds.has(definition.id)) continue
     if (!modelEligible(definition, options.provider, options.model)) continue
-    if (options.random() < definition.activationProbability) hits.push(definition)
+    if (options.random() < (options.probabilityFor?.(definition) ?? definition.activationProbability)) {
+      hits.push(definition)
+    }
   }
   if (hits.length > options.availableSlots) {
     for (let index = hits.length - 1; index > 0; index -= 1) {

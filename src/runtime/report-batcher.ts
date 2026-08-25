@@ -1,6 +1,7 @@
 /** Ordered fixed-window report batching with an explicit quiescence barrier. @module @whutzefengxie-ops/dsh-shadow-mind/report-batcher */
 
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { ShadowVerdict } from './types.ts'
 
 /** One accepted Shadow report awaiting root delivery. */
 export interface AcceptedShadowReport {
@@ -18,6 +19,16 @@ export interface AcceptedShadowReport {
   readonly capturedThroughSeq: number
   /** Self-contained report text. */
   readonly content: string
+  /** Epistemic classification required for reports. */
+  readonly verdict: ShadowVerdict
+  /** Optional within-relay priority from zero through one. */
+  readonly severity?: number
+  /** Ordered durable sequence anchors visible in the run projection. */
+  readonly refs: readonly number[]
+  /** Original run ids replaced by a successful synthesis. */
+  readonly replacesRunIds?: readonly string[]
+  /** Owner-only literals retained only until the relay assertion. */
+  readonly holdoutKeys?: readonly string[]
 }
 
 /** Collect accepted reports for one root agent and deliver fixed-window batches. */

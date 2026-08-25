@@ -18,9 +18,24 @@ export declare class ShadowRegistry {
     readonly root: string;
     /** Debug-log directory preserved when definitions are deleted. */
     readonly logRoot: string;
+    /** Metadata-only value-loop journal shared across sessions. */
+    readonly valueLoopPath: string;
+    /** Owner-only literal sidecar for holdout definitions. */
+    readonly holdoutKeysPath: string;
     private readonly mutations;
     /** @param dshHome Resolved Harness home. */
     constructor(dshHome: string);
+    /**
+     * Append one metadata-only challenge outcome.
+     * @param record Classification metadata without trajectory or report text.
+     */
+    appendValueLoop(record: Record<string, unknown>): Promise<void>;
+    /**
+     * Load and validate operator-managed literal keys for one holdout definition.
+     * @param id Definition id.
+     * @returns Non-empty unique literal keys.
+     */
+    holdoutKeys(id: string): Promise<readonly string[]>;
     /**
      * Load all readable definition files while isolating per-file failures.
      * @returns Current valid definitions and file-local diagnostics.

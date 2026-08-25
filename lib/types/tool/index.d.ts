@@ -1,4 +1,4 @@
-/** Model management tools and the `/shadow` root-agent command. @module @deepseek-ai/dsh-tool-shadow-mind */
+/** Model management tools and the `/shadow` root-agent command. @module @whutzefengxie-ops/dsh-shadow-mind/tool */
 import type { Context } from '@deepseek-ai/cordis';
 /** Cordis plugin name. */
 export declare const name = "tool-shadow-mind";

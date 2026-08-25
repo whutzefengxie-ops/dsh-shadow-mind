@@ -1,5 +1,6 @@
 import { Component, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { ObservableSnapshot, SessionId, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {
   ShadowAdministrationSnapshot,
   ShadowDefinition,
@@ -74,9 +75,11 @@ class ShadowMindSettingsTabBoundary extends Component<
   }
 }
 
-type SettingsDraft = Record<keyof ShadowMindSettings, string>
+/** String-backed form state for every resolved Shadow Mind setting. */
+export type SettingsDraft = Record<keyof ShadowMindSettings, string>
 
-interface DefinitionDraft {
+/** String-backed form state for one editable Shadow definition. */
+export interface DefinitionDraft {
   id: string
   name: string
   enabled: boolean
@@ -87,6 +90,13 @@ interface DefinitionDraft {
   reasoningEffort: string
   timeoutSeconds: string
   tools: string
+  capture: ShadowDefinition['capture']
+  context: ShadowDefinition['context']
+  thinkFirst: boolean
+  preFilters: string
+  boostFilters: string
+  boostFactor: string
+  holdout: boolean
   prompt: string
 }
 
@@ -99,6 +109,28 @@ const NUMBER_FIELDS = [
   'randomSeed',
   'maxPromptChars',
   'maxReportChars',
+  'longOutputBoostChars',
+  'lastReportCoversCount',
+  'repeatedFailureBoostThreshold',
+  'valueLoopWindowTurns',
+  'reviewWindowSize',
+  'spinningRepeatCount',
+  'oscillationPeriods',
+  'noDriftRepeatCount',
+  'diminishingWindowSize',
+  'diminishingNoveltyThreshold',
+  'stagnationCooldownSeconds',
+  'sessionShadowSoftBudgetChars',
+  'sessionShadowHardBudgetChars',
+  'staleReportDecay',
+  'conflictSynthesisTimeoutSeconds',
+] as const satisfies readonly (keyof ShadowMindSettings)[]
+
+const BOOLEAN_FIELDS = [
+  'preferIndependentVendor',
+  'valueLoopEnabled',
+  'stagnationEscalationEnabled',
+  'conflictSynthesisEnabled',
 ] as const satisfies readonly (keyof ShadowMindSettings)[]
 
 const OUTCOME_KEYS = {
@@ -110,7 +142,7 @@ const OUTCOME_KEYS = {
 } as const satisfies Record<ShadowRunOutcome, ShadowMindLocaleKey>
 
 /** Render one settings value as editable text. */
-function settingsDraft(value: ShadowMindSettings): SettingsDraft {
+export function settingsDraft(value: ShadowMindSettings): SettingsDraft {
   return {
     heartbeatProbability: String(value.heartbeatProbability),
     maxParallelShadows: String(value.maxParallelShadows),
@@ -123,11 +155,34 @@ function settingsDraft(value: ShadowMindSettings): SettingsDraft {
     randomSeed: value.randomSeed === undefined ? '' : String(value.randomSeed),
     maxPromptChars: String(value.maxPromptChars),
     maxReportChars: String(value.maxReportChars),
+    preferIndependentVendor: String(value.preferIndependentVendor),
+    longOutputBoostChars: String(value.longOutputBoostChars),
+    lastReportCoversCount: String(value.lastReportCoversCount),
+    repeatedFailureBoostThreshold: String(value.repeatedFailureBoostThreshold),
+    valueLoopEnabled: String(value.valueLoopEnabled),
+    valueLoopWindowTurns: String(value.valueLoopWindowTurns),
+    reviewWindowSize: String(value.reviewWindowSize),
+    spinningRepeatCount: String(value.spinningRepeatCount),
+    oscillationPeriods: String(value.oscillationPeriods),
+    noDriftRepeatCount: String(value.noDriftRepeatCount),
+    diminishingWindowSize: String(value.diminishingWindowSize),
+    diminishingNoveltyThreshold: String(value.diminishingNoveltyThreshold),
+    stagnationCooldownSeconds: String(value.stagnationCooldownSeconds),
+    stagnationEscalationEnabled: String(value.stagnationEscalationEnabled),
+    reasoningEffortLadder: value.reasoningEffortLadder.join('\n'),
+    sessionShadowSoftBudgetChars: value.sessionShadowSoftBudgetChars === undefined
+      ? '' : String(value.sessionShadowSoftBudgetChars),
+    sessionShadowHardBudgetChars: value.sessionShadowHardBudgetChars === undefined
+      ? '' : String(value.sessionShadowHardBudgetChars),
+    frugalShadowModel: value.frugalShadowModel ?? '',
+    staleReportDecay: String(value.staleReportDecay),
+    conflictSynthesisEnabled: String(value.conflictSynthesisEnabled),
+    conflictSynthesisTimeoutSeconds: String(value.conflictSynthesisTimeoutSeconds),
   }
 }
 
 /** Build an empty create form. */
-function emptyDefinition(): DefinitionDraft {
+export function emptyDefinition(): DefinitionDraft {
   return {
     id: '',
     name: '',
@@ -139,12 +194,19 @@ function emptyDefinition(): DefinitionDraft {
     reasoningEffort: '',
     timeoutSeconds: '',
     tools: '',
+    capture: 'full',
+    context: 'standard',
+    thinkFirst: false,
+    preFilters: '',
+    boostFilters: '',
+    boostFactor: '1',
+    holdout: false,
     prompt: '',
   }
 }
 
 /** Render one persisted definition into the complete edit form. */
-function definitionDraft(value: ShadowDefinition): DefinitionDraft {
+export function definitionDraft(value: ShadowDefinition): DefinitionDraft {
   return {
     id: value.id,
     name: value.name,
@@ -156,6 +218,13 @@ function definitionDraft(value: ShadowDefinition): DefinitionDraft {
     reasoningEffort: value.reasoningEffort ?? '',
     timeoutSeconds: value.timeoutSeconds === undefined ? '' : String(value.timeoutSeconds),
     tools: value.tools.join('\n'),
+    capture: value.capture,
+    context: value.context,
+    thinkFirst: value.thinkFirst,
+    preFilters: value.preFilters.join('\n'),
+    boostFilters: value.boostFilters.join('\n'),
+    boostFactor: String(value.boostFactor),
+    holdout: value.holdout,
     prompt: value.prompt,
   }
 }
@@ -172,14 +241,21 @@ function finite(text: string): number | undefined {
   return Number.isFinite(value) ? value : undefined
 }
 
+/** Retain an integer only when it meets the field's lower bound. */
+function integerAtLeast(value: number | undefined, minimum: number): number | undefined {
+  return value !== undefined && Number.isInteger(value) && value >= minimum ? value : undefined
+}
+
 /** Validate and convert a complete Shadow definition form. */
-function definitionInput(draft: DefinitionDraft): ShadowDefinitionInput | undefined {
+export function definitionInput(draft: DefinitionDraft): ShadowDefinitionInput | undefined {
   const probability = finite(draft.activationProbability)
   const timeout = finite(draft.timeoutSeconds)
+  const boostFactor = finite(draft.boostFactor)
   if (!/^[a-z0-9][a-z0-9_-]*$/u.test(draft.id)
     || draft.name.trim() === ''
     || draft.prompt.trim() === ''
     || probability === undefined || probability < 0 || probability > 1
+    || boostFactor === undefined || boostFactor < 1
     || (draft.timeoutSeconds.trim() !== '' && (timeout === undefined || timeout <= 0))) return undefined
   return {
     id: draft.id,
@@ -192,34 +268,105 @@ function definitionInput(draft: DefinitionDraft): ShadowDefinitionInput | undefi
     reasoningEffort: draft.reasoningEffort.trim() || null,
     timeoutSeconds: timeout ?? null,
     tools: lines(draft.tools),
+    capture: draft.capture,
+    context: draft.context,
+    thinkFirst: draft.thinkFirst,
+    preFilters: lines(draft.preFilters),
+    boostFilters: lines(draft.boostFilters),
+    boostFactor,
+    holdout: draft.holdout,
     prompt: draft.prompt.trim(),
   }
 }
 
 /** Validate and convert the complete resolved settings form. */
-function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefined {
+export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefined {
   const numbers = Object.fromEntries(NUMBER_FIELDS.map(field => [field, finite(draft[field])])) as
     Record<(typeof NUMBER_FIELDS)[number], number | undefined>
-  if (numbers.heartbeatProbability === undefined || numbers.heartbeatProbability < 0 || numbers.heartbeatProbability > 1
-    || numbers.maxParallelShadows === undefined || !Number.isInteger(numbers.maxParallelShadows) || numbers.maxParallelShadows < 1
-    || numbers.defaultShadowTimeoutSeconds === undefined || numbers.defaultShadowTimeoutSeconds <= 0
-    || numbers.headlessDrainTimeoutSeconds === undefined || numbers.headlessDrainTimeoutSeconds <= 0
-    || numbers.resultBatchWindowMs === undefined || numbers.resultBatchWindowMs < 0
+  const heartbeatProbability = numbers.heartbeatProbability
+  const maxParallelShadows = integerAtLeast(numbers.maxParallelShadows, 1)
+  const maxPromptChars = integerAtLeast(numbers.maxPromptChars, 1)
+  const maxReportChars = integerAtLeast(numbers.maxReportChars, 1)
+  const longOutputBoostChars = integerAtLeast(numbers.longOutputBoostChars, 1)
+  const valueLoopWindowTurns = integerAtLeast(numbers.valueLoopWindowTurns, 1)
+  const reviewWindowSize = integerAtLeast(numbers.reviewWindowSize, 1)
+  const diminishingWindowSize = integerAtLeast(numbers.diminishingWindowSize, 1)
+  const lastReportCoversCount = integerAtLeast(numbers.lastReportCoversCount, 2)
+  const repeatedFailureBoostThreshold = integerAtLeast(numbers.repeatedFailureBoostThreshold, 2)
+  const spinningRepeatCount = integerAtLeast(numbers.spinningRepeatCount, 2)
+  const oscillationPeriods = integerAtLeast(numbers.oscillationPeriods, 2)
+  const noDriftRepeatCount = integerAtLeast(numbers.noDriftRepeatCount, 2)
+  const defaultShadowTimeoutSeconds = numbers.defaultShadowTimeoutSeconds
+  const headlessDrainTimeoutSeconds = numbers.headlessDrainTimeoutSeconds
+  const resultBatchWindowMs = numbers.resultBatchWindowMs
+  const diminishingNoveltyThreshold = numbers.diminishingNoveltyThreshold
+  const stagnationCooldownSeconds = numbers.stagnationCooldownSeconds
+  const staleReportDecay = numbers.staleReportDecay
+  const conflictSynthesisTimeoutSeconds = numbers.conflictSynthesisTimeoutSeconds
+  const effortLadder = lines(draft.reasoningEffortLadder)
+  const soft = numbers.sessionShadowSoftBudgetChars
+  const hard = numbers.sessionShadowHardBudgetChars
+  const frugalRoute = draft.frugalShadowModel.trim()
+  const largestWindow = Math.max(
+    spinningRepeatCount ?? Number.POSITIVE_INFINITY,
+    (oscillationPeriods ?? Number.POSITIVE_INFINITY) * 2,
+    noDriftRepeatCount ?? Number.POSITIVE_INFINITY,
+    diminishingWindowSize ?? Number.POSITIVE_INFINITY,
+  )
+  if (heartbeatProbability === undefined || heartbeatProbability < 0 || heartbeatProbability > 1
+    || maxParallelShadows === undefined || maxPromptChars === undefined || maxReportChars === undefined
+    || longOutputBoostChars === undefined || valueLoopWindowTurns === undefined || reviewWindowSize === undefined
+    || diminishingWindowSize === undefined || lastReportCoversCount === undefined
+    || repeatedFailureBoostThreshold === undefined || spinningRepeatCount === undefined
+    || oscillationPeriods === undefined || noDriftRepeatCount === undefined
+    || defaultShadowTimeoutSeconds === undefined || defaultShadowTimeoutSeconds <= 0
+    || headlessDrainTimeoutSeconds === undefined || headlessDrainTimeoutSeconds <= 0
+    || resultBatchWindowMs === undefined || resultBatchWindowMs < 0
     || (draft.randomSeed.trim() !== '' && numbers.randomSeed === undefined)
-    || numbers.maxPromptChars === undefined || !Number.isInteger(numbers.maxPromptChars) || numbers.maxPromptChars < 1
-    || numbers.maxReportChars === undefined || !Number.isInteger(numbers.maxReportChars) || numbers.maxReportChars < 1) return undefined
+    || diminishingNoveltyThreshold === undefined || diminishingNoveltyThreshold < 0
+    || diminishingNoveltyThreshold > 1
+    || stagnationCooldownSeconds === undefined || stagnationCooldownSeconds < 0
+    || staleReportDecay === undefined || staleReportDecay < 0 || staleReportDecay > 1
+    || conflictSynthesisTimeoutSeconds === undefined || conflictSynthesisTimeoutSeconds <= 0
+    || (soft !== undefined && (!Number.isInteger(soft) || soft < 1))
+    || (hard !== undefined && (!Number.isInteger(hard) || hard < 1))
+    || (soft !== undefined && (hard === undefined || frugalRoute === '' || soft >= hard))
+    || (frugalRoute !== '' && soft === undefined)
+    || effortLadder.length === 0 || new Set(effortLadder).size !== effortLadder.length
+    || reviewWindowSize < largestWindow) return undefined
   return {
-    heartbeatProbability: numbers.heartbeatProbability,
-    maxParallelShadows: numbers.maxParallelShadows,
-    defaultShadowTimeoutSeconds: numbers.defaultShadowTimeoutSeconds,
-    headlessDrainTimeoutSeconds: numbers.headlessDrainTimeoutSeconds,
-    resultBatchWindowMs: numbers.resultBatchWindowMs,
+    heartbeatProbability,
+    maxParallelShadows,
+    defaultShadowTimeoutSeconds,
+    headlessDrainTimeoutSeconds,
+    resultBatchWindowMs,
     ...(draft.defaultShadowModel.trim() === '' ? {} : { defaultShadowModel: draft.defaultShadowModel.trim() }),
     ...(draft.defaultReasoningEffort.trim() === '' ? {} : { defaultReasoningEffort: draft.defaultReasoningEffort.trim() }),
     argumentDisclosure: draft.argumentDisclosure === 'full' ? 'full' : 'redacted',
     ...(numbers.randomSeed === undefined ? {} : { randomSeed: numbers.randomSeed }),
-    maxPromptChars: numbers.maxPromptChars,
-    maxReportChars: numbers.maxReportChars,
+    maxPromptChars,
+    maxReportChars,
+    preferIndependentVendor: draft.preferIndependentVendor === 'true',
+    longOutputBoostChars,
+    lastReportCoversCount,
+    repeatedFailureBoostThreshold,
+    valueLoopEnabled: draft.valueLoopEnabled === 'true',
+    valueLoopWindowTurns,
+    reviewWindowSize,
+    spinningRepeatCount,
+    oscillationPeriods,
+    noDriftRepeatCount,
+    diminishingWindowSize,
+    diminishingNoveltyThreshold,
+    stagnationCooldownSeconds,
+    stagnationEscalationEnabled: draft.stagnationEscalationEnabled === 'true',
+    reasoningEffortLadder: effortLadder,
+    ...(soft === undefined ? {} : { sessionShadowSoftBudgetChars: soft }),
+    ...(hard === undefined ? {} : { sessionShadowHardBudgetChars: hard }),
+    ...(frugalRoute === '' ? {} : { frugalShadowModel: frugalRoute }),
+    staleReportDecay,
+    conflictSynthesisEnabled: draft.conflictSynthesisEnabled === 'true',
+    conflictSynthesisTimeoutSeconds,
   }
 }
 
@@ -314,6 +461,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
 
   const validSettings = settingsEdit === null ? undefined : settingsInput(settingsEdit)
   const validDefinition = definitionEdit === null ? undefined : definitionInput(definitionEdit)
+  const resolvedSettings = settings.status === 'ready' ? settings.value : undefined
   const settingsDirty = useMemo(() => settings.status === 'ready' && settings.value !== undefined
     && settingsEdit !== null && JSON.stringify(validSettings) !== JSON.stringify(settings.value),
   [settings, settingsEdit, validSettings])
@@ -330,19 +478,17 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
     }
   }
 
-  const changeStatus = (operation: (sessionId: SessionId) => Promise<ShadowMindStatus>): void => {
-    if (currentSession === undefined) return
-    void run(async () => { setStatus(await operation(currentSession)) })
+  const changeStatus = (
+    sessionId: SessionId,
+    operation: (sessionId: SessionId) => Promise<ShadowMindStatus>,
+  ): void => {
+    void run(async () => { setStatus(await operation(sessionId)) })
   }
 
-  const submitDefinition = (): void => {
-    if (validDefinition === undefined) {
-      setMessage(t('invalidForm'))
-      return
-    }
+  const submitDefinition = (input: ShadowDefinitionInput): void => {
     void run(async () => {
-      if (editingId === null) await props.create(validDefinition)
-      else await props.update(validDefinition)
+      if (editingId === null) await props.create(input)
+      else await props.update(input)
       setDefinitionEdit(null)
       setEditingId(null)
       await reload()
@@ -368,6 +514,11 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
               <span>{t('pending')}: {status.pendingSchedules}</span>
               <span>{t('totalRuns')}: {status.totalRuns}</span>
               <span>{t('epoch')}: {status.epoch}</span>
+              <span>{t('prefilterSkips')}: {status.prefilterSkips}</span>
+              <span>{t('budgetTier')}: {status.budgetTier}</span>
+              <span>{t('spentChars')}: {status.spentChars}</span>
+              <span>{t('synthesisRuns')}: {status.synthesisRuns}</span>
+              <span>{t('synthesisFailures')}: {status.synthesisFailures}</span>
             </div>
             {status.lastRun === undefined ? <p>{t('noCompletedRuns')}</p> : (
               <dl className={css.lastRun} data-shadow-last-run>
@@ -379,15 +530,34 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                 {status.lastRun.reasonCode === undefined ? null : (
                   <div><dt>{t('reviewReason')}</dt><dd><code>{status.lastRun.reasonCode}</code></dd></div>
                 )}
+                <div><dt>{t('deliberationChars')}</dt><dd>{status.lastRun.deliberationChars}</dd></div>
+                <div><dt>{t('independence')}</dt><dd>{status.lastRun.independence}</dd></div>
+                {status.lastRun.route === undefined ? null : (
+                  <div><dt>{t('route')}</dt><dd><code>{status.lastRun.route}</code></dd></div>
+                )}
                 {status.lastRun.childSessionId === undefined ? null : (
                   <div><dt>{t('childSession')}</dt><dd><code>{status.lastRun.childSessionId}</code></dd></div>
                 )}
               </dl>
             )}
+            <dl className={css.lastRun} data-shadow-diagnostics-status>
+              <div><dt>{t('effectiveProbabilities')}</dt><dd>{status.effectiveProbabilities
+                .map(value => `${value.shadowId}=${value.probability}`).join(', ') || 'none'}</dd></div>
+              <div><dt>{t('valueLoop')}</dt><dd>{status.valueLoop
+                .map(value => `${value.shadowId}:${value.adopted}/${value.rejected}/${value.ignored}`).join(', ') || 'none'}</dd></div>
+              <div><dt>{t('cooldowns')}</dt><dd>{status.cooldowns
+                .map(value => `${value.shadowId}@${value.until}`).join(', ') || 'none'}</dd></div>
+              <div><dt>{t('pendingEscalations')}</dt><dd>{status.pendingEscalations.join(', ') || 'none'}</dd></div>
+              <div><dt>{t('recentReviews')}</dt><dd>{status.recentReviews
+                .map(value => `${value.shadowId}:${value.verdict}`).join(', ') || 'none'}</dd></div>
+              {status.lastSynthesisFailure === undefined ? null : (
+                <div><dt>{t('lastSynthesisFailure')}</dt><dd>{status.lastSynthesisFailure}</dd></div>
+              )}
+            </dl>
             <div className={css.actions}>
-              <button type="button" disabled={busy || status.paused} onClick={() => { changeStatus(props.pause) }}>{t('pause')}</button>
-              <button type="button" disabled={busy || !status.paused} onClick={() => { changeStatus(props.resume) }}>{t('resume')}</button>
-              <button type="button" disabled={busy} onClick={() => { changeStatus(props.toggle) }}>{t('toggle')}</button>
+              <button type="button" disabled={busy || status.paused} onClick={() => { changeStatus(currentSession, props.pause) }}>{t('pause')}</button>
+              <button type="button" disabled={busy || !status.paused} onClick={() => { changeStatus(currentSession, props.resume) }}>{t('resume')}</button>
+              <button type="button" disabled={busy} onClick={() => { changeStatus(currentSession, props.toggle) }}>{t('toggle')}</button>
             </div>
           </>
         )}
@@ -409,6 +579,22 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
               ['randomSeed', 'randomSeedHint'],
               ['maxPromptChars', 'maxPromptCharsHint'],
               ['maxReportChars', 'maxReportCharsHint'],
+              ['longOutputBoostChars', 'longOutputBoostCharsHint'],
+              ['lastReportCoversCount', 'lastReportCoversCountHint'],
+              ['repeatedFailureBoostThreshold', 'repeatedFailureBoostThresholdHint'],
+              ['valueLoopWindowTurns', 'valueLoopWindowTurnsHint'],
+              ['reviewWindowSize', 'reviewWindowSizeHint'],
+              ['spinningRepeatCount', 'spinningRepeatCountHint'],
+              ['oscillationPeriods', 'oscillationPeriodsHint'],
+              ['noDriftRepeatCount', 'noDriftRepeatCountHint'],
+              ['diminishingWindowSize', 'diminishingWindowSizeHint'],
+              ['diminishingNoveltyThreshold', 'diminishingNoveltyThresholdHint'],
+              ['stagnationCooldownSeconds', 'stagnationCooldownSecondsHint'],
+              ['sessionShadowSoftBudgetChars', 'sessionShadowSoftBudgetCharsHint'],
+              ['sessionShadowHardBudgetChars', 'sessionShadowHardBudgetCharsHint'],
+              ['frugalShadowModel', 'frugalShadowModelHint'],
+              ['staleReportDecay', 'staleReportDecayHint'],
+              ['conflictSynthesisTimeoutSeconds', 'conflictSynthesisTimeoutSecondsHint'],
             ] as const).map(([field, hint]) => (
               <Field key={field} id={`shadow-setting-${field}`} label={t(field)} hint={t(hint)} value={settingsEdit[field]}
                 onChange={(value) => { setSettingsEdit({ ...settingsEdit, [field]: value }) }} />
@@ -421,18 +607,32 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
               </select>
               <small>{t('argumentDisclosureHint')}</small>
             </label>
+            <Field id="shadow-setting-reasoningEffortLadder" label={t('reasoningEffortLadder')}
+              hint={t('reasoningEffortLadderHint')} value={settingsEdit.reasoningEffortLadder} multiline
+              onChange={(value) => { setSettingsEdit({ ...settingsEdit, reasoningEffortLadder: value }) }} />
+            {BOOLEAN_FIELDS.map(field => (
+              <label className={css.field} htmlFor={`shadow-setting-${field}`} key={field}>
+                <span>{t(field)}</span>
+                <select id={`shadow-setting-${field}`} value={settingsEdit[field]}
+                  onChange={(event) => { setSettingsEdit({ ...settingsEdit, [field]: event.currentTarget.value }) }}>
+                  <option value="false">false</option><option value="true">true</option>
+                </select>
+              </label>
+            ))}
             <div className={css.formActions}>
-              <button type="button" disabled={!settingsDirty || busy} onClick={() => {
-                if (settings.status === 'ready' && settings.value !== undefined) setSettingsEdit(settingsDraft(settings.value))
-              }}>{t('discard')}</button>
-              <button type="button" disabled={!settingsDirty || validSettings === undefined || busy} onClick={() => {
-                if (validSettings === undefined) return
-                void run(async () => {
-                  await props.saveSettings(validSettings)
-                  setSettingsEdit(settingsDraft(validSettings))
-                  setMessage(t('saved'))
-                })
-              }}>{t(busy ? 'saving' : 'saveSettings')}</button>
+              <button type="button" disabled={!settingsDirty || busy}
+                onClick={resolvedSettings === undefined
+                  ? undefined
+                  : () => { setSettingsEdit(settingsDraft(resolvedSettings)) }
+                }>{t('discard')}</button>
+              <button type="button" disabled={!settingsDirty || validSettings === undefined || busy}
+                onClick={validSettings === undefined ? undefined : () => {
+                  void run(async () => {
+                    await props.saveSettings(validSettings)
+                    setSettingsEdit(settingsDraft(validSettings))
+                    setMessage(t('saved'))
+                  })
+                }}>{t(busy ? 'saving' : 'saveSettings')}</button>
             </div>
           </div>
         )}
@@ -450,6 +650,9 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                 <span data-enabled={definition.enabled}>{t(definition.enabled ? 'enabled' : 'disabled')}</span></div>
               <dl><div><dt>{t('activationProbability')}</dt><dd>{definition.activationProbability}</dd></div>
                 <div><dt>{t('runWithModel')}</dt><dd>{definition.runWithModel ?? 'inherit'}</dd></div>
+                <div><dt>{t('capture')}</dt><dd>{definition.capture}</dd></div>
+                <div><dt>{t('context')}</dt><dd>{definition.context}</dd></div>
+                <div><dt>{t('holdout')}</dt><dd>{String(definition.holdout)}</dd></div>
                 <div><dt>{t('sourcePath')}</dt><dd><code>{definition.sourcePath}</code></dd></div></dl>
               <div className={css.actions}>
                 <button type="button" disabled={busy} onClick={() => { void run(async () => { await props.setEnabled(definition.id, !definition.enabled); await reload() }) }}>
@@ -486,14 +689,46 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
               onChange={(value) => { setDefinitionEdit({ ...definitionEdit, timeoutSeconds: value }) }} />
             <Field id="shadow-definition-tools" label={t('tools')} hint={t('toolsHint')} value={definitionEdit.tools} multiline
               onChange={(value) => { setDefinitionEdit({ ...definitionEdit, tools: value }) }} />
+            <label className={css.field} htmlFor="shadow-definition-capture">
+              <span>{t('capture')}</span>
+              <select id="shadow-definition-capture" value={definitionEdit.capture}
+                onChange={(event) => { setDefinitionEdit({ ...definitionEdit, capture: event.currentTarget.value as ShadowDefinition['capture'] }) }}>
+                <option value="full">full</option><option value="since-compaction">since-compaction</option>
+              </select>
+              <small>{t('captureHint')}</small>
+            </label>
+            <label className={css.field} htmlFor="shadow-definition-context">
+              <span>{t('context')}</span>
+              <select id="shadow-definition-context" value={definitionEdit.context}
+                onChange={(event) => { setDefinitionEdit({ ...definitionEdit, context: event.currentTarget.value as ShadowDefinition['context'] }) }}>
+                <option value="standard">standard</option><option value="minimal">minimal</option>
+              </select>
+              <small>{t('contextHint')}</small>
+            </label>
+            <Field id="shadow-definition-prefilters" label={t('preFilters')} hint={t('preFiltersHint')}
+              value={definitionEdit.preFilters} multiline
+              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, preFilters: value }) }} />
+            <Field id="shadow-definition-boostfilters" label={t('boostFilters')} hint={t('boostFiltersHint')}
+              value={definitionEdit.boostFilters} multiline
+              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, boostFilters: value }) }} />
+            <Field id="shadow-definition-boostfactor" label={t('boostFactor')} hint={t('boostFactorHint')}
+              value={definitionEdit.boostFactor}
+              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, boostFactor: value }) }} />
             <Field id="shadow-definition-prompt" label={t('prompt')} hint={t('promptHint')} value={definitionEdit.prompt} multiline
               onChange={(value) => { setDefinitionEdit({ ...definitionEdit, prompt: value }) }} />
             <label className={css.check}><input type="checkbox" checked={definitionEdit.enabled}
               onChange={(event) => { setDefinitionEdit({ ...definitionEdit, enabled: event.currentTarget.checked }) }} />{t('enabled')}</label>
             <label className={css.check}><input type="checkbox" checked={definitionEdit.debug}
               onChange={(event) => { setDefinitionEdit({ ...definitionEdit, debug: event.currentTarget.checked }) }} />{t('debug')}</label>
+            <label className={css.check}><input type="checkbox" checked={definitionEdit.thinkFirst}
+              onChange={(event) => { setDefinitionEdit({ ...definitionEdit, thinkFirst: event.currentTarget.checked }) }} />{t('thinkFirst')}</label>
+            <label className={css.check}><input type="checkbox" checked={definitionEdit.holdout}
+              onChange={(event) => { setDefinitionEdit({ ...definitionEdit, holdout: event.currentTarget.checked }) }} />{t('holdout')}</label>
             <div className={css.formActions}><button type="button" disabled={busy} onClick={() => { setDefinitionEdit(null); setEditingId(null) }}>{t('cancel')}</button>
-              <button type="button" disabled={busy || validDefinition === undefined} onClick={submitDefinition}>{t(editingId === null ? 'create' : 'saveDefinition')}</button></div>
+              <button type="button" disabled={busy || validDefinition === undefined}
+                onClick={validDefinition === undefined ? undefined : () => { submitDefinition(validDefinition) }}>
+                {t(editingId === null ? 'create' : 'saveDefinition')}
+              </button></div>
           </div>
         </section>
       )}

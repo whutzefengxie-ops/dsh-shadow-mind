@@ -6,6 +6,7 @@
   },
   "include": [
     "src/index.ts",
+    "src/css-modules.d.ts",
     "src/runtime/**/*.ts",
     "src/tool/**/*.ts",
     "tests/**/*.ts",

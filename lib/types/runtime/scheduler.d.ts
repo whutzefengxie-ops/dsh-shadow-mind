@@ -22,4 +22,5 @@ export declare function selectShadows(definitions: readonly ShadowDefinition[], 
     readonly provider?: string;
     readonly model?: string;
     readonly random: RandomSource;
+    readonly probabilityFor?: (definition: ShadowDefinition) => number;
 }): ShadowDefinition[];

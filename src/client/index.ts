@@ -1,6 +1,6 @@
 /** Shadow Mind Web administration registered under Settings → Plugins. */
 
-import type {} from '@deepseek-ai/dsh-api-remotes/client'
+import type { ConnectionHandle, IApiClient, SettingsPathOpView } from '@deepseek-ai/dsh-api-remotes/client'
 import type { ClientContext, SessionId, SettingsScope } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-commands/client'
@@ -30,19 +30,12 @@ import {
   shadowReviewDefinition,
 } from './shadow-report-conversation.ts'
 import { ShadowReviewStore, useShadowReviewCycle } from './shadow-review-store.ts'
-import { en, zh, type ShadowMindLocaleKey } from './locales.ts'
+import { en, zh } from './locales.ts'
 
 export type { ShadowMindSettingsTabInjected, ShadowMindSettingsTabProps } from './ShadowMindSettingsTab.tsx'
 export type { ShadowReportCardProps } from './ShadowReportCard.tsx'
 export type { ShadowMindReviewChatData } from './shadow-report-projection.ts'
 export type { ShadowMindLocaleKey } from './locales.ts'
-
-declare module '@deepseek-ai/dsh-client-ui-slots' {
-  interface LocaleNamespaceMap {
-    /** Shadow Mind administration copy. */
-    'settings.shadowMind': ShadowMindLocaleKey
-  }
-}
 
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'settings.shadowMind'
@@ -50,6 +43,7 @@ const SETTINGS_NAMESPACE = 'shadow-mind'
 
 /** Services required by the Settings tab, Remote methods, and slash-command acknowledgment. */
 export const inject = [
+  'connection',
   'slots',
   'locale',
   'sessions',
@@ -68,39 +62,55 @@ async function remoteValue<T>(
   return result.value
 }
 
-/** Persist fields changed by the full settings form and clear removed optional overrides. */
-async function saveSettings(scope: SettingsScope<ShadowMindSettings>, next: ShadowMindSettings): Promise<void> {
+/** Atomically persist changed fields and removed overrides against one namespace revision. */
+async function saveSettings(
+  scope: SettingsScope<ShadowMindSettings>,
+  api: Pick<IApiClient, 'settings'>,
+  next: ShadowMindSettings,
+): Promise<void> {
   const snapshot = scope.getSnapshot()
   if (!snapshot.writable || snapshot.status !== 'ready' || snapshot.value === undefined) {
     throw new Error('Shadow Mind settings are not writable')
   }
   const current = snapshot.value
   const user = snapshot.user
-  const fields: readonly (keyof ShadowMindSettings)[] = [
-    'heartbeatProbability',
-    'maxParallelShadows',
-    'defaultShadowTimeoutSeconds',
-    'headlessDrainTimeoutSeconds',
-    'resultBatchWindowMs',
+  const optionalFields = [
     'defaultShadowModel',
     'defaultReasoningEffort',
-    'argumentDisclosure',
     'randomSeed',
-    'maxPromptChars',
-    'maxReportChars',
-  ]
-  for (const field of fields) {
-    const value = next[field]
-    if (value === undefined) {
-      if (typeof user === 'object' && user !== null && Object.hasOwn(user, field)) await scope.unset(field)
-    } else if (current[field] !== value) {
-      await scope.set(field, value)
+    'sessionShadowSoftBudgetChars',
+    'sessionShadowHardBudgetChars',
+    'frugalShadowModel',
+  ] as const satisfies readonly (keyof ShadowMindSettings)[]
+  const ops: SettingsPathOpView[] = []
+  for (const [field, value] of Object.entries(next)) {
+    const key = field as keyof ShadowMindSettings
+    if (JSON.stringify(current[key]) !== JSON.stringify(value)) {
+      ops.push({ op: 'set', path: [key], value })
     }
+  }
+  for (const field of optionalFields) {
+    if (!Object.hasOwn(next, field)
+      && typeof user === 'object' && user !== null && Object.hasOwn(user, field)) {
+      ops.push({ op: 'unset', path: [field] })
+    }
+  }
+  if (ops.length === 0) return
+  const response = await api.settings.mutate({
+    ns: SETTINGS_NAMESPACE,
+    ops,
+    ...snapshot.revision === undefined ? {} : { expectedRevision: snapshot.revision },
+  })
+  if (!response.result.ok) {
+    throw new Error(
+      `Shadow Mind settings save failed: ${response.result.error.code}: ${response.result.error.message}`,
+    )
   }
 }
 
 /** Mount the Shadow Mind Settings tab and visible slash-command acknowledgment. */
 export async function apply(ctx: ClientContext): Promise<void> {
+  const connection = ctx.get('connection') as ConnectionHandle
   const unmountRemote = await ctx.remote.$mount(shadowMindRemote)
   ctx.effect(() => unmountRemote, 'ui-shadow-mind: remote contribution')
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-shadow-mind: dictionaries')
@@ -146,7 +156,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
     }, ShadowRelayMarker))
     const injected = (): ShadowMindSettingsTabInjected => ({
       hooks: { settings },
-      saveSettings: next => saveSettings(settings, next),
+      saveSettings: next => saveSettings(settings, connection.api, next),
       catalog: () => remoteValue<ShadowAdministrationSnapshot>('shadowMind.catalog', remote.catalog()),
       create: input => remoteValue<ShadowDefinition>('shadowMind.create', remote.create(input)),
       update: input => remoteValue<ShadowDefinition>('shadowMind.update', remote.update(input)),

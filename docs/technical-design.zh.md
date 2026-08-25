@@ -1,6 +1,6 @@
 # Shadow Mind 技术方案
 
-本文记录参考 ZIP 中 `pi-shadow-mind` 的行为、独立 DSH 插件的对应设计、运行生命周期、数据披露规则和发行方式。实现以 DeepSeek Harness 的公开插件扩展点为基础，不修改 `agent-loop`。
+本文记录参考 ZIP 中 `pi-shadow-mind` 的行为、独立 DSH 插件的对应设计、运行生命周期、数据披露规则和发行方式。实现以 DeepSeek Harness 的公开插件扩展点为基础，不修改 `agent-loop`。当前机制分别由[目标架构](target-architecture.zh.md)、[审查条件机制](review-conditioning.zh.md)与[审查质量方向](review-quality-directions.zh.md)维护。
 
 ## 1. Pi Shadow Mind 的功能与实现
 
@@ -46,17 +46,17 @@ DSH 的浏览器模块扫描 Loader 中已经挂载的包；根运行时行足�
 
 ### 2.2 Child 运行
 
-被选中的定义通过 `ctx.subagents.start('spawn', request)` 启动一次性 child，使用 `maxDepth: 1`、独立 Session、每次运行的 AbortSignal、工具 allowlist、结构化输出 schema 和可选模型选择。没有单独模型配置时继承 root 路由；如果只配置 reasoning effort，必须能从定义、全局设置或 root 得到完整 `provider/model`。
+被选中的定义通过 `ctx.subagents.start('shadow-mind', request)` 启动一次性 child，使用 `maxDepth: 1`、独立 Session、每次运行的 AbortSignal、工具 allowlist、结构化输出 schema、可选模型选择、context 继承策略与 think-first 标志。插件在同名 provider 不存在时注册自己的进程内实现，并复用 DSH 已发布的 child 创建与策略继承原语；预先注册的同名 provider 必须显式声明本次请求需要的条件能力，否则运行在 start 阶段失败。没有单独模型配置时继承 root 路由；如果只配置 reasoning effort，必须能从定义、全局设置或 root 得到完整 `provider/model`。
 
 Child approval 固定为 `never`，并继承 parent 显式 sandbox 覆盖，不能通过批准对话扩大权限。默认工具为 `read`、`grep` 和 `glob`；定义添加的写入工具仍可能修改继承 sandbox 已允许的内容，因此不把“额外工具”默认为只读。
 
-Child 必须返回对象根结构：`status` 为 `not_relevant`、`silent` 或 `report`，`content` 为字符串。`report` 要求去除首尾空白后非空且不超过报告上限，其他状态要求空内容。超时、provider 失败、非完成结束、无效结构化输出或 dispose 失败只记录终态，不会把部分 assistant 文本转发给 root。
+Child 必须返回对象根结构：`status` 为 `not_relevant`、`silent` 或 `report`，`content` 为字符串。`report` 还要求 `verdict` 为 `challenge`、`gap`、`confirm` 或 `uncertain`；可选 `severity` 必须位于零到一，可选 `refs` 必须是投影视窗中最多八个升序唯一 sequence。`report` 的 content 去除首尾空白后必须非空且不超过报告上限，其他状态要求空 content 且禁止 envelope 字段。超时、provider 失败、非完成结束、无效结构化输出或 dispose 失败只记录终态，不会把部分 assistant 文本转发给 root。
 
 ### 2.3 轨迹投影与报告持久化
 
-投影以触发 `turn/end` 的序号为水位，只读取此前持久化事件。它包含用户文本、可见 assistant 文本、工具名、可选工具参数、确定性结果摘要、compaction 摘要和较早 Shadow relay；它排除 reasoning、流式 chunk、原始工具结果正文和水位之后的事件。默认 `argumentDisclosure: redacted` 不复制工具参数。
+投影以触发 `turn/end` 的序号为水位，只读取此前持久化事件。它包含带 sequence 的用户文本、可见 assistant 文本、工具名、可选工具参数、确定性结果摘要、compaction 摘要和较早 Shadow relay；它排除 reasoning、流式 chunk、原始工具结果正文和水位之后的事件。默认 `argumentDisclosure: redacted` 不复制工具参数；定义使用 `capture: since-compaction` 时，从最近成功 compaction epoch 截获并保留 summary。
 
-被接受的报告进入固定窗口的有序批次，并作为来源 `{ kind: 'shadow-report', form: 'relay' }` 的持久化 `user/message` 写入 root。来源记录每个 Shadow id、run id、child Session id 和捕获水位。运行中的 root 使用 `steer()`，空闲 root 使用 `followup()`；模型可见报告能够从 Session 日志重建。
+被接受的报告按 severity 降序进入固定窗口批次，并作为来源 `{ kind: 'shadow-report', form: 'relay' }` 的持久化 `user/message` 写入 root。来源记录每个 Shadow id、run id、child Session id、捕获水位、verdict、refs、可选 severity 与可选综合替换 id。运行中的 root 使用 `steer()`，空闲 root 使用 `followup()`；模型可见报告能够从 Session 日志重建。
 
 运行状态不写成仓库外自定义 Session 事件。当前 DSH 不提供为这类事件设置 `ignorable: true` 的公开写入接口，持久化未知事件会使未加载本插件的 Harness 拒绝恢复会话。插件改为通过只读 Remote 暴露按捕获水位分组的审查周期快照；报告仍由已知的 `user/message` 事件持久化，运行中、`silent`、`not_relevant`、取消和失败状态只用于 Web 展示和诊断，不进入主 agent 的模型历史。
 
@@ -76,7 +76,7 @@ scheduling -> running -> report | silent | not_relevant | aborted | failed
 
 ### 2.5 Web 设置与会话展示
 
-“设置 → 插件 → Shadow Mind”通过 settings namespace 和生成的 Remote 管理全局设置、Markdown 定义和当前 root 状态。每项定义可配置启用、激活概率、模型过滤、child 模型、reasoning effort、超时、工具与提示词。
+“设置 → 插件 → Shadow Mind”通过 settings namespace 和生成的 Remote 管理全局设置、Markdown 定义和当前 root 状态。每项定义可配置启用、激活概率、模型过滤、child 模型、reasoning effort、超时、截获视窗、context、think-first、skip/boost 谓词、holdout、工具与提示词；全局设置还提供 review window、vendor 偏好、value loop、软硬预算、陈旧衰减与可选冲突综合。
 
 插件通过 `conversation.chat.node` 为每个正常完成的 root `turn/end` 建立候选审查节点，并以该事件序号作为固定显示锚点。没有进入 Shadow 调度的节点不渲染；一旦周期准入，节点立即显示运行占位卡片，并明确提示“此时发送新消息会取消本轮审查”。同一节点随后原位更新为报告、`silent`、`not_relevant`、取消或失败终态，因此多轮审查各自停留在实际发生的位置。
 
@@ -84,11 +84,11 @@ scheduling -> running -> report | silent | not_relevant | aborted | failed
 
 `report` 是唯一可以进入 batcher 并 relay 给主 agent 的终态。`silent`、`not_relevant`、`aborted` 和 `failed` 只更新卡片、状态和调试日志，不调用 `steer()` 或 `followup()`；Shadow relay 的来源类型也不匹配“真实用户输入”取消监听。两项约束共同保证状态卡片不会再次触发主 agent 或 Shadow 调度。
 
-`/shadow status|pause|resume|toggle` 只控制当前 root。状态包含活动数、待调度数、累计准入运行数和最近终态；活动数恢复为零后，最近结果仍可证明本进程内发生过运行。
+`/shadow status|pause|resume|toggle` 只控制当前 root。状态包含活动数、待调度数、累计准入运行数、最近终态、有效概率、跳过计数、预算层、冷却、待处理提升、近期 anchored envelope、综合计数与 value-loop 计数；活动数恢复为零后，最近结果仍可证明本进程内发生过运行。
 
 ## 3. 与 Pi 的有意差异
 
-DSH 复用现有 `read`、`grep` 和 `glob`，不实现 Pi 的 `find`、`ls` 或专有 Session 驱动。结构化终态替代 `NOT_RELEVANT` 和 `report_to_main`，使终态验证由 subagent provider 完成。模型过滤支持对 model id 或完整路由使用本地 `*`/`?` glob，比 Pi 的精确完整路由匹配更宽。
+DSH 复用现有 `read`、`grep` 和 `glob`，不实现 Pi 的 `find`、`ls` 或专有 Session 驱动。插件专用 provider 的 `structured_output` 终态替代 `NOT_RELEVANT` 和 `report_to_main`，使 schema 校验、提交与同 child think-first continuation 在一个运行生命周期内完成。模型过滤支持对 model id 或完整路由使用本地 `*`/`?` glob，比 Pi 的精确完整路由匹配更宽。
 
 DSH 默认不公开工具参数和结果预览；Pi 会保留工具参数并为已知文件工具提供首行预览。DSH child 遵循现有 Session 持久化策略，而不是在 `debug: false` 时切到内存。插件保留通用 approval 和命令显示，不实现 `Alt+S`。
 
@@ -106,4 +106,4 @@ DSH 默认不公开工具参数和结果预览；Pi 会保留工具参数并为�
 
 功能验收使用新 Session，把 heartbeat 与定义激活概率都设为 `1`，启用匹配全部模型的审查定义，再让 root 明确使用至少一个工具。`/shadow status` 应先后显示准入运行和最近终态；运行开始后，被审查回复下方应立即出现占位卡片和新消息取消提示，并在完成后保持锚点不变。
 
-`report` 验收要求 Session 日志包含带来源信息的持久化 relay，root 自动完成 follow-up，卡片正文正确渲染标题、列表、表格和代码块，并可跳转 child Session。`silent` 必须显示明确终态卡片且 Session 中没有 Shadow relay；`not_relevant`、取消和失败同样不得生成伪报告。新用户消息取消用例必须显示 `USER_MESSAGE_RECEIVED`，Shadow 超时必须显示 `SHADOW_TIMEOUT`，调试 JSONL 能从 `run-admitted` 还原到 `run-finished` 且不包含提示词、报告、绝对路径、stack 或凭据。
+`report` 验收要求 Session 日志包含带 verdict 与 refs 的持久化 relay，root 自动完成 follow-up，卡片正文正确渲染标题、列表、表格和代码块，并可跳转 child Session。`silent` 必须显示明确终态卡片且 Session 中没有 Shadow relay；`not_relevant`、取消和失败同样不得生成伪报告。新用户消息取消用例必须显示 `USER_MESSAGE_RECEIVED`，包括已验证但仍待 relay 的报告；Shadow 超时必须显示 `SHADOW_TIMEOUT`，调试 JSONL 能从 `run-admitted` 还原到 `run-finished` 且不包含提示词、报告、绝对路径、stack 或凭据。

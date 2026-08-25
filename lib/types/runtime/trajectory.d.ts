@@ -2,6 +2,13 @@
 import type { ContentBlock } from '@deepseek-ai/dsh-llm';
 import type { SessionEvent } from '@deepseek-ai/dsh-session';
 import type { ShadowDefinition, ShadowMindSettings } from './types.ts';
+/** One projected transcript plus the exact durable anchors visible in it. */
+export interface ProjectedTrajectory {
+    /** Model-visible trajectory text. */
+    readonly text: string;
+    /** Sequence numbers rendered into the text. */
+    readonly seqs: ReadonlySet<number>;
+}
 /**
  * Summarize a tool result without disclosing its text.
  * @param toolName Tool name paired from the durable call event.
@@ -16,9 +23,19 @@ export declare function summarizeToolResult(toolName: string, content: readonly 
  * @param events Complete root session events.
  * @param capturedThroughSeq Inclusive event sequence watermark.
  * @param argumentDisclosure Tool argument policy.
+ * @param capture Root trajectory window policy.
  * @returns Plain-text trajectory.
  */
-export declare function projectTrajectory(events: readonly SessionEvent[], capturedThroughSeq: number, argumentDisclosure: ShadowMindSettings['argumentDisclosure']): string;
+export declare function projectTrajectoryWithAnchors(events: readonly SessionEvent[], capturedThroughSeq: number, argumentDisclosure: ShadowMindSettings['argumentDisclosure'], capture?: ShadowDefinition['capture']): ProjectedTrajectory;
+/**
+ * Project a session prefix into a stable, reasoning-free text transcript.
+ * @param events Complete root session events.
+ * @param capturedThroughSeq Inclusive event sequence watermark.
+ * @param argumentDisclosure Tool argument policy.
+ * @param capture Root-log range to project.
+ * @returns Plain-text trajectory.
+ */
+export declare function projectTrajectory(events: readonly SessionEvent[], capturedThroughSeq: number, argumentDisclosure: ShadowMindSettings['argumentDisclosure'], capture?: ShadowDefinition['capture']): string;
 /**
  * Build the complete fresh-child prompt and fail closed above its configured bound.
  * @param definition Selected Shadow definition.

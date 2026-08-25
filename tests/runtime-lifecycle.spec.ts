@@ -43,7 +43,7 @@ class MemorySettings extends SettingsProvider {
 }
 
 class StubProvider implements SubagentProvider {
-  readonly name = 'spawn'
+  readonly name = 'shadow-mind'
   readonly capabilities = CAPABILITIES
   readonly inheritsParentContext = false
 
@@ -65,13 +65,22 @@ interface RuntimeHarness {
 
 const harnesses: RuntimeHarness[] = []
 
+interface SetupOptions {
+  readonly resultBatchWindowMs?: number
+  readonly maxParallelShadows?: number
+  readonly conflictSynthesisEnabled?: boolean
+  readonly definitions?: Readonly<Record<string, string>>
+  readonly holdoutKeys?: Readonly<Record<string, readonly string[]>>
+}
+
 async function setup(
   createRun: (request: ResolvedSubagentStartRequest) => SubagentRun,
+  options: SetupOptions = {},
 ): Promise<RuntimeHarness> {
   const dshHome = await mkdtemp(join(tmpdir(), 'dsh-shadow-runtime-'))
   const definitionRoot = join(dshHome, 'shadow-minds')
   await mkdir(definitionRoot, { recursive: true })
-  await writeFile(join(definitionRoot, 'reviewer.md'), `---
+  const definitions = options.definitions ?? { 'reviewer.md': `---
 id: reviewer
 name: Reviewer
 enabled: true
@@ -83,7 +92,13 @@ tools: []
 ---
 
 Review the completed tool-using turn.
-`, 'utf8')
+` }
+  await Promise.all(Object.entries(definitions).map(async ([filename, content]) => {
+    await writeFile(join(definitionRoot, filename), content, 'utf8')
+  }))
+  if (options.holdoutKeys !== undefined) {
+    await writeFile(join(definitionRoot, 'holdout-keys.json'), JSON.stringify(options.holdoutKeys), 'utf8')
+  }
 
   const ctx = new Context()
   const settingsFiber = ctx.plugin(MemorySettings)
@@ -96,8 +111,9 @@ Review the completed tool-using turn.
   const shadowFiber = ctx.plugin(ShadowMindRuntime, {
     dshHome,
     heartbeatProbability: 1,
-    maxParallelShadows: 1,
-    resultBatchWindowMs: 0,
+    maxParallelShadows: options.maxParallelShadows ?? 1,
+    resultBatchWindowMs: options.resultBatchWindowMs ?? 0,
+    conflictSynthesisEnabled: options.conflictSynthesisEnabled ?? false,
   })
   await shadowFiber
 
@@ -180,7 +196,12 @@ describe('Shadow runtime lifecycle', () => {
       result: Promise.resolve({
         output: [],
         stopReason: 'completed',
-        structured: { status: 'report', content: '## Finding\n\n- Fix the defect.' },
+        structured: {
+          status: 'report',
+          content: '## Finding\n\n- Fix the defect.',
+          verdict: 'challenge',
+          refs: [],
+        },
       }),
       dispose: () => Promise.resolve(),
     }))
@@ -200,6 +221,310 @@ describe('Shadow runtime lifecycle', () => {
     })
   })
 
+  it('aborts a validated report when user input invalidates its pending relay', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-pending-report'),
+      localAgent: undefined,
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed',
+        structured: {
+          status: 'report',
+          content: 'This report must not survive the user input.',
+          verdict: 'challenge',
+          refs: [],
+        },
+      }),
+      dispose: () => Promise.resolve(),
+    }), { resultBatchWindowMs: 500 })
+    emitToolTurn(harness)
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'report',
+        stage: 'relay',
+        relayed: false,
+      })
+    })
+
+    harness.ctx.emit('agent/inbox/inserted', {
+      agent: harness.agent,
+      message: createUserMessage({
+        content: [{ type: 'text', text: 'Start a different task.' }],
+        source: { kind: 'user' },
+      }),
+    })
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'aborted',
+        stage: 'relay',
+        reasonCode: 'USER_MESSAGE_RECEIVED',
+        cancellationSource: 'user-input',
+        relayed: false,
+      })
+    })
+    expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).not.toHaveProperty('content')
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
+  it('discards both original reports when user input cancels conflict synthesis', async () => {
+    let run = 0
+    let synthesisStarted!: () => void
+    const started = new Promise<void>((resolve) => { synthesisStarted = resolve })
+    const harness = await setup(request => {
+      run += 1
+      if (run < 3) {
+        return {
+          id: SessionId(`child-conflict-${String(run)}`),
+          localAgent: undefined,
+          result: Promise.resolve({
+            output: [],
+            stopReason: 'completed',
+            structured: {
+              status: 'report',
+              content: `Conflicting report ${String(run)}.`,
+              verdict: run === 1 ? 'challenge' : 'confirm',
+              refs: [],
+            },
+          }),
+          dispose: () => Promise.resolve(),
+        }
+      }
+      synthesisStarted()
+      return {
+        id: SessionId('child-synthesis'),
+        localAgent: undefined,
+        result: new Promise((resolve) => {
+          const abort = (): void => { resolve({ output: [], stopReason: 'aborted' }) }
+          if (request.signal.aborted) abort()
+          else request.signal.addEventListener('abort', abort, { once: true })
+        }),
+        dispose: () => Promise.resolve(),
+      }
+    }, {
+      maxParallelShadows: 2,
+      conflictSynthesisEnabled: true,
+      definitions: {
+        'challenge.md': `---
+id: challenge
+name: Challenge
+enabled: true
+activation_probability: 1
+active_for_models: ['*']
+tools: []
+---
+Challenge the result.
+`,
+        'confirm.md': `---
+id: confirm
+name: Confirm
+enabled: true
+activation_probability: 1
+active_for_models: ['*']
+tools: []
+---
+Confirm the result.
+`,
+        'synthesizer.md': `---
+id: synthesizer
+name: Synthesizer
+enabled: true
+activation_probability: 0
+active_for_models: ['*']
+tools: []
+---
+Resolve the conflict from the two report texts.
+`,
+      },
+    })
+    emitToolTurn(harness)
+    await started
+
+    harness.ctx.emit('agent/inbox/inserted', {
+      agent: harness.agent,
+      message: createUserMessage({
+        content: [{ type: 'text', text: 'Replace the task while synthesis is running.' }],
+        source: { kind: 'user' },
+      }),
+    })
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs).toHaveLength(2)
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'aborted',
+          stage: 'relay',
+          reasonCode: 'USER_MESSAGE_RECEIVED',
+          cancellationSource: 'user-input',
+          relayed: false,
+        }),
+        expect.objectContaining({
+          phase: 'aborted',
+          stage: 'relay',
+          reasonCode: 'USER_MESSAGE_RECEIVED',
+          cancellationSource: 'user-input',
+          relayed: false,
+        }),
+      ]))
+    })
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
+  it('fails conflict synthesis open when its definition registry becomes unreadable', async () => {
+    let run = 0
+    const harness = await setup(() => {
+      run += 1
+      return {
+        id: SessionId(`child-fail-open-${String(run)}`),
+        localAgent: undefined,
+        result: Promise.resolve({
+          output: [],
+          stopReason: 'completed',
+          structured: {
+            status: 'report',
+            content: `Original report ${String(run)}.`,
+            verdict: run === 1 ? 'challenge' : 'confirm',
+            refs: [],
+          },
+        }),
+        dispose: () => Promise.resolve(),
+      }
+    }, {
+      resultBatchWindowMs: 1_000,
+      maxParallelShadows: 2,
+      conflictSynthesisEnabled: true,
+      definitions: {
+        'challenge.md': `---
+id: challenge
+name: Challenge
+enabled: true
+activation_probability: 1
+active_for_models: ['*']
+tools: []
+---
+Challenge the result.
+`,
+        'confirm.md': `---
+id: confirm
+name: Confirm
+enabled: true
+activation_probability: 1
+active_for_models: ['*']
+tools: []
+---
+Confirm the result.
+`,
+        'synthesizer.md': `---
+id: synthesizer
+name: Synthesizer
+enabled: true
+activation_probability: 0
+active_for_models: ['*']
+tools: []
+---
+Resolve the conflict.
+`,
+      },
+    })
+    emitToolTurn(harness)
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs).toMatchObject([
+        { phase: 'report', relayed: false },
+        { phase: 'report', relayed: false },
+      ])
+    })
+
+    const definitionRoot = join(harness.dshHome, 'shadow-minds')
+    await rm(definitionRoot, { recursive: true, force: true })
+    await writeFile(definitionRoot, 'not a directory', 'utf8')
+    await vi.waitFor(() => { expect(harness.deliveries).toHaveLength(1) }, { timeout: 2_000 })
+
+    expect(JSON.stringify(harness.deliveries[0])).toContain('Original report 1.')
+    expect(JSON.stringify(harness.deliveries[0])).toContain('Original report 2.')
+    expect(harness.runtime.status(harness.agent)).toMatchObject({
+      synthesisFailures: 1,
+      lastSynthesisFailure: 'preparation_failed',
+    })
+    expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs).toMatchObject([
+      { phase: 'report', relayed: true },
+      { phase: 'report', relayed: true },
+    ])
+  })
+
+  it('redacts holdout literals from the complete relay framing', async () => {
+    const literal = 'PRIVATE_BENCHMARK_NAME'
+    const harness = await setup(() => ({
+      id: SessionId('child-holdout-relay'),
+      localAgent: undefined,
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed',
+        structured: {
+          status: 'report',
+          content: 'The report content is already clean.',
+          verdict: 'challenge',
+          refs: [],
+        },
+      }),
+      dispose: () => Promise.resolve(),
+    }), {
+      definitions: {
+        'reviewer.md': `---
+id: reviewer
+name: Reviewer ${literal}
+enabled: true
+activation_probability: 1
+active_for_models: ['*']
+tools: []
+holdout: true
+---
+Review the completed turn.
+`,
+      },
+      holdoutKeys: { reviewer: [literal] },
+    })
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => { expect(harness.deliveries).toHaveLength(1) })
+    const relay = JSON.stringify(harness.deliveries[0])
+    expect(relay).not.toContain(literal)
+    expect(relay).toContain('[redacted holdout]')
+  })
+
+  it('rejects unsupported external conditioning before provider start', async () => {
+    let starts = 0
+    const harness = await setup(() => {
+      starts += 1
+      throw new Error('provider start must not be called')
+    }, {
+      definitions: {
+        'reviewer.md': `---
+id: reviewer
+name: Reviewer
+enabled: true
+activation_probability: 1
+active_for_models: ['*']
+tools: []
+context: minimal
+think_first: true
+---
+Review the completed turn.
+`,
+      },
+    })
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'failed',
+        stage: 'prepare',
+        error: { message: expect.stringContaining('contextInheritance, thinkFirst') },
+      })
+    })
+    expect(starts).toBe(0)
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
   it('admits the same Shadow again on a later tool-using turn', async () => {
     let run = 0
     const harness = await setup(() => ({
@@ -208,7 +533,7 @@ describe('Shadow runtime lifecycle', () => {
       result: Promise.resolve({
         output: [],
         stopReason: 'completed',
-        structured: { status: 'report', content: `Finding ${String(run)}.` },
+        structured: { status: 'report', content: `Finding ${String(run)}.`, verdict: 'challenge', refs: [] },
       }),
       dispose: () => Promise.resolve(),
     }))
@@ -336,6 +661,7 @@ describe('Shadow runtime lifecycle', () => {
       'run-admitted',
       'child-started',
       'run-cancellation-requested',
+      'quality-metadata',
       'run-finished',
     ])
     expect(records.at(-1)).toMatchObject({

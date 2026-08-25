@@ -41,7 +41,7 @@ GitHub 安装直接使用仓库提交的 `lib/`。本包没有 `prepare` 脚本�
 进入 **设置 → 插件 → Shadow Mind**。该页面提供：
 
 - heartbeat 概率、并发数、超时、报告批处理、模型路由、reasoning effort、披露策略和长度上限等实时调度设置；
-- 由 Markdown 保存的 Shadow 定义，包括名称、激活概率、模型过滤、运行模型、工具和提示词；
+- 由 Markdown 保存的 Shadow 定义，包括名称、激活概率、模型过滤、运行模型、截获视窗、context 继承、think-first 执行、谓词、holdout 模式、工具和提示词；
 - 当前所选 root Session 的暂停、恢复和状态控制；
 - 定义目录和逐文件诊断。
 
@@ -57,12 +57,15 @@ activation_probability: 1
 active_for_models:
   - '*'
 tools: []
+capture: since-compaction
+context: minimal
+think_first: true
 ---
 
-Review the completed task. If there is a concrete defect or missing requirement, return a concise report with evidence. Otherwise return not_relevant.
+Review the completed task. If there is a concrete defect or missing requirement, return a concise report with verdict `challenge` or `gap` and only rendered sequence numbers in `refs`. Return `silent` when the review applies but adds nothing actionable, or `not_relevant` when it does not apply.
 ```
 
-验收时把全局 heartbeat 概率设为 `1`。省略 `run_with_model` 时 child 继承 root 的模型路由；如需单独模型，应填写完整的 `provider/model`。默认 Shadow 工具为 `read`、`grep` 和 `glob`；定义中的工具会扩展 allowlist，如果继承的 sandbox 允许，它们也可能具有写入能力。
+验收时把全局 heartbeat 概率设为 `1`。省略 `run_with_model` 时 child 继承 root 的模型路由；如需单独模型，应填写完整的 `provider/model`。默认 Shadow 工具为 `read`、`grep` 和 `glob`；定义中的工具会扩展 allowlist，如果继承的 sandbox 允许，它们也可能具有写入能力。[`examples/shadow-minds/`](examples/shadow-minds/) 中默认禁用的 starter library 展示 anchored probe 词汇，安装过程绝不会自动把它写入 `$DSH_HOME`。
 
 ## 验证实际运行
 
@@ -80,7 +83,7 @@ Shadow 进入调度后，被审查的 root 回复下方会立即出现运行占�
 
 定义按一个 Harness home 全局生效，不按 profile 或 workspace 隔离。Child Session 遵循 Harness 的持久化策略。并发 Shadow 之间没有共享事务；一旦启用写入型工具，它们可能与 root 或其他 Shadow 发生竞争。
 
-[技术方案](docs/technical-design.zh.md)包含 Pi 参考实现分析、DSH 架构、生命周期和有意保留的差异。提交日志或更新安装 commit 前请阅读 [SECURITY.md](SECURITY.md)。
+[目标架构](docs/target-architecture.zh.md)、[审查条件机制](docs/review-conditioning.zh.md)与[审查质量方向](docs/review-quality-directions.zh.md)记录当前运行时契约；[技术方案](docs/technical-design.zh.md)保留 Pi 参考实现分析和独立发行拓扑。提交日志或更新安装 commit 前请阅读 [SECURITY.md](SECURITY.md)。
 
 ## 开发
 

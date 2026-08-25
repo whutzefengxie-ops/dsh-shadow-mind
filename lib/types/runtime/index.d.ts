@@ -8,7 +8,7 @@ import { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 import { ShadowRegistry } from './registry.ts';
-import type { CreateShadowDefinition, ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowReviewCycle, UpdateShadowDefinition } from './types.ts';
+import type { CreateShadowDefinition, ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowReviewCycle, UpdateShadowDefinition, UpdateShadowMindSettings } from './types.ts';
 export { Config } from './config.ts';
 export * from './types.ts';
 export * from './protocol.ts';
@@ -16,7 +16,16 @@ export { ShadowRegistry, parseShadowDefinition, SHADOW_ID_PATTERN } from './regi
 export { seededRandom } from './random.ts';
 export { optionalModelRoute, SHADOW_MODEL_ROUTE_PATTERN } from './model-route.ts';
 export { modelEligible, selectShadows } from './scheduler.ts';
-export { buildShadowPrompt, projectTrajectory, summarizeToolResult } from './trajectory.ts';
+export { buildShadowPrompt, projectTrajectory, projectTrajectoryWithAnchors, summarizeToolResult } from './trajectory.ts';
+export { PERSONA_AFFINITIES, PROBE_CLASSES_V1, renderProbeChecklist } from './probes.ts';
+export { boostPredicates, matchesPredicate, prefilterPredicates } from './prefilter.ts';
+export { preferIndependentCandidates, resolveIndependence, vendorFamily } from './vendor.ts';
+export { classifyChallenge, classifyChallengeObservation, observeChallenge, } from './value-loop.ts';
+export type { ChallengeObservation, ShadowValueClassification, ValueLoopChallenge, } from './value-loop.ts';
+export { detectPatterns } from './review-window.ts';
+export type { ReviewEntry, ReviewWindowOptions, StagnationDetection, } from './review-window.ts';
+export { buildSynthesisPrompt, containsHoldoutLiteral, redactHoldoutLiterals, selectShadowConflict, } from './synthesis.ts';
+export type { ShadowConflict } from './synthesis.ts';
 export { ReportBatcher } from './report-batcher.ts';
 declare module '@deepseek-ai/cordis' {
     interface Context {
@@ -105,10 +114,11 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
      */
     currentSettings(): ShadowMindSettings;
     /**
-     * Persist a partial user-settings patch.
-     * @param patch Settings fields to replace.
+     * Atomically persist selected settings; null removes an optional user override.
+     * @param patch Settings fields to set or clear.
+     * @returns A promise settled after the settings mutation commits.
      */
-    updateSettings(patch: Partial<ShadowMindSettings>): Promise<void>;
+    updateSettings(patch: UpdateShadowMindSettings): Promise<void>;
     /**
      * Return per-root orchestration status without creating state for an untouched root.
      * @param agent Root agent to inspect.
@@ -141,6 +151,12 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     toggle(agent: Agent): ShadowMindStatus;
     /** Handle turn closure and user-cancellation boundaries from the durable log. */
     private onSessionEvent;
+    /** Admit challenge envelopes to the diagnostic value-loop window. */
+    private captureValueChallenges;
+    /** Classify settled challenge windows and append metadata-only diagnostic records. */
+    private evaluateValueChallenges;
+    /** Increment exactly one terminal value-loop counter. */
+    private incrementValueClassification;
     /** Refresh definitions, sample gates, and synchronously reserve selected ids. */
     private scheduleTurn;
     /** Reserve one active id before provider startup and start its owned lifecycle. */
@@ -151,20 +167,30 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     private finishRun;
     /** Refresh the compact status record from one terminal run view. */
     private updateLastRun;
+    /** Retain one accepted envelope, update decay, and apply its latest stagnation action. */
+    private recordReviewEntry;
+    /** Resolve one higher configured reasoning-effort rung. */
+    private nextReasoningEffort;
+    /** Append an opt-in metadata record without letting diagnostics fail a run. */
+    private debugMetadata;
     /** Append an opt-in lifecycle record without model inputs, report content, paths, or stacks. */
     private debug;
     /** Get or create root-owned mutable state. */
     private owner;
+    /** Resolve the current budget tier without mutating its counters. */
+    private budgetTier;
+    /** Clear suppression actions whose meaning is tied to the current control state. */
+    private resetCoordination;
+    /** Start a fresh user-owned budget and review epoch. */
+    private resetSessionGovernance;
+    /** Replace one selected conflict with a fresh synthesized report, or fail open. */
+    private synthesizeConflict;
+    /** Record a fail-open synthesis outcome without report text. */
+    private recordSynthesisFailure;
+    /** Append synthesis diagnostics and contain storage failures. */
+    private appendSynthesisDebug;
     /** Deliver only reports still current at the end of the batch window. */
     private deliver;
-    /** Claim idle headless lifetime until Shadow scheduling and report delivery converge. */
-    private startHeadlessMaintenance;
-    /** Await every schedule, active lifecycle, and report batch for one owner. */
-    private drainOwner;
-    /** Record and request cancellation for one active run exactly once. */
-    private requestCancellation;
-    /** Cancel admitted work and advance the stale-result epoch. */
-    private cancelOwner;
     /** Find one retained run record by its opaque id. */
     private findRun;
     /** Replace a not-yet-relayed report with its cancellation outcome. */
@@ -173,6 +199,14 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     private discardPendingEntry;
     /** Surface an admitted report that could not enter the root inbox. */
     private failReportDelivery;
+    /** Claim idle headless lifetime until Shadow scheduling and report delivery converge. */
+    private startHeadlessMaintenance;
+    /** Await every schedule, active lifecycle, and report batch for one owner. */
+    private drainOwner;
+    /** Record and request cancellation for one active run exactly once. */
+    private requestCancellation;
+    /** Cancel admitted work and advance the stale-result epoch. */
+    private cancelOwner;
     /** Drain and remove one owner state exactly once. */
     private releaseOwner;
     /** Whether an asynchronous run may still affect this exact root. */
