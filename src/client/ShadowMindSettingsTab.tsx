@@ -652,6 +652,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                 <div><dt>{t('runWithModel')}</dt><dd>{definition.runWithModel ?? 'inherit'}</dd></div>
                 <div><dt>{t('capture')}</dt><dd>{definition.capture}</dd></div>
                 <div><dt>{t('context')}</dt><dd>{definition.context}</dd></div>
+                <div><dt>{t('thinkFirst')}</dt><dd>{String(definition.thinkFirst)}</dd></div>
                 <div><dt>{t('holdout')}</dt><dd>{String(definition.holdout)}</dd></div>
                 <div><dt>{t('sourcePath')}</dt><dd><code>{definition.sourcePath}</code></dd></div></dl>
               <div className={css.actions}>
