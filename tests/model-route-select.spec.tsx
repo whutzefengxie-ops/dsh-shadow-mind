@@ -1,0 +1,187 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import type { ShadowModelCatalog } from '../src/runtime/types.ts'
+import { ModelRouteSelect, splitRoute, type ModelRouteValue } from '../src/client/ModelRouteSelect.tsx'
+
+afterEach(() => {
+  cleanup()
+})
+
+const CATALOG: ShadowModelCatalog = {
+  groups: [
+    {
+      id: 'deepseek-official',
+      name: 'DeepSeek Official',
+      models: [
+        {
+          id: 'deepseek-v4-pro',
+          name: 'DeepSeek V4 Pro',
+          reasoning: {
+            efforts: [
+              { id: 'low', name: 'Low' },
+              { id: 'high', name: 'High' },
+            ],
+            defaultEffort: 'high',
+          },
+        },
+        { id: 'deepseek-v4-flash', name: 'DeepSeek V4 Flash' },
+      ],
+    },
+    {
+      id: 'other-vendor',
+      name: 'Other Vendor',
+      models: [{ id: 'other-model', name: 'Other Model' }],
+    },
+  ],
+  failures: [{ id: 'broken', name: 'Broken Route', message: 'unreachable' }],
+  agentPresets: [
+    { id: 'standard', name: 'Standard' },
+    { id: 'code', name: 'Code' },
+  ],
+}
+
+const LABELS = { provider: 'Provider', model: 'Model', effort: 'Effort', preset: 'Preset' }
+
+/** Controlled render harness: every onChange commits the value and re-renders. */
+function mount(initial: ModelRouteValue, props: Partial<Parameters<typeof ModelRouteSelect>[0]> = {}) {
+  const calls: ModelRouteValue[] = []
+  let current = initial
+  const commit = (next: ModelRouteValue): void => {
+    current = next
+    calls.push(next)
+    utils.rerender(renderElement())
+  }
+  const renderElement = () => (
+    <ModelRouteSelect
+      catalog={CATALOG}
+      labels={LABELS}
+      value={current}
+      onChange={commit}
+      {...props}
+    />
+  )
+  const utils = render(renderElement())
+  const value = (): ModelRouteValue => current
+  const select = (label: string): HTMLSelectElement => screen.getByLabelText(label) as HTMLSelectElement
+  return { calls, value, select }
+}
+
+describe('ModelRouteSelect', () => {
+  it('splits a route string into provider and model halves', () => {
+    expect(splitRoute('')).toEqual({ provider: '', model: '' })
+    expect(splitRoute('provider')).toEqual({ provider: '', model: '' })
+    expect(splitRoute('deepseek-official/deepseek-v4-pro')).toEqual({
+      provider: 'deepseek-official',
+      model: 'deepseek-v4-pro',
+    })
+    expect(splitRoute('vendor/models/with/slashes')).toEqual({
+      provider: 'vendor',
+      model: 'models/with/slashes',
+    })
+  })
+
+  it('lists every provider group plus failure rows', () => {
+    const { calls, select } = mount({ route: '', effort: '', preset: '' })
+    expect(calls).toHaveLength(0)
+    const options = [...select('Provider').options].map(option => ({
+      value: option.value,
+      disabled: option.disabled,
+    }))
+    expect(options).toContainEqual({ value: 'deepseek-official', disabled: false })
+    expect(options).toContainEqual({ value: 'other-vendor', disabled: false })
+    expect(options).toContainEqual({ value: 'broken', disabled: true })
+  })
+
+  it('links model options to the selected provider and composes the route', () => {
+    const harness = mount({ route: '', effort: '', preset: '' })
+    expect(harness.select('Model').disabled).toBe(true)
+
+    fireEvent.change(harness.select('Provider'), { target: { value: 'deepseek-official' } })
+    expect(harness.value().route).toBe('')
+    expect(harness.select('Model').disabled).toBe(false)
+    expect([...harness.select('Model').options].map(option => option.value))
+      .toEqual(['', 'deepseek-v4-pro', 'deepseek-v4-flash'])
+
+    fireEvent.change(harness.select('Model'), { target: { value: 'deepseek-v4-pro' } })
+    expect(harness.value().route).toBe('deepseek-official/deepseek-v4-pro')
+  })
+
+  it('advertises only the selected model\'s reasoning efforts and resets a stale effort', () => {
+    const harness = mount({ route: 'deepseek-official/deepseek-v4-pro', effort: '', preset: '' })
+    expect([...harness.select('Effort').options].map(option => option.value))
+      .toEqual(['', 'low', 'high'])
+
+    fireEvent.change(harness.select('Effort'), { target: { value: 'low' } })
+    expect(harness.value().effort).toBe('low')
+
+    // Switching to a model without reasoning metadata clears the effort.
+    fireEvent.change(harness.select('Model'), { target: { value: 'deepseek-v4-flash' } })
+    expect(harness.value()).toEqual({
+      route: 'deepseek-official/deepseek-v4-flash',
+      effort: '',
+      preset: '',
+    })
+    expect([...harness.select('Effort').options].map(option => option.value)).toEqual([''])
+  })
+
+  it('keeps an unknown stored effort visible as a disabled current option', () => {
+    const harness = mount({ route: 'deepseek-official/deepseek-v4-pro', effort: 'ultra', preset: '' })
+    const options = [...harness.select('Effort').options].map(option => ({
+      value: option.value,
+      disabled: option.disabled,
+    }))
+    expect(options).toEqual([
+      { value: '', disabled: false },
+      { value: 'low', disabled: false },
+      { value: 'high', disabled: false },
+      { value: 'ultra', disabled: true },
+    ])
+  })
+
+  it('lists agent presets and preserves an off-roster stored preset', () => {
+    const harness = mount({ route: '', effort: '', preset: 'standard' })
+    expect([...harness.select('Preset').options].map(option => option.value))
+      .toEqual(['', 'standard', 'code'])
+    fireEvent.change(harness.select('Preset'), { target: { value: 'code' } })
+    expect(harness.value().preset).toBe('code')
+
+    cleanup()
+    const stale = mount({ route: '', effort: '', preset: 'gone-preset' })
+    expect([...stale.select('Preset').options].map(option => option.value))
+      .toEqual(['', 'standard', 'code', 'gone-preset'])
+    expect([...stale.select('Preset').options].find(option => option.value === 'gone-preset')?.disabled)
+      .toBe(true)
+  })
+
+  it('hides the effort and preset dropdowns when asked', () => {
+    render(
+      <ModelRouteSelect
+        catalog={CATALOG}
+        labels={LABELS}
+        value={{ route: '', effort: '', preset: '' }}
+        hideEffort
+        hidePreset
+        onChange={() => undefined}
+      />,
+    )
+    expect(screen.queryByLabelText('Effort')).toBeNull()
+    expect(screen.queryByLabelText('Preset')).toBeNull()
+    expect(screen.getByLabelText('Provider')).toBeDefined()
+  })
+
+  it('disables every dropdown while the catalog is unavailable', () => {
+    render(
+      <ModelRouteSelect
+        catalog={null}
+        labels={LABELS}
+        value={{ route: '', effort: '', preset: '' }}
+        onChange={() => undefined}
+      />,
+    )
+    expect((screen.getByLabelText('Provider') as HTMLSelectElement).disabled).toBe(true)
+    expect((screen.getByLabelText('Model') as HTMLSelectElement).disabled).toBe(true)
+    expect((screen.getByLabelText('Effort') as HTMLSelectElement).disabled).toBe(true)
+    expect((screen.getByLabelText('Preset') as HTMLSelectElement).disabled).toBe(true)
+  })
+})

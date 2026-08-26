@@ -2091,10 +2091,22 @@ export class ShadowMindRuntime extends TypertRemoteService {
       const result = await run.result
       const output = result.stopReason === 'completed' ? parseGateOutput(result.structured) : undefined
       if (output === undefined) {
-        return { kind: 'failure', reason: `judge produced no valid verdict (${result.stopReason})` }
+        const tail = run.localAgent?.session.events.slice(-4)
+          .map(event => `${event.type}:${JSON.stringify(event.data).slice(0, 220)}`)
+          .join(' | ')
+        this.ctx.logger.warn(
+          'dsh-shadow-mind: command-gate judge produced no valid verdict (stop reason %s): %s',
+          result.stopReason,
+          tail ?? 'no child session',
+        )
+        return {
+          kind: 'failure',
+          reason: `judge produced no valid verdict (${result.stopReason}${tail === undefined ? '' : `; ${tail}`})`,
+        }
       }
       return { kind: 'verdict', allow: output.allow, reason: output.reason }
     } catch (error: unknown) {
+      this.ctx.logger.warn('dsh-shadow-mind: command-gate judge failed: %o', error)
       return { kind: 'failure', reason: error instanceof Error ? error.message : String(error) }
     } finally {
       clearTimeout(timeout)

@@ -81,6 +81,8 @@ Review the completed task. If there is a concrete defect or missing requirement,
 
 首要场景是防止改项目时主 agent 误杀生产环境服务：在 **设置 → 插件 → Shadow Mind → 命令闸门** 中声明保护名单（或环境说明），启用闸门后，破坏性命令在到达 shell 之前就会被拦下。裁决会审计到 `$DSH_HOME/shadow-minds/logs/command-gate.jsonl`，`/shadow status` 会报告闸门拒绝/放行/法官计数。闸门**默认关闭**，且永远不会审查 Shadow 子代理自身。
 
+验证级别：常规测试套件用 mock 模型 + 真实 PowerShell 完成了机制级端到端验证（含隔离 fixture 服务的 kill 拦截测试）。Tier-2 法官的**真实模型裁决质量**由门控冒烟验证：法官由实际绑定的 provider/model 经真实 DeepSeek API 回答——发版前执行 `DSH_REAL_MODEL_GATE=1 pnpm exec vitest run tests/command-gate-real-model.spec.ts`，它会喂入一条伪装 kill（期望 deny、fixture 存活）与一条良性命令（期望 allow），并打印两条裁决及其审计记录。设置页下拉框有 jsdom 组件测试覆盖供应商/模型联动、思考强度失效重置与预设绑定。
+
 ## 验证实际运行
 
 只有包含至少一个持久化工具结果的已完成 root 轮次才会触发调度。在新会话中明确要求主 agent 读取一个仓库文件再分析。`/shadow status` 会显示等待调度数、活动运行数、累计准入运行数和最近结果。

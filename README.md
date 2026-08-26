@@ -81,6 +81,8 @@ The command gate blocks the root agent's `pwsh` (and any configured tool) calls 
 
 The primary scenario is preventing the root agent from killing production services while it edits a project: declare the protected names (or an environment description) under **Settings → Plugins → Shadow Mind → Command gate**, enable the gate, and destructive commands stop before they reach the shell. Verdicts are audited to `$DSH_HOME/shadow-minds/logs/command-gate.jsonl`, and `/shadow status` reports gate deny/allow/judge counters. The gate is **disabled by default** and never inspects Shadow children themselves.
 
+Verification levels: the regular suite proves the gate mechanics end to end against a real PowerShell binary with a mock model (including an isolated fixture-service kill test). The Tier-2 judge's real-model judgment quality is verified by a gated smoke that answers the judge with the actually bound provider/model over the real DeepSeek API — run `DSH_REAL_MODEL_GATE=1 pnpm exec vitest run tests/command-gate-real-model.spec.ts` before a release; it feeds one disguised kill (expect deny, fixture survives) and one benign command (expect allow) and prints both verdicts and their audit records. The settings dropdowns have jsdom component tests covering provider/model linking, effort invalidation, and preset binding.
+
 ## Observe a run
 
 Shadow scheduling requires a completed root turn containing at least one durable tool result. In a new session, ask the root agent to read a repository file and analyze it. `/shadow status` reports pending schedules, active runs, total admitted runs, and the last outcome.

@@ -198,9 +198,10 @@ commandGateVerdictTtlSeconds: number   // 120
 
 ## 6. 端到端验证方案（隔离测试环境）
 
-- 使用独立临时目录（`%TEMP%\dsh-shadow-e2e-*`）作为工作区与 DSH home，**不触碰任何生产路径/进程**；命令闸门测试目标只针对测试目录内自建的模拟服务（如临时起的 node 进程），并在断言后自行清理。
-- e2e 组合：DSH Loader（`examples/` 中既有 fixture 模式）挂载 `tool-pwsh`（或 fake pwsh 工具）+ 本插件；mock LLM（复用 `tests/mock-adapter.ts`）驱动主 Agent 发出 kill 命令，断言闸门拒绝且生产（测试）进程存活。
-- 客户端下拉框用 vitest + jsdom 组件测试验证联动与保存。
+- 使用独立临时目录（`%TEMP%\dsh-shadow-e2e-*`）作为工作区与 DSH home，**不触碰任何生产路径/进程**；命令闸门测试目标只针对测试目录内自建的模拟服务（测试自起的 node fixture 进程），并在断言后自行清理。
+- mock e2e（`tests/command-gate-e2e.spec.ts`，CI 默认执行）：真实 PowerShell 执行器 + mock LLM。对照臂证明闸门关闭时主 Agent 真的会杀掉 fixture；Tier-0 臂与法官臂证明真实 kill 被拦截、fixture 存活；输出含 PowerShell 宿主路径、fixture 存活状态与闸门审计 deny 记录。
+- 真实模型冒烟（`tests/command-gate-real-model.spec.ts`，门控执行：`DSH_REAL_MODEL_GATE=1 pnpm vitest run tests/command-gate-real-model.spec.ts`）：法官子代理由**实际绑定的 provider/model（settings.yaml 的 agent-default-model）经真实 DeepSeek API** 裁决；已用 `deepseek-official/deepseek-v4-pro` 验证「伪装 kill → deny（fixture 存活）」与「相近良性命令（ping 本机）→ allow」两条，裁决理由与审计记录输出在测试日志中，密钥永不落日志。CI 默认跳过（真实模型有成本与延迟），发版前手动跑一次。
+- 能力一下拉框的组件级交互测试（`tests/model-route-select.spec.tsx`，jsdom + testing-library）：联动过滤、路由组合/拆解、思考强度失效重置、预设列表、目录不可用降级等 8 条用例；目录 RPC 数据链路另有 mock e2e 覆盖。
 
 ## 7. 风险与边界
 

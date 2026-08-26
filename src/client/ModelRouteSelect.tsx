@@ -4,9 +4,14 @@
  * wire format stays the legacy `provider/model` route string: this component
  * composes and decomposes it, so stored definitions and the model-facing
  * management tools keep their unchanged contract.
+ *
+ * The dropdowns own local selection state so a user can pick a provider
+ * before picking a model (a half-composed route is emitted as an empty
+ * route). External value changes — a fresh load or a discard — are adopted
+ * whenever they differ from what this component last emitted.
  */
 
-import type { ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { ShadowModelCatalog } from '../runtime/types.ts'
 import css from './ShadowMindSettingsTab.module.css'
 
@@ -51,31 +56,58 @@ export function splitRoute(route: string): { provider: string; model: string } {
   return { provider: route.slice(0, slash), model: route.slice(slash + 1) }
 }
 
+/** Shallow equality for the externally visible selection state. */
+function sameValue(left: ModelRouteValue, right: ModelRouteValue): boolean {
+  return left.route === right.route && left.effort === right.effort && left.preset === right.preset
+}
+
 /** Render the four linked dropdowns. */
 export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
   const { catalog, labels, effortFallback = [] } = props
-  const { provider, model } = splitRoute(props.value.route)
   const groups = catalog?.groups ?? []
   const failures = catalog?.failures ?? []
   const presets = catalog?.agentPresets ?? []
+  const initial = splitRoute(props.value.route)
+  const [provider, setProvider] = useState(initial.provider)
+  const [model, setModel] = useState(initial.model)
+  const [effort, setEffort] = useState(props.value.effort)
+  const [preset, setPreset] = useState(props.value.preset)
+  const lastEmitted = useRef(props.value)
+
+  // Adopt an external change (load, discard, another field edit) that this
+  // component did not emit itself; own emissions carry through untouched.
+  useEffect(() => {
+    if (sameValue(lastEmitted.current, props.value)) return
+    lastEmitted.current = props.value
+    const split = splitRoute(props.value.route)
+    setProvider(split.provider)
+    setModel(split.model)
+    setEffort(props.value.effort)
+    setPreset(props.value.preset)
+  }, [props.value])
+
   const group = groups.find(candidate => candidate.id === provider)
   const modelEntry = group?.models.find(candidate => candidate.id === model)
-  const advertisedEfforts = modelEntry?.reasoning?.efforts.map(effort => effort.id) ?? effortFallback
-  const effortKnown = props.value.effort === '' || advertisedEfforts.includes(props.value.effort)
+  const advertisedEfforts = modelEntry?.reasoning?.efforts.map(entry => entry.id) ?? effortFallback
+  const effortKnown = effort === '' || advertisedEfforts.includes(effort)
   const controlsDisabled = props.disabled === true || catalog === null
+  const currentRoute = model === '' ? '' : `${provider}/${model}`
 
-  const setRoute = (route: string): void => {
-    const next = splitRoute(route)
-    // A route change invalidates an effort the new model does not advertise.
-    const effort = props.value.effort
-    const efforts = groups.find(candidate => candidate.id === next.provider)
-      ?.models.find(candidate => candidate.id === next.model)
-      ?.reasoning?.efforts.map(candidate => candidate.id) ?? effortFallback
-    props.onChange({
-      route,
-      effort: effort !== '' && !efforts.includes(effort) ? '' : effort,
-      preset: props.value.preset,
-    })
+  const emit = (next: ModelRouteValue): void => {
+    lastEmitted.current = next
+    props.onChange(next)
+  }
+
+  const adoptRoute = (route: string): void => {
+    // Callers set provider/model state themselves: a half-composed route
+    // (provider picked, model still pending) must not erase that selection.
+    const split = splitRoute(route)
+    const efforts = groups.find(candidate => candidate.id === split.provider)
+      ?.models.find(candidate => candidate.id === split.model)
+      ?.reasoning?.efforts.map(entry => entry.id) ?? effortFallback
+    const nextEffort = effort !== '' && !efforts.includes(effort) ? '' : effort
+    setEffort(nextEffort)
+    emit({ route, effort: nextEffort, preset })
   }
 
   return (
@@ -89,7 +121,9 @@ export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
             const next = event.currentTarget.value
             const nextModels = groups.find(candidate => candidate.id === next)?.models ?? []
             const nextModel = next === '' || nextModels.some(candidate => candidate.id === model) ? model : ''
-            setRoute(next === '' ? '' : nextModel === '' ? '' : `${next}/${nextModel}`)
+            setProvider(next)
+            setModel(nextModel)
+            adoptRoute(next === '' || nextModel === '' ? '' : `${next}/${nextModel}`)
           }}
         >
           <option value="">—</option>
@@ -99,7 +133,6 @@ export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
             : null}
           {failures.map(candidate => <option key={candidate.id} value={candidate.id} disabled>{candidate.name}</option>)}
         </select>
-        <small>{labels.provider}</small>
       </label>
       <label className={css.field}>
         <span>{labels.model}</span>
@@ -108,7 +141,8 @@ export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
           value={model}
           onChange={(event) => {
             const next = event.currentTarget.value
-            setRoute(next === '' ? '' : `${provider}/${next}`)
+            setModel(next)
+            adoptRoute(next === '' ? '' : `${provider}/${next}`)
           }}
         >
           <option value="">—</option>
@@ -117,25 +151,25 @@ export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
             ? <option value={model} disabled>{model}</option>
             : null}
         </select>
-        <small>{labels.model}</small>
       </label>
       {props.hideEffort === true ? null : (
         <label className={css.field}>
           <span>{labels.effort}</span>
           <select
             disabled={controlsDisabled}
-            value={props.value.effort}
+            value={effort}
             onChange={(event) => {
-              props.onChange({ ...props.value, effort: event.currentTarget.value })
+              const next = event.currentTarget.value
+              setEffort(next)
+              emit({ route: currentRoute, effort: next, preset })
             }}
           >
             <option value="">—</option>
-            {advertisedEfforts.map(effort => <option key={effort} value={effort}>{effort}</option>)}
-            {props.value.effort !== '' && !effortKnown
-              ? <option value={props.value.effort}>{props.value.effort}</option>
+            {advertisedEfforts.map(entry => <option key={entry} value={entry}>{entry}</option>)}
+            {effort !== '' && !effortKnown
+              ? <option value={effort} disabled>{effort}</option>
               : null}
           </select>
-          <small>{labels.effort}</small>
         </label>
       )}
       {props.hidePreset === true ? null : (
@@ -143,18 +177,19 @@ export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
           <span>{labels.preset}</span>
           <select
             disabled={controlsDisabled}
-            value={props.value.preset}
+            value={preset}
             onChange={(event) => {
-              props.onChange({ ...props.value, preset: event.currentTarget.value })
+              const next = event.currentTarget.value
+              setPreset(next)
+              emit({ route: currentRoute, effort, preset: next })
             }}
           >
             <option value="">—</option>
             {presets.map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
-            {props.value.preset !== '' && !presets.some(candidate => candidate.id === props.value.preset)
-              ? <option value={props.value.preset} disabled>{props.value.preset}</option>
+            {preset !== '' && !presets.some(candidate => candidate.id === preset)
+              ? <option value={preset} disabled>{preset}</option>
               : null}
           </select>
-          <small>{labels.preset}</small>
         </label>
       )}
     </>
