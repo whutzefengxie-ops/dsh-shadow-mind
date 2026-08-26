@@ -12,7 +12,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -182,6 +182,12 @@ afterEach(async () => {
 })
 
 describe.skipIf(!pwshAvailable())('command gate end-to-end in an isolated environment', () => {
+  beforeAll(() => {
+    // Observable evidence that the gate really sits in front of a real shell
+    // binary: the resolved host path and its probe status.
+    console.log(`[command-gate-e2e] PowerShell host: ${POWER_SHELL ?? 'unavailable'}; probe passed: ${pwshAvailable()}`)
+  })
+
   it('control arm: without the gate the root agent really kills the fixture service', async () => {
     const { child, pid } = startFixtureService()
     fixtures.push(child)
@@ -215,6 +221,10 @@ describe.skipIf(!pwshAvailable())('command gate end-to-end in an isolated enviro
       gateJudgeRuns: 0,
     })
     expect(harness.adapter.requests).toHaveLength(2)
+    console.log(
+      `[command-gate-e2e] tier-0 denied Stop-Process on fixture pid ${String(pid)} `
+      + `(fixture alive: ${String(alive(pid))}; judge calls: 0; gateDenies: 1)`,
+    )
   })
 
   it('judge arm: a disguised kill is blocked by the judge child and the fixture survives', async () => {
@@ -256,6 +266,14 @@ describe.skipIf(!pwshAvailable())('command gate end-to-end in an isolated enviro
       await new Promise<void>(resolve => setTimeout(resolve, 50))
     }
     expect(records).toContainEqual(expect.objectContaining({ tier: 'judge', allow: false }))
+    const denyRecord = records.find(record => {
+      if (record === null || typeof record !== 'object') return false
+      return (record as Record<string, unknown>)['tier'] === 'judge'
+    })
+    console.log(
+      `[command-gate-e2e] judge denied disguised kill on fixture pid ${String(pid)} `
+      + `(fixture alive: ${String(alive(pid))}; audit: ${JSON.stringify(denyRecord ?? {})})`,
+    )
   })
 
   it('serves the DSH model directory and preset roster through the catalog remotes', async () => {
