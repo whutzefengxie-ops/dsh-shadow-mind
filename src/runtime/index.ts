@@ -1178,6 +1178,18 @@ export class ShadowMindRuntime extends TypertRemoteService {
       return
     }
     if (output.status !== 'report') {
+      // A non-report status with an explanatory body is tolerated (the body is
+      // never relayed), but the discard stays observable so a silently accepted
+      // body cannot masquerade as a report or hide model drift.
+      const rawContent = (result.structured as Record<string, unknown> | undefined)?.['content']
+      if (typeof rawContent === 'string' && rawContent.trim() !== '') {
+        this.ctx.logger.warn(
+          'dsh-shadow-mind: shadow %s returned %s with a non-empty content body; the body is not relayed and was discarded (run %s)',
+          definition.id,
+          output.status,
+          entry.runId,
+        )
+      }
       await this.finishRun(state, entry, output.status, {
         stage: 'validate',
         providerStopReason: result.stopReason,

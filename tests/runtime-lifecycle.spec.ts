@@ -580,6 +580,7 @@ Review the completed turn.
       }),
       dispose: () => Promise.resolve(),
     }))
+    const warn = vi.spyOn(harness.ctx.logger, 'warn')
     emitToolTurn(harness)
 
     await vi.waitFor(() => {
@@ -589,6 +590,12 @@ Review the completed turn.
       })
     })
     expect(harness.deliveries).toHaveLength(0)
+    expect(warn).toHaveBeenCalledWith(
+      'dsh-shadow-mind: shadow %s returned %s with a non-empty content body; the body is not relayed and was discarded (run %s)',
+      'reviewer',
+      'silent',
+      expect.any(String),
+    )
   })
 
   it('settles not_relevant with an explanatory body instead of failing validation', async () => {
@@ -611,6 +618,34 @@ Review the completed turn.
       })
     })
     expect(harness.deliveries).toHaveLength(0)
+  })
+
+  it('does not warn when a non-report status carries an empty body', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-silent-empty'),
+      localAgent: undefined,
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed',
+        structured: { status: 'silent', content: '' },
+      }),
+      dispose: () => Promise.resolve(),
+    }))
+    const warn = vi.spyOn(harness.ctx.logger, 'warn')
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'silent',
+        stage: 'validate',
+      })
+    })
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('non-empty content body'),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    )
   })
 
   it('rejects report-only fields carried on a non-report status', async () => {
