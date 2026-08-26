@@ -216,6 +216,7 @@ describe('trajectory projection', () => {
     const prompt = buildShadowPrompt(definition(), 'trajectory', 7, 10_000)
     expect(prompt).toContain('Find risks.')
     expect(prompt).toContain('captured through session seq 7')
+    expect(prompt).toContain('For "not_relevant" and "silent", content must be an empty string')
     expect(buildShadowPrompt(definition(), '', 0, 10_000)).toContain('[no model-visible trajectory content]')
     expect(() => buildShadowPrompt(definition(), 'trajectory', 7, 10)).toThrow('above maxPromptChars')
   })

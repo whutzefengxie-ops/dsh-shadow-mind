@@ -569,6 +569,73 @@ Review the completed turn.
     expect(harness.deliveries).toHaveLength(0)
   })
 
+  it('settles silent with an explanatory body instead of failing validation', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-silent-body'),
+      localAgent: undefined,
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed',
+        structured: { status: 'silent', content: 'Nothing actionable after reviewing the turn.' },
+      }),
+      dispose: () => Promise.resolve(),
+    }))
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'silent',
+        stage: 'validate',
+      })
+    })
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
+  it('settles not_relevant with an explanatory body instead of failing validation', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-not-relevant-body'),
+      localAgent: undefined,
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed',
+        structured: { status: 'not_relevant', content: 'Outside this Shadow specialty.' },
+      }),
+      dispose: () => Promise.resolve(),
+    }))
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'not_relevant',
+        stage: 'validate',
+      })
+    })
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
+  it('rejects report-only fields carried on a non-report status', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-silent-verdict'),
+      localAgent: undefined,
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed',
+        structured: { status: 'silent', content: '', verdict: 'confirm' },
+      }),
+      dispose: () => Promise.resolve(),
+    }))
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'failed',
+        stage: 'validate',
+        reasonCode: 'INVALID_STRUCTURED_OUTPUT',
+      })
+    })
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
   it('classifies provider failure and keeps its diagnostics safe', async () => {
     const harness = await setup(() => ({
       id: SessionId('child-failed'),

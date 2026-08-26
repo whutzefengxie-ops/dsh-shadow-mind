@@ -227,7 +227,12 @@ function shadowOutput(value: unknown, projectedSeqs: ReadonlySet<number>): Shado
   const severity = record['severity']
   const refs = record['refs']
   if (status !== 'report') {
-    if (content !== '' || Object.hasOwn(record, 'verdict') || Object.hasOwn(record, 'severity')
+    // Silent/not_relevant never relay body text, so an explanatory content string is
+    // tolerated and normalized away instead of failing the whole run: the tool-level
+    // JSON Schema subset cannot express the cross-field "empty content" rule, while
+    // the runtime contract keeps report-only fields (verdict/severity/refs) rejected
+    // because carrying them on a non-report status is a genuine state-machine error.
+    if (Object.hasOwn(record, 'verdict') || Object.hasOwn(record, 'severity')
       || Object.hasOwn(record, 'refs')) return undefined
     return { status, content: '', refs: [] }
   }

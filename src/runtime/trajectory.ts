@@ -196,6 +196,7 @@ export function buildShadowPrompt(
     `You are the independent Shadow \"${definition.name}\" (${definition.id}).`,
     'Review the captured root-agent trajectory. Do not assume access to hidden reasoning or omitted tool output.',
     'Return status "not_relevant" when your specialty does not apply, "silent" when it applies but adds nothing actionable, or "report" with a concise self-contained finding.',
+    'For "not_relevant" and "silent", content must be an empty string; only a "report" carries body text.',
     'Every report must set verdict to "challenge", "gap", "confirm", or "uncertain"; refs is an ascending unique list of at most eight rendered seq values, and optional severity is from 0 through 1.',
     'A report must help the root agent decide or act; do not narrate that you reviewed the trajectory.',
     ...definition.thinkFirst
