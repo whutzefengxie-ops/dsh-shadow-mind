@@ -290,7 +290,11 @@ export class ShadowRegistry {
       source = await readFile(this.holdoutKeysPath, 'utf8')
     } catch (error: unknown) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-        throw new Error(`holdout definition ${JSON.stringify(id)} needs ${this.holdoutKeysPath}`)
+        throw new Error(
+          `holdout definition ${JSON.stringify(id)} needs ${this.holdoutKeysPath} containing `
+          + `{"${id}": ["literal", ...]}; create the sidecar as the operator, or remove `
+          + '"holdout: true" from the definition',
+        )
       }
       throw error
     }
