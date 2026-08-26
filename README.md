@@ -83,7 +83,9 @@ The default trajectory projection omits reasoning, raw tool-result text, and too
 
 Definitions apply to one Harness home rather than one profile or workspace. Child Sessions follow the Harness persistence policy. Concurrent Shadows do not share a transaction, and write-capable tools can race with the root agent or other Shadows.
 
-See the [target architecture](docs/target-architecture.md), [review conditioning](docs/review-conditioning.md), and [review-quality directions](docs/review-quality-directions.md) for current runtime contracts. [The Chinese technical design](docs/technical-design.zh.md) retains the Pi reference analysis and independent release topology. See [SECURITY.md](SECURITY.md) before publishing logs or changing an installation pin.
+Accepted reports and their anchored cards survive a service restart. Runtime counters, the latest-run diagnostic, non-report lifecycle cards, and pause state are current-process data. The current release also resets `spentChars` on restart, so a restart can reopen a configured soft or hard budget before the next real user message.
+
+Follow the [installation and runtime validation plan](docs/installation-runtime-validation.md) for a reproducible source-host deployment, real-model acceptance run, restart checks, and the budget-persistence remediation. See the [target architecture](docs/target-architecture.md), [review conditioning](docs/review-conditioning.md), and [review-quality directions](docs/review-quality-directions.md) for current runtime contracts. [The Chinese technical design](docs/technical-design.zh.md) retains the Pi reference analysis and independent release topology. See [SECURITY.md](SECURITY.md) before publishing logs or changing an installation pin.
 
 ## Development
 
