@@ -569,6 +569,121 @@ Review the completed turn.
     expect(harness.deliveries).toHaveLength(0)
   })
 
+  it('settles silent with an explanatory body instead of failing validation', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-silent-body'),
+      localAgent: undefined,
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed',
+        structured: { status: 'silent', content: 'Nothing actionable after reviewing the turn.' },
+      }),
+      dispose: () => Promise.resolve(),
+    }))
+    const warn = vi.spyOn(harness.ctx.logger, 'warn')
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'silent',
+        stage: 'validate',
+      })
+    })
+    expect(harness.deliveries).toHaveLength(0)
+    expect(warn).toHaveBeenCalledWith(
+      'dsh-shadow-mind: shadow %s returned %s with a non-empty content body; the body is not relayed and was discarded (run %s)',
+      'reviewer',
+      'silent',
+      expect.any(String),
+    )
+
+    const records = (await readFile(
+      join(harness.dshHome, 'shadow-minds', 'logs', 'reviewer.jsonl'),
+      'utf8',
+    )).trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
+    const discarded = records.find(record => record['event'] === 'non-report-body-discarded')
+    expect(discarded).toMatchObject({
+      status: 'silent',
+      discardedBodyChars: 'Nothing actionable after reviewing the turn.'.length,
+    })
+    expect(discarded?.['discardedBodyHash']).toBe('d6ed8049f11cbbcbe38047ebbd5f60888a11d87351b1984ba66b1b0ae0c48d10')
+    // The body text itself must never be persisted to the debug log.
+    expect(JSON.stringify(records)).not.toContain('Nothing actionable after reviewing the turn.')
+  })
+
+  it('settles not_relevant with an explanatory body instead of failing validation', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-not-relevant-body'),
+      localAgent: undefined,
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed',
+        structured: { status: 'not_relevant', content: 'Outside this Shadow specialty.' },
+      }),
+      dispose: () => Promise.resolve(),
+    }))
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'not_relevant',
+        stage: 'validate',
+      })
+    })
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
+  it('does not warn when a non-report status carries an empty body', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-silent-empty'),
+      localAgent: undefined,
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed',
+        structured: { status: 'silent', content: '' },
+      }),
+      dispose: () => Promise.resolve(),
+    }))
+    const warn = vi.spyOn(harness.ctx.logger, 'warn')
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'silent',
+        stage: 'validate',
+      })
+    })
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('non-empty content body'),
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+    )
+  })
+
+  it('rejects report-only fields carried on a non-report status', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-silent-verdict'),
+      localAgent: undefined,
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed',
+        structured: { status: 'silent', content: '', verdict: 'confirm' },
+      }),
+      dispose: () => Promise.resolve(),
+    }))
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'failed',
+        stage: 'validate',
+        reasonCode: 'INVALID_STRUCTURED_OUTPUT',
+      })
+    })
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
   it('classifies provider failure and keeps its diagnostics safe', async () => {
     const harness = await setup(() => ({
       id: SessionId('child-failed'),

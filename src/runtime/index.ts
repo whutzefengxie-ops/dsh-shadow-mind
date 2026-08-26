@@ -5,7 +5,7 @@
  * @module @whutzefengxie-ops/dsh-shadow-mind
  */
 
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -227,7 +227,12 @@ function shadowOutput(value: unknown, projectedSeqs: ReadonlySet<number>): Shado
   const severity = record['severity']
   const refs = record['refs']
   if (status !== 'report') {
-    if (content !== '' || Object.hasOwn(record, 'verdict') || Object.hasOwn(record, 'severity')
+    // Silent/not_relevant never relay body text, so an explanatory content string is
+    // tolerated and normalized away instead of failing the whole run: the tool-level
+    // JSON Schema subset cannot express the cross-field "empty content" rule, while
+    // the runtime contract keeps report-only fields (verdict/severity/refs) rejected
+    // because carrying them on a non-report status is a genuine state-machine error.
+    if (Object.hasOwn(record, 'verdict') || Object.hasOwn(record, 'severity')
       || Object.hasOwn(record, 'refs')) return undefined
     return { status, content: '', refs: [] }
   }
@@ -1173,6 +1178,30 @@ export class ShadowMindRuntime extends TypertRemoteService {
       return
     }
     if (output.status !== 'report') {
+      // A non-report status with an explanatory body is tolerated (the body is
+      // never relayed), but the discard stays observable so a silently accepted
+      // body cannot masquerade as a report or hide model drift.
+      const rawContent = (result.structured as Record<string, unknown> | undefined)?.['content']
+      if (typeof rawContent === 'string' && rawContent.trim() !== '') {
+        this.ctx.logger.warn(
+          'dsh-shadow-mind: shadow %s returned %s with a non-empty content body; the body is not relayed and was discarded (run %s)',
+          definition.id,
+          output.status,
+          entry.runId,
+        )
+        // Keep the discarded body reconstructable without persisting model text:
+        // record its presence, length, and a content hash in the opt-in debug log.
+        await this.debugMetadata(definition, {
+          time: new Date().toISOString(),
+          runId: entry.runId,
+          rootSessionId: agent.id,
+          childSessionId: entry.childSessionId,
+          capturedThroughSeq: entry.capturedThroughSeq,
+          status: output.status,
+          discardedBodyChars: rawContent.length,
+          discardedBodyHash: createHash('sha256').update(rawContent).digest('hex'),
+        }, 'non-report-body-discarded')
+      }
       await this.finishRun(state, entry, output.status, {
         stage: 'validate',
         providerStopReason: result.stopReason,
@@ -1369,10 +1398,14 @@ export class ShadowMindRuntime extends TypertRemoteService {
   }
 
   /** Append an opt-in metadata record without letting diagnostics fail a run. */
-  private async debugMetadata(definition: ShadowDefinition, record: Record<string, unknown>): Promise<void> {
+  private async debugMetadata(
+    definition: ShadowDefinition,
+    record: Record<string, unknown>,
+    event = 'quality-metadata',
+  ): Promise<void> {
     if (!definition.debug) return
     try {
-      await this.registry.appendDebug(definition.id, { event: 'quality-metadata', ...record })
+      await this.registry.appendDebug(definition.id, { event, ...record })
     } catch (error: unknown) {
       this.ctx.logger.warn('dsh-shadow-mind: failed to write debug log for %s: %o', definition.id, error)
     }
