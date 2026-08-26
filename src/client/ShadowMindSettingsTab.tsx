@@ -11,6 +11,7 @@ import type {
 } from '../runtime/types.ts'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ShadowMindLocaleKey } from './locales.ts'
+import { SHADOW_TEMPLATES, type ShadowTemplate } from './templates.ts'
 import css from './ShadowMindSettingsTab.module.css'
 
 /** Browser operations injected by the Shadow Mind client plugin. */
@@ -133,6 +134,45 @@ const BOOLEAN_FIELDS = [
   'conflictSynthesisEnabled',
 ] as const satisfies readonly (keyof ShadowMindSettings)[]
 
+/** Ordered text/numeric global settings rendered as simple fields. */
+const SETTING_TEXT_FIELDS = [
+  ['heartbeatProbability', 'heartbeatProbabilityHint'],
+  ['maxParallelShadows', 'maxParallelShadowsHint'],
+  ['defaultShadowTimeoutSeconds', 'defaultShadowTimeoutSecondsHint'],
+  ['defaultShadowModel', 'defaultShadowModelHint'],
+  ['defaultReasoningEffort', 'defaultReasoningEffortHint'],
+  ['headlessDrainTimeoutSeconds', 'headlessDrainTimeoutSecondsHint'],
+  ['resultBatchWindowMs', 'resultBatchWindowMsHint'],
+  ['randomSeed', 'randomSeedHint'],
+  ['maxPromptChars', 'maxPromptCharsHint'],
+  ['maxReportChars', 'maxReportCharsHint'],
+  ['longOutputBoostChars', 'longOutputBoostCharsHint'],
+  ['lastReportCoversCount', 'lastReportCoversCountHint'],
+  ['repeatedFailureBoostThreshold', 'repeatedFailureBoostThresholdHint'],
+  ['valueLoopWindowTurns', 'valueLoopWindowTurnsHint'],
+  ['reviewWindowSize', 'reviewWindowSizeHint'],
+  ['spinningRepeatCount', 'spinningRepeatCountHint'],
+  ['oscillationPeriods', 'oscillationPeriodsHint'],
+  ['noDriftRepeatCount', 'noDriftRepeatCountHint'],
+  ['diminishingWindowSize', 'diminishingWindowSizeHint'],
+  ['diminishingNoveltyThreshold', 'diminishingNoveltyThresholdHint'],
+  ['stagnationCooldownSeconds', 'stagnationCooldownSecondsHint'],
+  ['sessionShadowSoftBudgetChars', 'sessionShadowSoftBudgetCharsHint'],
+  ['sessionShadowHardBudgetChars', 'sessionShadowHardBudgetCharsHint'],
+  ['frugalShadowModel', 'frugalShadowModelHint'],
+  ['staleReportDecay', 'staleReportDecayHint'],
+  ['conflictSynthesisTimeoutSeconds', 'conflictSynthesisTimeoutSecondsHint'],
+] as const satisfies readonly (readonly [keyof ShadowMindSettings, ShadowMindLocaleKey])[]
+
+/** Global settings shown by default; every other field lives in the advanced disclosure. */
+const BASIC_SETTING_FIELDS = new Set<keyof ShadowMindSettings>([
+  'heartbeatProbability',
+  'maxParallelShadows',
+  'defaultShadowTimeoutSeconds',
+  'defaultShadowModel',
+  'defaultReasoningEffort',
+])
+
 const OUTCOME_KEYS = {
   report: 'outcomeReport',
   silent: 'outcomeSilent',
@@ -200,8 +240,24 @@ export function emptyDefinition(): DefinitionDraft {
     preFilters: '',
     boostFilters: '',
     boostFactor: '1',
+    // Not surfaced in the editor: enabling holdout requires an operator-managed
+    // holdout-keys.json sidecar that the Web form cannot administer. New
+    // definitions always start with holdout off; the draft field only
+    // round-trips a loaded value so saving never clears it.
     holdout: false,
     prompt: '',
+  }
+}
+
+/** Prefill the create form from one reference template. */
+export function templateDraft(template: ShadowTemplate, name: string): DefinitionDraft {
+  return {
+    ...emptyDefinition(),
+    id: template.id,
+    name,
+    activationProbability: String(template.activationProbability),
+    capture: template.capture,
+    prompt: template.prompt,
   }
 }
 
@@ -567,58 +623,45 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
         <h3>{t('settingsTitle')}</h3>
         <p>{t('settingsDescription')}</p>
         {settingsEdit === null ? <p>{t('loadError')}</p> : (
-          <div className={css.grid}>
-            {([
-              ['heartbeatProbability', 'heartbeatProbabilityHint'],
-              ['maxParallelShadows', 'maxParallelShadowsHint'],
-              ['defaultShadowTimeoutSeconds', 'defaultShadowTimeoutSecondsHint'],
-              ['headlessDrainTimeoutSeconds', 'headlessDrainTimeoutSecondsHint'],
-              ['resultBatchWindowMs', 'resultBatchWindowMsHint'],
-              ['defaultShadowModel', 'defaultShadowModelHint'],
-              ['defaultReasoningEffort', 'defaultReasoningEffortHint'],
-              ['randomSeed', 'randomSeedHint'],
-              ['maxPromptChars', 'maxPromptCharsHint'],
-              ['maxReportChars', 'maxReportCharsHint'],
-              ['longOutputBoostChars', 'longOutputBoostCharsHint'],
-              ['lastReportCoversCount', 'lastReportCoversCountHint'],
-              ['repeatedFailureBoostThreshold', 'repeatedFailureBoostThresholdHint'],
-              ['valueLoopWindowTurns', 'valueLoopWindowTurnsHint'],
-              ['reviewWindowSize', 'reviewWindowSizeHint'],
-              ['spinningRepeatCount', 'spinningRepeatCountHint'],
-              ['oscillationPeriods', 'oscillationPeriodsHint'],
-              ['noDriftRepeatCount', 'noDriftRepeatCountHint'],
-              ['diminishingWindowSize', 'diminishingWindowSizeHint'],
-              ['diminishingNoveltyThreshold', 'diminishingNoveltyThresholdHint'],
-              ['stagnationCooldownSeconds', 'stagnationCooldownSecondsHint'],
-              ['sessionShadowSoftBudgetChars', 'sessionShadowSoftBudgetCharsHint'],
-              ['sessionShadowHardBudgetChars', 'sessionShadowHardBudgetCharsHint'],
-              ['frugalShadowModel', 'frugalShadowModelHint'],
-              ['staleReportDecay', 'staleReportDecayHint'],
-              ['conflictSynthesisTimeoutSeconds', 'conflictSynthesisTimeoutSecondsHint'],
-            ] as const).map(([field, hint]) => (
-              <Field key={field} id={`shadow-setting-${field}`} label={t(field)} hint={t(hint)} value={settingsEdit[field]}
-                onChange={(value) => { setSettingsEdit({ ...settingsEdit, [field]: value }) }} />
-            ))}
-            <label className={css.field} htmlFor="shadow-setting-argumentDisclosure">
-              <span>{t('argumentDisclosure')}</span>
-              <select id="shadow-setting-argumentDisclosure" value={settingsEdit.argumentDisclosure}
-                onChange={(event) => { setSettingsEdit({ ...settingsEdit, argumentDisclosure: event.currentTarget.value }) }}>
-                <option value="redacted">redacted</option><option value="full">full</option>
-              </select>
-              <small>{t('argumentDisclosureHint')}</small>
-            </label>
-            <Field id="shadow-setting-reasoningEffortLadder" label={t('reasoningEffortLadder')}
-              hint={t('reasoningEffortLadderHint')} value={settingsEdit.reasoningEffortLadder} multiline
-              onChange={(value) => { setSettingsEdit({ ...settingsEdit, reasoningEffortLadder: value }) }} />
-            {BOOLEAN_FIELDS.map(field => (
-              <label className={css.field} htmlFor={`shadow-setting-${field}`} key={field}>
-                <span>{t(field)}</span>
-                <select id={`shadow-setting-${field}`} value={settingsEdit[field]}
-                  onChange={(event) => { setSettingsEdit({ ...settingsEdit, [field]: event.currentTarget.value }) }}>
-                  <option value="false">false</option><option value="true">true</option>
-                </select>
-              </label>
-            ))}
+          <>
+            <div className={css.grid}>
+              {SETTING_TEXT_FIELDS.filter(([field]) => BASIC_SETTING_FIELDS.has(field)).map(([field, hint]) => (
+                <Field key={field} id={`shadow-setting-${field}`} label={t(field)} hint={t(hint)} value={settingsEdit[field]}
+                  onChange={(value) => { setSettingsEdit({ ...settingsEdit, [field]: value }) }} />
+              ))}
+            </div>
+            <details className={css.disclosure} data-shadow-settings-advanced>
+              <summary>
+                {t('advancedSettings')}
+                <small className={css.disclosureHint}>{t('advancedSettingsHint')}</small>
+              </summary>
+              <div className={css.grid}>
+                {SETTING_TEXT_FIELDS.filter(([field]) => !BASIC_SETTING_FIELDS.has(field)).map(([field, hint]) => (
+                  <Field key={field} id={`shadow-setting-${field}`} label={t(field)} hint={t(hint)} value={settingsEdit[field]}
+                    onChange={(value) => { setSettingsEdit({ ...settingsEdit, [field]: value }) }} />
+                ))}
+                <label className={css.field} htmlFor="shadow-setting-argumentDisclosure">
+                  <span>{t('argumentDisclosure')}</span>
+                  <select id="shadow-setting-argumentDisclosure" value={settingsEdit.argumentDisclosure}
+                    onChange={(event) => { setSettingsEdit({ ...settingsEdit, argumentDisclosure: event.currentTarget.value }) }}>
+                    <option value="redacted">redacted</option><option value="full">full</option>
+                  </select>
+                  <small>{t('argumentDisclosureHint')}</small>
+                </label>
+                <Field id="shadow-setting-reasoningEffortLadder" label={t('reasoningEffortLadder')}
+                  hint={t('reasoningEffortLadderHint')} value={settingsEdit.reasoningEffortLadder} multiline
+                  onChange={(value) => { setSettingsEdit({ ...settingsEdit, reasoningEffortLadder: value }) }} />
+                {BOOLEAN_FIELDS.map(field => (
+                  <label className={css.field} htmlFor={`shadow-setting-${field}`} key={field}>
+                    <span>{t(field)}</span>
+                    <select id={`shadow-setting-${field}`} value={settingsEdit[field]}
+                      onChange={(event) => { setSettingsEdit({ ...settingsEdit, [field]: event.currentTarget.value }) }}>
+                      <option value="false">false</option><option value="true">true</option>
+                    </select>
+                  </label>
+                ))}
+              </div>
+            </details>
             <div className={css.formActions}>
               <button type="button" disabled={!settingsDirty || busy}
                 onClick={resolvedSettings === undefined
@@ -634,7 +677,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                   })
                 }}>{t(busy ? 'saving' : 'saveSettings')}</button>
             </div>
-          </div>
+          </>
         )}
       </section>
 
@@ -670,61 +713,102 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
         </ul>
       </section>
 
+      <section className={css.panel} data-shadow-templates>
+        <div className={css.sectionHead}><div><h3>{t('templatesTitle')}</h3><p>{t('templatesDescription')}</p></div></div>
+        <ul className={css.definitions}>
+          {SHADOW_TEMPLATES.map(template => {
+            const exists = catalog?.definitions.some(definition => definition.id === template.id) === true
+            return (
+              <li key={template.id} data-shadow-template={template.id}>
+                <div className={css.definitionTitle}>
+                  <div><strong>{t(template.nameKey)}</strong><code>{template.id}</code>
+                    <span className={css.templateDescription}>{t(template.descriptionKey)}</span></div>
+                  <span data-enabled="false">{t('templateStatus')}</span>
+                </div>
+                <details className={css.templatePromptDisclosure}>
+                  <summary>{t('templatePromptPreview')}</summary>
+                  <pre className={css.templatePrompt}>{template.prompt}</pre>
+                </details>
+                <div className={css.actions}>
+                  <button type="button" disabled={busy || exists} onClick={() => {
+                    setEditingId(null)
+                    setDefinitionEdit(templateDraft(template, t(template.nameKey)))
+                  }}>{t(exists ? 'templateExists' : 'useTemplate')}</button>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      </section>
+
       {definitionEdit === null ? null : (
         <section className={css.panel} data-shadow-editor>
           <h3>{t(editingId === null ? 'createTitle' : 'editTitle')}</h3>
-          <div className={css.grid}>
-            <Field id="shadow-definition-id" label={t('id')} hint={t('idHint')} value={definitionEdit.id} disabled={editingId !== null}
-              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, id: value }) }} />
-            <Field id="shadow-definition-name" label={t('name')} value={definitionEdit.name}
-              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, name: value }) }} />
-            <Field id="shadow-definition-probability" label={t('activationProbability')} hint={t('activationProbabilityHint')} value={definitionEdit.activationProbability}
-              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, activationProbability: value }) }} />
-            <Field id="shadow-definition-models" label={t('activeForModels')} hint={t('activeForModelsHint')} value={definitionEdit.activeForModels} multiline
-              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, activeForModels: value }) }} />
-            <Field id="shadow-definition-run-model" label={t('runWithModel')} hint={t('runWithModelHint')} value={definitionEdit.runWithModel}
-              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, runWithModel: value }) }} />
-            <Field id="shadow-definition-effort" label={t('reasoningEffort')} hint={t('reasoningEffortHint')} value={definitionEdit.reasoningEffort}
-              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, reasoningEffort: value }) }} />
-            <Field id="shadow-definition-timeout" label={t('timeoutSeconds')} hint={t('timeoutSecondsHint')} value={definitionEdit.timeoutSeconds}
-              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, timeoutSeconds: value }) }} />
-            <Field id="shadow-definition-tools" label={t('tools')} hint={t('toolsHint')} value={definitionEdit.tools} multiline
-              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, tools: value }) }} />
-            <label className={css.field} htmlFor="shadow-definition-capture">
-              <span>{t('capture')}</span>
-              <select id="shadow-definition-capture" value={definitionEdit.capture}
-                onChange={(event) => { setDefinitionEdit({ ...definitionEdit, capture: event.currentTarget.value as ShadowDefinition['capture'] }) }}>
-                <option value="full">full</option><option value="since-compaction">since-compaction</option>
-              </select>
-              <small>{t('captureHint')}</small>
-            </label>
-            <label className={css.field} htmlFor="shadow-definition-context">
-              <span>{t('context')}</span>
-              <select id="shadow-definition-context" value={definitionEdit.context}
-                onChange={(event) => { setDefinitionEdit({ ...definitionEdit, context: event.currentTarget.value as ShadowDefinition['context'] }) }}>
-                <option value="standard">standard</option><option value="minimal">minimal</option>
-              </select>
-              <small>{t('contextHint')}</small>
-            </label>
-            <Field id="shadow-definition-prefilters" label={t('preFilters')} hint={t('preFiltersHint')}
-              value={definitionEdit.preFilters} multiline
-              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, preFilters: value }) }} />
-            <Field id="shadow-definition-boostfilters" label={t('boostFilters')} hint={t('boostFiltersHint')}
-              value={definitionEdit.boostFilters} multiline
-              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, boostFilters: value }) }} />
-            <Field id="shadow-definition-boostfactor" label={t('boostFactor')} hint={t('boostFactorHint')}
-              value={definitionEdit.boostFactor}
-              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, boostFactor: value }) }} />
-            <Field id="shadow-definition-prompt" label={t('prompt')} hint={t('promptHint')} value={definitionEdit.prompt} multiline
-              onChange={(value) => { setDefinitionEdit({ ...definitionEdit, prompt: value }) }} />
-            <label className={css.check}><input type="checkbox" checked={definitionEdit.enabled}
-              onChange={(event) => { setDefinitionEdit({ ...definitionEdit, enabled: event.currentTarget.checked }) }} />{t('enabled')}</label>
-            <label className={css.check}><input type="checkbox" checked={definitionEdit.debug}
-              onChange={(event) => { setDefinitionEdit({ ...definitionEdit, debug: event.currentTarget.checked }) }} />{t('debug')}</label>
-            <label className={css.check}><input type="checkbox" checked={definitionEdit.thinkFirst}
-              onChange={(event) => { setDefinitionEdit({ ...definitionEdit, thinkFirst: event.currentTarget.checked }) }} />{t('thinkFirst')}</label>
-            <label className={css.check}><input type="checkbox" checked={definitionEdit.holdout}
-              onChange={(event) => { setDefinitionEdit({ ...definitionEdit, holdout: event.currentTarget.checked }) }} />{t('holdout')}</label>
+          <div className={css.editorStack}>
+            <fieldset className={css.fieldset}>
+              <legend>{t('definitionBasicFields')}</legend>
+              <div className={css.grid}>
+                <Field id="shadow-definition-id" label={t('id')} hint={t('idHint')} value={definitionEdit.id} disabled={editingId !== null}
+                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, id: value }) }} />
+                <Field id="shadow-definition-name" label={t('name')} value={definitionEdit.name}
+                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, name: value }) }} />
+                <Field id="shadow-definition-probability" label={t('activationProbability')} hint={t('activationProbabilityHint')} value={definitionEdit.activationProbability}
+                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, activationProbability: value }) }} />
+              </div>
+              <Field id="shadow-definition-prompt" label={t('prompt')} hint={t('promptHint')} value={definitionEdit.prompt} multiline
+                onChange={(value) => { setDefinitionEdit({ ...definitionEdit, prompt: value }) }} />
+              <label className={css.check}><input type="checkbox" checked={definitionEdit.enabled}
+                onChange={(event) => { setDefinitionEdit({ ...definitionEdit, enabled: event.currentTarget.checked }) }} />{t('enabled')}</label>
+            </fieldset>
+            <fieldset className={css.fieldset}>
+              <legend>{t('definitionCommonFields')}</legend>
+              <div className={css.grid}>
+                <Field id="shadow-definition-run-model" label={t('runWithModel')} hint={t('runWithModelHint')} value={definitionEdit.runWithModel}
+                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, runWithModel: value }) }} />
+                <Field id="shadow-definition-effort" label={t('reasoningEffort')} hint={t('reasoningEffortHint')} value={definitionEdit.reasoningEffort}
+                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, reasoningEffort: value }) }} />
+                <Field id="shadow-definition-timeout" label={t('timeoutSeconds')} hint={t('timeoutSecondsHint')} value={definitionEdit.timeoutSeconds}
+                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, timeoutSeconds: value }) }} />
+                <Field id="shadow-definition-tools" label={t('tools')} hint={t('toolsHint')} value={definitionEdit.tools} multiline
+                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, tools: value }) }} />
+              </div>
+              <label className={css.check}><input type="checkbox" checked={definitionEdit.thinkFirst}
+                onChange={(event) => { setDefinitionEdit({ ...definitionEdit, thinkFirst: event.currentTarget.checked }) }} />{t('thinkFirst')}</label>
+            </fieldset>
+            <details className={css.disclosure} data-shadow-definition-advanced>
+              <summary>{t('definitionAdvancedFields')}</summary>
+              <div className={css.grid}>
+                <label className={css.check}><input type="checkbox" checked={definitionEdit.debug}
+                  onChange={(event) => { setDefinitionEdit({ ...definitionEdit, debug: event.currentTarget.checked }) }} />{t('debug')}</label>
+                <Field id="shadow-definition-models" label={t('activeForModels')} hint={t('activeForModelsHint')} value={definitionEdit.activeForModels} multiline
+                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, activeForModels: value }) }} />
+                <label className={css.field} htmlFor="shadow-definition-capture">
+                  <span>{t('capture')}</span>
+                  <select id="shadow-definition-capture" value={definitionEdit.capture}
+                    onChange={(event) => { setDefinitionEdit({ ...definitionEdit, capture: event.currentTarget.value as ShadowDefinition['capture'] }) }}>
+                    <option value="full">full</option><option value="since-compaction">since-compaction</option>
+                  </select>
+                  <small>{t('captureHint')}</small>
+                </label>
+                <label className={css.field} htmlFor="shadow-definition-context">
+                  <span>{t('context')}</span>
+                  <select id="shadow-definition-context" value={definitionEdit.context}
+                    onChange={(event) => { setDefinitionEdit({ ...definitionEdit, context: event.currentTarget.value as ShadowDefinition['context'] }) }}>
+                    <option value="standard">standard</option><option value="minimal">minimal</option>
+                  </select>
+                  <small>{t('contextHint')}</small>
+                </label>
+                <Field id="shadow-definition-prefilters" label={t('preFilters')} hint={t('preFiltersHint')}
+                  value={definitionEdit.preFilters} multiline
+                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, preFilters: value }) }} />
+                <Field id="shadow-definition-boostfilters" label={t('boostFilters')} hint={t('boostFiltersHint')}
+                  value={definitionEdit.boostFilters} multiline
+                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, boostFilters: value }) }} />
+                <Field id="shadow-definition-boostfactor" label={t('boostFactor')} hint={t('boostFactorHint')}
+                  value={definitionEdit.boostFactor}
+                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, boostFactor: value }) }} />
+              </div>
+            </details>
             <div className={css.formActions}><button type="button" disabled={busy} onClick={() => { setDefinitionEdit(null); setEditingId(null) }}>{t('cancel')}</button>
               <button type="button" disabled={busy || validDefinition === undefined}
                 onClick={validDefinition === undefined ? undefined : () => { submitDefinition(validDefinition) }}>

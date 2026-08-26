@@ -201,6 +201,82 @@
   overflow-wrap: anywhere;
 }
 
+.editorStack {
+  display: grid;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.fieldset {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--dsw-color-border, #ddd);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.fieldset legend {
+  padding: 0 6px;
+  font-weight: 600;
+  color: var(--dsw-color-text-secondary, #555);
+}
+
+.disclosure {
+  border: 1px solid var(--dsw-color-border, #ddd);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-top: 16px;
+}
+
+.disclosure summary {
+  cursor: pointer;
+  font-weight: 600;
+  user-select: none;
+}
+
+.disclosure .grid {
+  margin-top: 12px;
+}
+
+.disclosureHint {
+  display: block;
+  color: var(--dsw-color-text-tertiary, #777);
+  font-weight: 400;
+  margin-top: 4px;
+}
+
+.templateDescription {
+  display: block;
+  color: var(--dsw-color-text-secondary, #666);
+  font-weight: 400;
+  margin-top: 4px;
+}
+
+.templatePromptDisclosure {
+  margin: 12px 0;
+}
+
+.templatePromptDisclosure summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.templatePrompt {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--dsw-color-border, #ddd);
+  border-radius: 8px;
+  background: var(--dsw-color-bg-layout, #f7f7f7);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12.5px;
+  line-height: 1.5;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
 .actions {
   justify-content: flex-end;
 }
