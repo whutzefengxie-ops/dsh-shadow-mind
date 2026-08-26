@@ -1,0 +1,4 @@
+# Bilingual-pair consistency record. Both languages carry equal authority.
+# Recompute each value with: git hash-object -- <path>
+installation-runtime-validation.md: 0f66ececa1b5bd09fda5943c80f167ecf92fbd9d
+installation-runtime-validation.zh.md: ba33284441611c132553396c0606eb2a913aaeed

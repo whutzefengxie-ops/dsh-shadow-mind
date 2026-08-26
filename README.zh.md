@@ -83,7 +83,9 @@ Shadow 进入调度后，被审查的 root 回复下方会立即出现运行占�
 
 定义按一个 Harness home 全局生效，不按 profile 或 workspace 隔离。Child Session 遵循 Harness 的持久化策略。并发 Shadow 之间没有共享事务；一旦启用写入型工具，它们可能与 root 或其他 Shadow 发生竞争。
 
-[目标架构](docs/target-architecture.zh.md)、[审查条件机制](docs/review-conditioning.zh.md)与[审查质量方向](docs/review-quality-directions.zh.md)记录当前运行时契约；[技术方案](docs/technical-design.zh.md)保留 Pi 参考实现分析和独立发行拓扑。提交日志或更新安装 commit 前请阅读 [SECURITY.md](SECURITY.md)。
+已接受报告及其 anchored 卡片会在服务重启后恢复。运行计数、最近运行诊断、非 report 生命周期卡片和暂停状态属于当前进程。当前版本还会在重启时把 `spentChars` 清零，因此下一条真实用户消息到来前，重启可以重新打开已经达到的软预算或硬预算。
+
+[安装、启动与运行验收技术方案](docs/installation-runtime-validation.zh.md)给出可复现的源码宿主部署、真实模型验收、重启检查与预算持久化整改步骤。[目标架构](docs/target-architecture.zh.md)、[审查条件机制](docs/review-conditioning.zh.md)与[审查质量方向](docs/review-quality-directions.zh.md)记录当前运行时契约；[技术方案](docs/technical-design.zh.md)保留 Pi 参考实现分析和独立发行拓扑。提交日志或更新安装 commit 前请阅读 [SECURITY.md](SECURITY.md)。
 
 ## 开发
 
