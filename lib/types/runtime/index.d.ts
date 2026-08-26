@@ -8,7 +8,7 @@ import { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 import { ShadowRegistry } from './registry.ts';
-import type { CreateShadowDefinition, ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowReviewCycle, UpdateShadowDefinition, UpdateShadowMindSettings } from './types.ts';
+import type { CreateShadowDefinition, ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowModelCatalog, ShadowReviewCycle, UpdateShadowDefinition, UpdateShadowMindSettings } from './types.ts';
 export { Config } from './config.ts';
 export * from './types.ts';
 export * from './protocol.ts';
@@ -27,6 +27,10 @@ export type { ReviewEntry, ReviewWindowOptions, StagnationDetection, } from './r
 export { buildSynthesisPrompt, containsHoldoutLiteral, redactHoldoutLiterals, selectShadowConflict, } from './synthesis.ts';
 export type { ShadowConflict } from './synthesis.ts';
 export { ReportBatcher } from './report-batcher.ts';
+export { CommandGate, GATE_OUTPUT_SCHEMA } from './command-gate.ts';
+export type { CommandGateStats, GateCommand, GateJudgeOutcome, GateTier, GateVerdict } from './command-gate.ts';
+export { buildShadowModelCatalog } from './model-catalog.ts';
+export type { ShadowAgentPresetOption, ShadowCatalogModel, ShadowModelCatalog, ShadowModelEffort, ShadowModelFailure, ShadowModelGroup, ShadowModelReasoning, } from './model-catalog.ts';
 declare module '@deepseek-ai/cordis' {
     interface Context {
         shadowMind: ShadowMindRuntime;
@@ -46,6 +50,7 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     private readonly settingsScope;
     private random;
     private readonly owners;
+    private readonly gate;
     private stopped;
     /** @param ctx Cordis context carrying agents, subagents, and settings. @param config Deployment base settings. */
     constructor(ctx: Context, config?: ShadowMindConfig);
@@ -56,9 +61,14 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     listDefinitions(): Promise<ShadowCatalog>;
     /**
      * Load definitions and their storage directory for the trusted Web administration page.
-     * @returns Current catalog and definition directory.
+     * @returns Current catalog, definition directory, and the live DSH model directory.
      */
     remoteExportCatalog(): Promise<ShadowAdministrationSnapshot>;
+    /**
+     * Load the live DSH provider/model/effort directory plus the agent-preset roster.
+     * @returns Detached directory for the Web settings dropdowns.
+     */
+    modelCatalog(): Promise<ShadowModelCatalog>;
     /**
      * Create one complete definition submitted by the Web administration page.
      * @param input Validated wire fields.
@@ -211,6 +221,33 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     private releaseOwner;
     /** Whether an asynchronous run may still affect this exact root. */
     private accepts;
+    /** Per-root command-gate counters for runtime status. */
+    private gateStats;
+    /** Resolve the model selection the gate judge runs under. */
+    private gateModelSelection;
+    /**
+     * Settle one intercepted command through a fresh gate-judge child. Every
+     * failure path returns a `failure` outcome instead of throwing, so the
+     * gate's fail-open/fail-closed policy stays the only decision maker.
+     * @param agent Root agent whose command is under review.
+     * @param command Extracted command under review.
+     * @param signal Root turn signal; the judge aborts with it.
+     * @returns One judge settlement.
+     */
+    private judgeVerdict;
+    /** Build the bounded judge prompt from the environment declaration and recent trajectory. */
+    private buildGateJudgePrompt;
+    /** Append one gate diagnostic record without letting storage failures escape. */
+    private appendGateLog;
+    /**
+     * Resolve one DSH agent preset's persona text for a child request. Presets
+     * are plugin compositions; the `persona` row carries the prose the child
+     * installs as its shadowing `deployment:persona` section. Resolution
+     * failures fall back to inheriting the root persona and only warn.
+     * @param presetId Configured preset id.
+     * @returns The preset's persona prose, or undefined without one.
+     */
+    private resolveAgentPresetPersona;
     /** Whether an agent is a top-level root rather than a subagent child. */
     private isRoot;
     /** Reject commands and APIs that target a child agent. */

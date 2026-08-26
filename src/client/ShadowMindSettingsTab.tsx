@@ -12,6 +12,7 @@ import type {
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ShadowMindLocaleKey } from './locales.ts'
 import { SHADOW_TEMPLATES, type ShadowTemplate } from './templates.ts'
+import { ModelRouteSelect } from './ModelRouteSelect.tsx'
 import css from './ShadowMindSettingsTab.module.css'
 
 /** Browser operations injected by the Shadow Mind client plugin. */
@@ -89,6 +90,7 @@ export interface DefinitionDraft {
   activeForModels: string
   runWithModel: string
   reasoningEffort: string
+  agentPreset: string
   timeoutSeconds: string
   tools: string
   capture: ShadowDefinition['capture']
@@ -125,6 +127,9 @@ const NUMBER_FIELDS = [
   'sessionShadowHardBudgetChars',
   'staleReportDecay',
   'conflictSynthesisTimeoutSeconds',
+  'commandGateJudgeTimeoutSeconds',
+  'commandGateMaxParallel',
+  'commandGateVerdictTtlSeconds',
 ] as const satisfies readonly (keyof ShadowMindSettings)[]
 
 const BOOLEAN_FIELDS = [
@@ -134,13 +139,25 @@ const BOOLEAN_FIELDS = [
   'conflictSynthesisEnabled',
 ] as const satisfies readonly (keyof ShadowMindSettings)[]
 
+/** Multi-line list settings rendered as one-name-per-line textareas. */
+const LIST_FIELDS = [
+  'commandGateTools',
+  'commandGateDenyPatterns',
+  'commandGateAllowPatterns',
+  'commandGateProtectedProcesses',
+  'commandGateProtectedServices',
+] as const satisfies readonly (keyof ShadowMindSettings)[]
+
+/** Optional free-text environment declaration. */
+const CONTEXT_FIELDS = [
+  'commandGateContext',
+] as const satisfies readonly (keyof ShadowMindSettings)[]
+
 /** Ordered text/numeric global settings rendered as simple fields. */
 const SETTING_TEXT_FIELDS = [
   ['heartbeatProbability', 'heartbeatProbabilityHint'],
   ['maxParallelShadows', 'maxParallelShadowsHint'],
   ['defaultShadowTimeoutSeconds', 'defaultShadowTimeoutSecondsHint'],
-  ['defaultShadowModel', 'defaultShadowModelHint'],
-  ['defaultReasoningEffort', 'defaultReasoningEffortHint'],
   ['headlessDrainTimeoutSeconds', 'headlessDrainTimeoutSecondsHint'],
   ['resultBatchWindowMs', 'resultBatchWindowMsHint'],
   ['randomSeed', 'randomSeedHint'],
@@ -159,9 +176,11 @@ const SETTING_TEXT_FIELDS = [
   ['stagnationCooldownSeconds', 'stagnationCooldownSecondsHint'],
   ['sessionShadowSoftBudgetChars', 'sessionShadowSoftBudgetCharsHint'],
   ['sessionShadowHardBudgetChars', 'sessionShadowHardBudgetCharsHint'],
-  ['frugalShadowModel', 'frugalShadowModelHint'],
   ['staleReportDecay', 'staleReportDecayHint'],
   ['conflictSynthesisTimeoutSeconds', 'conflictSynthesisTimeoutSecondsHint'],
+  ['commandGateJudgeTimeoutSeconds', 'commandGateJudgeTimeoutSecondsHint'],
+  ['commandGateMaxParallel', 'commandGateMaxParallelHint'],
+  ['commandGateVerdictTtlSeconds', 'commandGateVerdictTtlSecondsHint'],
 ] as const satisfies readonly (readonly [keyof ShadowMindSettings, ShadowMindLocaleKey])[]
 
 /** Global settings shown by default; every other field lives in the advanced disclosure. */
@@ -169,8 +188,6 @@ const BASIC_SETTING_FIELDS = new Set<keyof ShadowMindSettings>([
   'heartbeatProbability',
   'maxParallelShadows',
   'defaultShadowTimeoutSeconds',
-  'defaultShadowModel',
-  'defaultReasoningEffort',
 ])
 
 const OUTCOME_KEYS = {
@@ -191,6 +208,10 @@ export function settingsDraft(value: ShadowMindSettings): SettingsDraft {
     resultBatchWindowMs: String(value.resultBatchWindowMs),
     defaultShadowModel: value.defaultShadowModel ?? '',
     defaultReasoningEffort: value.defaultReasoningEffort ?? '',
+    defaultAgentPreset: value.defaultAgentPreset ?? '',
+    synthesisModel: value.synthesisModel ?? '',
+    synthesisReasoningEffort: value.synthesisReasoningEffort ?? '',
+    synthesisAgentPreset: value.synthesisAgentPreset ?? '',
     argumentDisclosure: value.argumentDisclosure,
     randomSeed: value.randomSeed === undefined ? '' : String(value.randomSeed),
     maxPromptChars: String(value.maxPromptChars),
@@ -218,6 +239,21 @@ export function settingsDraft(value: ShadowMindSettings): SettingsDraft {
     staleReportDecay: String(value.staleReportDecay),
     conflictSynthesisEnabled: String(value.conflictSynthesisEnabled),
     conflictSynthesisTimeoutSeconds: String(value.conflictSynthesisTimeoutSeconds),
+    commandGateEnabled: String(value.commandGateEnabled),
+    commandGateTools: value.commandGateTools.join('\n'),
+    commandGateScope: value.commandGateScope,
+    commandGateDenyPatterns: value.commandGateDenyPatterns.join('\n'),
+    commandGateAllowPatterns: value.commandGateAllowPatterns.join('\n'),
+    commandGateProtectedProcesses: value.commandGateProtectedProcesses.join('\n'),
+    commandGateProtectedServices: value.commandGateProtectedServices.join('\n'),
+    commandGateContext: value.commandGateContext ?? '',
+    commandGateModel: value.commandGateModel ?? '',
+    commandGateReasoningEffort: value.commandGateReasoningEffort ?? '',
+    commandGateAgentPreset: value.commandGateAgentPreset ?? '',
+    commandGateJudgeTimeoutSeconds: String(value.commandGateJudgeTimeoutSeconds),
+    commandGateOnJudgeFailure: value.commandGateOnJudgeFailure,
+    commandGateMaxParallel: String(value.commandGateMaxParallel),
+    commandGateVerdictTtlSeconds: String(value.commandGateVerdictTtlSeconds),
   }
 }
 
@@ -232,6 +268,7 @@ export function emptyDefinition(): DefinitionDraft {
     activeForModels: '',
     runWithModel: '',
     reasoningEffort: '',
+    agentPreset: '',
     timeoutSeconds: '',
     tools: '',
     capture: 'full',
@@ -272,6 +309,7 @@ export function definitionDraft(value: ShadowDefinition): DefinitionDraft {
     activeForModels: value.activeForModels.join('\n'),
     runWithModel: value.runWithModel ?? '',
     reasoningEffort: value.reasoningEffort ?? '',
+    agentPreset: value.agentPreset ?? '',
     timeoutSeconds: value.timeoutSeconds === undefined ? '' : String(value.timeoutSeconds),
     tools: value.tools.join('\n'),
     capture: value.capture,
@@ -322,6 +360,7 @@ export function definitionInput(draft: DefinitionDraft): ShadowDefinitionInput |
     activeForModels: lines(draft.activeForModels),
     runWithModel: draft.runWithModel.trim() || null,
     reasoningEffort: draft.reasoningEffort.trim() || null,
+    agentPreset: draft.agentPreset.trim() || null,
     timeoutSeconds: timeout ?? null,
     tools: lines(draft.tools),
     capture: draft.capture,
@@ -363,6 +402,17 @@ export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefi
   const soft = numbers.sessionShadowSoftBudgetChars
   const hard = numbers.sessionShadowHardBudgetChars
   const frugalRoute = draft.frugalShadowModel.trim()
+  const gateJudgeTimeout = numbers.commandGateJudgeTimeoutSeconds
+  const gateMaxParallel = integerAtLeast(numbers.commandGateMaxParallel, 1)
+  const gateVerdictTtl = numbers.commandGateVerdictTtlSeconds
+  const gateEnabled = draft.commandGateEnabled === 'true'
+  const gateScope: ShadowMindSettings['commandGateScope'] = draft.commandGateScope === 'root-and-subagents'
+    ? 'root-and-subagents'
+    : 'root-only'
+  const gateOnFailure: ShadowMindSettings['commandGateOnJudgeFailure'] = draft.commandGateOnJudgeFailure === 'allow'
+    ? 'allow'
+    : 'deny'
+  const gateTools = lines(draft.commandGateTools)
   const largestWindow = Math.max(
     spinningRepeatCount ?? Number.POSITIVE_INFINITY,
     (oscillationPeriods ?? Number.POSITIVE_INFINITY) * 2,
@@ -388,6 +438,9 @@ export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefi
     || (hard !== undefined && (!Number.isInteger(hard) || hard < 1))
     || (soft !== undefined && (hard === undefined || frugalRoute === '' || soft >= hard))
     || (frugalRoute !== '' && soft === undefined)
+    || gateJudgeTimeout === undefined || gateJudgeTimeout <= 0
+    || gateMaxParallel === undefined
+    || gateVerdictTtl === undefined || gateVerdictTtl < 0
     || effortLadder.length === 0 || new Set(effortLadder).size !== effortLadder.length
     || reviewWindowSize < largestWindow) return undefined
   return {
@@ -398,6 +451,10 @@ export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefi
     resultBatchWindowMs,
     ...(draft.defaultShadowModel.trim() === '' ? {} : { defaultShadowModel: draft.defaultShadowModel.trim() }),
     ...(draft.defaultReasoningEffort.trim() === '' ? {} : { defaultReasoningEffort: draft.defaultReasoningEffort.trim() }),
+    ...(draft.defaultAgentPreset.trim() === '' ? {} : { defaultAgentPreset: draft.defaultAgentPreset.trim() }),
+    ...(draft.synthesisModel.trim() === '' ? {} : { synthesisModel: draft.synthesisModel.trim() }),
+    ...(draft.synthesisReasoningEffort.trim() === '' ? {} : { synthesisReasoningEffort: draft.synthesisReasoningEffort.trim() }),
+    ...(draft.synthesisAgentPreset.trim() === '' ? {} : { synthesisAgentPreset: draft.synthesisAgentPreset.trim() }),
     argumentDisclosure: draft.argumentDisclosure === 'full' ? 'full' : 'redacted',
     ...(numbers.randomSeed === undefined ? {} : { randomSeed: numbers.randomSeed }),
     maxPromptChars,
@@ -423,6 +480,21 @@ export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefi
     staleReportDecay,
     conflictSynthesisEnabled: draft.conflictSynthesisEnabled === 'true',
     conflictSynthesisTimeoutSeconds,
+    commandGateEnabled: gateEnabled,
+    commandGateTools: gateTools,
+    commandGateScope: gateScope,
+    commandGateDenyPatterns: lines(draft.commandGateDenyPatterns),
+    commandGateAllowPatterns: lines(draft.commandGateAllowPatterns),
+    commandGateProtectedProcesses: lines(draft.commandGateProtectedProcesses),
+    commandGateProtectedServices: lines(draft.commandGateProtectedServices),
+    ...(draft.commandGateContext.trim() === '' ? {} : { commandGateContext: draft.commandGateContext.trim() }),
+    ...(draft.commandGateModel.trim() === '' ? {} : { commandGateModel: draft.commandGateModel.trim() }),
+    ...(draft.commandGateReasoningEffort.trim() === '' ? {} : { commandGateReasoningEffort: draft.commandGateReasoningEffort.trim() }),
+    ...(draft.commandGateAgentPreset.trim() === '' ? {} : { commandGateAgentPreset: draft.commandGateAgentPreset.trim() }),
+    commandGateJudgeTimeoutSeconds: gateJudgeTimeout,
+    commandGateOnJudgeFailure: gateOnFailure,
+    commandGateMaxParallel: gateMaxParallel,
+    commandGateVerdictTtlSeconds: gateVerdictTtl,
   }
 }
 
@@ -575,6 +647,10 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
               <span>{t('spentChars')}: {status.spentChars}</span>
               <span>{t('synthesisRuns')}: {status.synthesisRuns}</span>
               <span>{t('synthesisFailures')}: {status.synthesisFailures}</span>
+              <span>{t('gateDenies')}: {status.gateDenies}</span>
+              <span>{t('gateAllows')}: {status.gateAllows}</span>
+              <span>{t('gateJudgeRuns')}: {status.gateJudgeRuns}</span>
+              <span>{t('gateJudgeFailures')}: {status.gateJudgeFailures}</span>
             </div>
             {status.lastRun === undefined ? <p>{t('noCompletedRuns')}</p> : (
               <dl className={css.lastRun} data-shadow-last-run>
@@ -630,6 +706,34 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                   onChange={(value) => { setSettingsEdit({ ...settingsEdit, [field]: value }) }} />
               ))}
             </div>
+            <fieldset className={css.fieldset}>
+              <legend>{t('defaultShadowModel')}</legend>
+              <div className={css.grid}>
+                <ModelRouteSelect
+                  catalog={catalog?.modelCatalog ?? null}
+                  disabled={busy}
+                  labels={{
+                    provider: t('providerLabel'),
+                    model: t('modelLabel'),
+                    effort: t('effortLabel'),
+                    preset: t('presetLabel'),
+                  }}
+                  value={{
+                    route: settingsEdit.defaultShadowModel,
+                    effort: settingsEdit.defaultReasoningEffort,
+                    preset: settingsEdit.defaultAgentPreset,
+                  }}
+                  onChange={(next) => {
+                    setSettingsEdit({
+                      ...settingsEdit,
+                      defaultShadowModel: next.route,
+                      defaultReasoningEffort: next.effort,
+                      defaultAgentPreset: next.preset,
+                    })
+                  }}
+                />
+              </div>
+            </fieldset>
             <details className={css.disclosure} data-shadow-settings-advanced>
               <summary>
                 {t('advancedSettings')}
@@ -661,6 +765,54 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                   </label>
                 ))}
               </div>
+              <fieldset className={css.fieldset}>
+                <legend>{t('frugalShadowModel')}</legend>
+                <div className={css.grid}>
+                  <ModelRouteSelect
+                    catalog={catalog?.modelCatalog ?? null}
+                    disabled={busy}
+                    labels={{
+                      provider: t('providerLabel'),
+                      model: t('modelLabel'),
+                      effort: t('effortLabel'),
+                      preset: t('presetLabel'),
+                    }}
+                    hideEffort
+                    hidePreset
+                    value={{ route: settingsEdit.frugalShadowModel, effort: '', preset: '' }}
+                    onChange={(next) => { setSettingsEdit({ ...settingsEdit, frugalShadowModel: next.route }) }}
+                  />
+                </div>
+                <small>{t('frugalShadowModelHint')}</small>
+              </fieldset>
+              <fieldset className={css.fieldset}>
+                <legend>{t('synthesisModel')}</legend>
+                <div className={css.grid}>
+                  <ModelRouteSelect
+                    catalog={catalog?.modelCatalog ?? null}
+                    disabled={busy}
+                    labels={{
+                      provider: t('providerLabel'),
+                      model: t('modelLabel'),
+                      effort: t('effortLabel'),
+                      preset: t('presetLabel'),
+                    }}
+                    value={{
+                      route: settingsEdit.synthesisModel,
+                      effort: settingsEdit.synthesisReasoningEffort,
+                      preset: settingsEdit.synthesisAgentPreset,
+                    }}
+                    onChange={(next) => {
+                      setSettingsEdit({
+                        ...settingsEdit,
+                        synthesisModel: next.route,
+                        synthesisReasoningEffort: next.effort,
+                        synthesisAgentPreset: next.preset,
+                      })
+                    }}
+                  />
+                </div>
+              </fieldset>
             </details>
             <div className={css.formActions}>
               <button type="button" disabled={!settingsDirty || busy}
@@ -681,6 +833,79 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
         )}
       </section>
 
+      <section className={css.panel} data-shadow-command-gate>
+        <h3>{t('gateTitle')}</h3>
+        <p>{t('gateDescription')}</p>
+        {settingsEdit === null ? <p>{t('loadError')}</p> : (
+          <>
+            <div className={css.grid}>
+              <label className={css.field} htmlFor="shadow-setting-commandGateEnabled">
+                <span>{t('commandGateEnabled')}</span>
+                <select id="shadow-setting-commandGateEnabled" value={settingsEdit.commandGateEnabled}
+                  onChange={(event) => { setSettingsEdit({ ...settingsEdit, commandGateEnabled: event.currentTarget.value }) }}>
+                  <option value="false">false</option><option value="true">true</option>
+                </select>
+                <small>{t('commandGateEnabledHint')}</small>
+              </label>
+              <label className={css.field} htmlFor="shadow-setting-commandGateScope">
+                <span>{t('commandGateScope')}</span>
+                <select id="shadow-setting-commandGateScope" value={settingsEdit.commandGateScope}
+                  onChange={(event) => { setSettingsEdit({ ...settingsEdit, commandGateScope: event.currentTarget.value }) }}>
+                  <option value="root-only">root-only</option><option value="root-and-subagents">root-and-subagents</option>
+                </select>
+                <small>{t('commandGateScopeHint')}</small>
+              </label>
+              <label className={css.field} htmlFor="shadow-setting-commandGateOnJudgeFailure">
+                <span>{t('commandGateOnJudgeFailure')}</span>
+                <select id="shadow-setting-commandGateOnJudgeFailure" value={settingsEdit.commandGateOnJudgeFailure}
+                  onChange={(event) => { setSettingsEdit({ ...settingsEdit, commandGateOnJudgeFailure: event.currentTarget.value }) }}>
+                  <option value="deny">deny</option><option value="allow">allow</option>
+                </select>
+                <small>{t('commandGateOnJudgeFailureHint')}</small>
+              </label>
+              {LIST_FIELDS.map(field => (
+                <Field key={field} id={`shadow-setting-${field}`} label={t(field)} hint={t(`${field}Hint`)}
+                  value={settingsEdit[field]} multiline
+                  onChange={(value) => { setSettingsEdit({ ...settingsEdit, [field]: value }) }} />
+              ))}
+              {CONTEXT_FIELDS.map(field => (
+                <Field key={field} id={`shadow-setting-${field}`} label={t(field)} hint={t(`${field}Hint`)}
+                  value={settingsEdit[field]} multiline
+                  onChange={(value) => { setSettingsEdit({ ...settingsEdit, [field]: value }) }} />
+              ))}
+            </div>
+            <fieldset className={css.fieldset}>
+              <legend>{t('commandGateModel')}</legend>
+              <div className={css.grid}>
+                <ModelRouteSelect
+                  catalog={catalog?.modelCatalog ?? null}
+                  disabled={busy}
+                  labels={{
+                    provider: t('providerLabel'),
+                    model: t('modelLabel'),
+                    effort: t('effortLabel'),
+                    preset: t('presetLabel'),
+                  }}
+                  value={{
+                    route: settingsEdit.commandGateModel,
+                    effort: settingsEdit.commandGateReasoningEffort,
+                    preset: settingsEdit.commandGateAgentPreset,
+                  }}
+                  onChange={(next) => {
+                    setSettingsEdit({
+                      ...settingsEdit,
+                      commandGateModel: next.route,
+                      commandGateReasoningEffort: next.effort,
+                      commandGateAgentPreset: next.preset,
+                    })
+                  }}
+                />
+              </div>
+            </fieldset>
+          </>
+        )}
+      </section>
+
       <section className={css.panel} data-shadow-definitions>
         <div className={css.sectionHead}><div><h3>{t('definitionsTitle')}</h3><p>{t('definitionsDescription')}</p></div>
           <button type="button" disabled={busy} onClick={() => { setEditingId(null); setDefinitionEdit(emptyDefinition()) }}>{t('addShadow')}</button></div>
@@ -693,6 +918,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                 <span data-enabled={definition.enabled}>{t(definition.enabled ? 'enabled' : 'disabled')}</span></div>
               <dl><div><dt>{t('activationProbability')}</dt><dd>{definition.activationProbability}</dd></div>
                 <div><dt>{t('runWithModel')}</dt><dd>{definition.runWithModel ?? 'inherit'}</dd></div>
+                <div><dt>{t('presetLabel')}</dt><dd>{definition.agentPreset ?? '—'}</dd></div>
                 <div><dt>{t('capture')}</dt><dd>{definition.capture}</dd></div>
                 <div><dt>{t('context')}</dt><dd>{definition.context}</dd></div>
                 <div><dt>{t('thinkFirst')}</dt><dd>{String(definition.thinkFirst)}</dd></div>
@@ -763,10 +989,29 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
             <fieldset className={css.fieldset}>
               <legend>{t('definitionCommonFields')}</legend>
               <div className={css.grid}>
-                <Field id="shadow-definition-run-model" label={t('runWithModel')} hint={t('runWithModelHint')} value={definitionEdit.runWithModel}
-                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, runWithModel: value }) }} />
-                <Field id="shadow-definition-effort" label={t('reasoningEffort')} hint={t('reasoningEffortHint')} value={definitionEdit.reasoningEffort}
-                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, reasoningEffort: value }) }} />
+                <ModelRouteSelect
+                  catalog={catalog?.modelCatalog ?? null}
+                  disabled={busy}
+                  labels={{
+                    provider: t('providerLabel'),
+                    model: t('modelLabel'),
+                    effort: t('effortLabel'),
+                    preset: t('presetLabel'),
+                  }}
+                  value={{
+                    route: definitionEdit.runWithModel,
+                    effort: definitionEdit.reasoningEffort,
+                    preset: definitionEdit.agentPreset,
+                  }}
+                  onChange={(next) => {
+                    setDefinitionEdit({
+                      ...definitionEdit,
+                      runWithModel: next.route,
+                      reasoningEffort: next.effort,
+                      agentPreset: next.preset,
+                    })
+                  }}
+                />
                 <Field id="shadow-definition-timeout" label={t('timeoutSeconds')} hint={t('timeoutSecondsHint')} value={definitionEdit.timeoutSeconds}
                   onChange={(value) => { setDefinitionEdit({ ...definitionEdit, timeoutSeconds: value }) }} />
                 <Field id="shadow-definition-tools" label={t('tools')} hint={t('toolsHint')} value={definitionEdit.tools} multiline

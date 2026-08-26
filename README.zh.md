@@ -67,6 +67,20 @@ Review the completed task. If there is a concrete defect or missing requirement,
 
 验收时把全局 heartbeat 概率设为 `1`。省略 `run_with_model` 时 child 继承 root 的模型路由；如需单独模型，应填写完整的 `provider/model`。默认 Shadow 工具为 `read`、`grep` 和 `glob`；定义中的工具会扩展 allowlist，如果继承的 sandbox 允许，它们也可能具有写入能力。[`examples/shadow-minds/`](examples/shadow-minds/) 中默认禁用的 starter library 展示 anchored probe 词汇，安装过程绝不会自动把它写入 `$DSH_HOME`。
 
+### 把 Shadow 绑定到 DSH 的模型与 Agent 预设
+
+每个 Shadow 子代理——评审影子、冲突综合与命令闸门法官——都可以绑定 DSH 部署中已配置的供应商、模型与思考强度。设置页提供供应商 / 模型 / 思考强度三级联动下拉框（数据来自 DSH 实时 LLM 目录，含每个模型公布的适配器思考强度），以及 DSH Agent 预设下拉框：绑定预设后，子代理沿用该预设的 `persona` 组合。磁盘与 wire 格式仍是 `provider/model` 路由字符串，因此面向模型的管理工具无需改动。
+
+## 命令闸门
+
+命令闸门在**执行前**阻断主 agent 的 `pwsh`（以及任意配置的工具）调用，并分三层裁决：
+
+1. **拒绝模式**——正则命中即 0 延迟拒绝（默认覆盖 `Stop-Process`、`Stop-Service`、`taskkill`、`shutdown`、递归删除等破坏性命令），不产生任何模型成本；命中受保护进程/服务名的命令会在拒绝原因中点名目标。
+2. **放行模式**——只读命令（默认覆盖 `Get-*`、`pwd`、`git status/diff/log` 等）在未命中拒绝模式时立即执行。
+3. **闸门法官**——其余命令唤起绑定到法官模型（未配置时继承主 agent 模型）的全新 Shadow 子代理，返回结构化 `allow`/`deny` 与理由。法官提示词包含你的环境声明、受保护进程/服务名单、工作区、完整命令与有界的近期轨迹；主 agent 的 turn 会阻塞等待裁决。法官超时或失败时按失败策略处理（`deny` 为 fail-closed 默认值，`allow` 为 fail-open）。相同命令在 TTL 窗口内复用上次裁决，法官并发有上限。
+
+首要场景是防止改项目时主 agent 误杀生产环境服务：在 **设置 → 插件 → Shadow Mind → 命令闸门** 中声明保护名单（或环境说明），启用闸门后，破坏性命令在到达 shell 之前就会被拦下。裁决会审计到 `$DSH_HOME/shadow-minds/logs/command-gate.jsonl`，`/shadow status` 会报告闸门拒绝/放行/法官计数。闸门**默认关闭**，且永远不会审查 Shadow 子代理自身。
+
 ## 验证实际运行
 
 只有包含至少一个持久化工具结果的已完成 root 轮次才会触发调度。在新会话中明确要求主 agent 读取一个仓库文件再分析。`/shadow status` 会显示等待调度数、活动运行数、累计准入运行数和最近结果。

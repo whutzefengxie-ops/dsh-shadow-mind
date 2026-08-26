@@ -118,6 +118,10 @@ class RuntimeStub {
       recentReviews: [],
       synthesisRuns: 0,
       synthesisFailures: 0,
+      gateDenies: 0,
+      gateAllows: 0,
+      gateJudgeRuns: 0,
+      gateJudgeFailures: 0,
       ...this.lastRun === undefined ? {} : { lastRun: this.lastRun },
     }
   }

@@ -37,6 +37,16 @@ export declare const DEFAULT_DIMINISHING_WINDOW_SIZE = 5;
 export declare const DEFAULT_DIMINISHING_NOVELTY_THRESHOLD = 0.4;
 /** Default wall-clock stagnation cooldown in seconds. */
 export declare const DEFAULT_STAGNATION_COOLDOWN_SECONDS = 300;
+/** Default gate judge deadline in seconds. */
+export declare const DEFAULT_COMMAND_GATE_JUDGE_TIMEOUT_SECONDS = 30;
+/** Default gate judge concurrency. */
+export declare const DEFAULT_COMMAND_GATE_MAX_PARALLEL = 1;
+/** Default identical-command verdict reuse window in seconds. */
+export declare const DEFAULT_COMMAND_GATE_VERDICT_TTL_SECONDS = 120;
+/** Commands matching one of these are denied before any judge runs. */
+export declare const DEFAULT_COMMAND_GATE_DENY_PATTERNS: readonly string[];
+/** Pure-read commands allowed without a judge when no deny pattern matches. */
+export declare const DEFAULT_COMMAND_GATE_ALLOW_PATTERNS: readonly string[];
 /** User-editable settings plus cross-field budget and window validation. */
 export declare const SHADOW_MIND_SETTINGS_SCHEMA: Schema<ShadowMindSettings>;
 /** Cordis plugin configuration schema. */

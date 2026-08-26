@@ -10,6 +10,34 @@ const _shadowDefinitionConditioning$shape = {
   'boostFactor': z.number().readonly(),
   'holdout': z.boolean().readonly(),
 }
+const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema = z.object({
+  'groups': z.array(z.object({
+    'id': z.string().readonly(),
+    'name': z.string().readonly(),
+    'models': z.array(z.object({
+      'id': z.string().readonly(),
+      'name': z.string().readonly(),
+      'description': z.string().readonly().optional(),
+      'reasoning': z.object({
+        'efforts': z.array(z.object({
+          'id': z.string().readonly(),
+          'name': z.string().readonly(),
+          'description': z.string().readonly().optional(),
+        })).readonly(),
+        'defaultEffort': z.string().readonly().optional(),
+      }).readonly().optional(),
+    })).readonly(),
+  })).readonly(),
+  'failures': z.array(z.object({
+    'id': z.string().readonly(),
+    'name': z.string().readonly(),
+    'message': z.string().readonly(),
+  })).readonly(),
+  'agentPresets': z.array(z.object({
+    'id': z.string().readonly(),
+    'name': z.string().readonly(),
+  })).readonly(),
+}).readonly()
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_catalog_result$schema = z.object({
   'definitionRoot': z.string().readonly(),
   'definitions': z.array(z.object({
@@ -21,12 +49,14 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_catalog_result$schema = z.
   'activeForModels': z.array(z.string()).readonly(),
   'runWithModel': z.string().readonly().optional(),
   'reasoningEffort': z.string().readonly().optional(),
+  'agentPreset': z.string().readonly().optional(),
   'timeoutSeconds': z.number().readonly().optional(),
   'tools': z.array(z.string()).readonly(),
   ..._shadowDefinitionConditioning$shape,
   'prompt': z.string().readonly(),
   'sourcePath': z.string().readonly(),
 })).readonly(),
+  'modelCatalog': _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema,
   'diagnostics': z.array(z.object({
   'path': z.string().readonly(),
   'error': z.string().readonly(),
@@ -41,6 +71,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_create_parameter_0$schema 
   'activeForModels': z.array(z.string()).readonly(),
   'runWithModel': z.union([z.literal(null), z.string()]).readonly(),
   'reasoningEffort': z.union([z.literal(null), z.string()]).readonly(),
+  'agentPreset': z.union([z.literal(null), z.string()]).readonly(),
   'timeoutSeconds': z.union([z.literal(null), z.number()]).readonly(),
   'tools': z.array(z.string()).readonly(),
   ..._shadowDefinitionConditioning$shape,
@@ -55,6 +86,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_create_result$schema = z.o
   'activeForModels': z.array(z.string()).readonly(),
   'runWithModel': z.string().readonly().optional(),
   'reasoningEffort': z.string().readonly().optional(),
+  'agentPreset': z.string().readonly().optional(),
   'timeoutSeconds': z.number().readonly().optional(),
   'tools': z.array(z.string()).readonly(),
   ..._shadowDefinitionConditioning$shape,
@@ -112,6 +144,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_result$schema =
   'activeForModels': z.array(z.string()).readonly(),
   'runWithModel': z.string().readonly().optional(),
   'reasoningEffort': z.string().readonly().optional(),
+  'agentPreset': z.string().readonly().optional(),
   'timeoutSeconds': z.number().readonly().optional(),
   'tools': z.array(z.string()).readonly(),
   ..._shadowDefinitionConditioning$shape,
@@ -165,6 +198,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_update_parameter_0$schema 
   'activeForModels': z.array(z.string()).readonly(),
   'runWithModel': z.union([z.literal(null), z.string()]).readonly(),
   'reasoningEffort': z.union([z.literal(null), z.string()]).readonly(),
+  'agentPreset': z.union([z.literal(null), z.string()]).readonly(),
   'timeoutSeconds': z.union([z.literal(null), z.number()]).readonly(),
   'tools': z.array(z.string()).readonly(),
   ..._shadowDefinitionConditioning$shape,
@@ -179,6 +213,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_update_result$schema = z.o
   'activeForModels': z.array(z.string()).readonly(),
   'runWithModel': z.string().readonly().optional(),
   'reasoningEffort': z.string().readonly().optional(),
+  'agentPreset': z.string().readonly().optional(),
   'timeoutSeconds': z.number().readonly().optional(),
   'tools': z.array(z.string()).readonly(),
   ..._shadowDefinitionConditioning$shape,
@@ -300,6 +335,10 @@ const _shadowMindStatusV2$schema = z.object({
   })).readonly(),
   'synthesisRuns': z.number().readonly(),
   'synthesisFailures': z.number().readonly(),
+  'gateDenies': z.number().readonly(),
+  'gateAllows': z.number().readonly(),
+  'gateJudgeRuns': z.number().readonly(),
+  'gateJudgeFailures': z.number().readonly(),
   'lastSynthesisFailure': z.string().readonly().optional(),
   'lastRun': z.object({
     'runId': z.string().readonly(),
@@ -343,6 +382,22 @@ export const TYPERT = {
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_catalog_result$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":254,"column":9},
+    },
+    {
+      id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/modelCatalog',
+      service: 'shadowMind',
+      namespace: 'shadowMind',
+      method: 'modelCatalog',
+      implementation: 'modelCatalog',
+      invocation: { kind: 'direct' },
+      parameters: [
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowModelCatalog',
+        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema,
+      },
+      sourceLocation: {"file":"src/runtime/index.ts","line":521,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/cycles',
@@ -1203,7 +1258,7 @@ export const TYPERT = {
           },
           {
             "name": "UpdateShadowDefinition",
-            "declaration": "export type UpdateShadowDefinition = Partial<Omit<CreateShadowDefinition, 'id' | 'runWithModel' | 'reasoningEffort' | 'timeoutSeconds'>> & { readonly runWithModel?: string | undefined; readonly reasoningEffort?: string | undefined; readonly timeoutSeconds?: number | undefined; };"
+            "declaration": "export type UpdateShadowDefinition = Partial<Omit<CreateShadowDefinition, 'id' | 'runWithModel' | 'reasoningEffort' | 'agentPreset' | 'timeoutSeconds'>> & { readonly runWithModel?: string | undefined; readonly reasoningEffort?: string | undefined; readonly agentPreset?: string | undefined; readonly timeoutSeconds?: number | undefined; };"
           },
           {
             "name": "UserMessage",

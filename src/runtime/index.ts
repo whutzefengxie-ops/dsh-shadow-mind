@@ -6,6 +6,7 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto'
+import { parse as parseYaml } from 'yaml'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -21,11 +22,20 @@ import { ShadowRegistry } from './registry.ts'
 import { seededRandom, type RandomSource } from './random.ts'
 import { modelEligible, selectShadows } from './scheduler.ts'
 import { boostPredicates, matchesPredicate, prefilterPredicates } from './prefilter.ts'
-import { buildShadowPrompt, projectTrajectoryWithAnchors } from './trajectory.ts'
+import { buildShadowPrompt, projectTrajectory, projectTrajectoryWithAnchors } from './trajectory.ts'
 import { ReportBatcher, type AcceptedShadowReport } from './report-batcher.ts'
 import { failureAt, safeError, type ShadowCancellation, type ShadowFailure } from './run-diagnostics.ts'
 import { installShadowMindProvider, SHADOW_MIND_SUBAGENT_PROVIDER } from './subagent-provider.ts'
 import { preferIndependentCandidates, resolveIndependence } from './vendor.ts'
+import {
+  CommandGate,
+  GATE_OUTPUT_SCHEMA,
+  type CommandGateRuntime,
+  type CommandGateStats,
+  type GateCommand,
+  type GateJudgeOutcome,
+} from './command-gate.ts'
+import { buildShadowModelCatalog } from './model-catalog.ts'
 import {
   classifyChallenge,
   type ShadowValueClassification,
@@ -54,6 +64,7 @@ import type {
   ShadowIndependence,
   ShadowMindSettings,
   ShadowMindStatus,
+  ShadowModelCatalog,
   ShadowReviewCycle,
   ShadowReviewCycleFailure,
   ShadowRunOutcome,
@@ -101,6 +112,18 @@ export {
 } from './synthesis.ts'
 export type { ShadowConflict } from './synthesis.ts'
 export { ReportBatcher } from './report-batcher.ts'
+export { CommandGate, GATE_OUTPUT_SCHEMA } from './command-gate.ts'
+export type { CommandGateStats, GateCommand, GateJudgeOutcome, GateTier, GateVerdict } from './command-gate.ts'
+export { buildShadowModelCatalog } from './model-catalog.ts'
+export type {
+  ShadowAgentPresetOption,
+  ShadowCatalogModel,
+  ShadowModelCatalog,
+  ShadowModelEffort,
+  ShadowModelFailure,
+  ShadowModelGroup,
+  ShadowModelReasoning,
+} from './model-catalog.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -263,6 +286,41 @@ function shadowOutput(value: unknown, projectedSeqs: ReadonlySet<number>): Shado
   }
 }
 
+/** Narrow a provider-validated gate verdict for TypeScript. */
+function parseGateOutput(value: unknown): { allow: boolean; reason: string } | undefined {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const record = value as Record<string, unknown>
+  const decision = record['decision']
+  const reason = record['reason']
+  if (decision !== 'allow' && decision !== 'deny') return undefined
+  if (typeof reason !== 'string' || reason.trim() === '') return undefined
+  return { allow: decision === 'allow', reason: reason.trim() }
+}
+
+/** Find the `persona` row of a parsed preset composition, including nested groups. */
+function personaFromComposition(composition: unknown): string | undefined {
+  if (!Array.isArray(composition)) return undefined
+  for (const entry of composition) {
+    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) continue
+    const row = entry as { name?: unknown; config?: unknown; group?: unknown }
+    if (row.name === 'persona' && row.config !== null && typeof row.config === 'object') {
+      const text = (row.config as { text?: unknown }).text
+      if (typeof text === 'string' && text.trim() !== '') return text
+    }
+    if (Array.isArray(row.group)) {
+      const nested = personaFromComposition(row.group)
+      if (nested !== undefined) return nested
+    }
+  }
+  return undefined
+}
+
+/** Keep the newest `limit` characters of a projected trajectory. */
+function tailChars(text: string, limit: number): string {
+  if (text.length <= limit) return text
+  return `…(trajectory truncated)\n${text.slice(-limit)}`
+}
+
 /** Map provider-owned non-completion into a stable plugin reason. */
 function providerFailureReason(stopReason: string): ShadowRunReasonCode {
   switch (stopReason) {
@@ -370,6 +428,7 @@ function authoringDefinition(input: ShadowDefinitionInput): CreateShadowDefiniti
     activeForModels: input.activeForModels,
     ...input.runWithModel === null ? {} : { runWithModel: input.runWithModel },
     ...input.reasoningEffort === null ? {} : { reasoningEffort: input.reasoningEffort },
+    ...input.agentPreset === null ? {} : { agentPreset: input.agentPreset },
     ...input.timeoutSeconds === null ? {} : { timeoutSeconds: input.timeoutSeconds },
     tools: input.tools,
     capture: input.capture,
@@ -393,6 +452,7 @@ function editableDefinition(input: ShadowDefinitionInput): UpdateShadowDefinitio
     activeForModels: input.activeForModels,
     runWithModel: input.runWithModel ?? undefined,
     reasoningEffort: input.reasoningEffort ?? undefined,
+    agentPreset: input.agentPreset ?? undefined,
     timeoutSeconds: input.timeoutSeconds ?? undefined,
     tools: input.tools,
     capture: input.capture,
@@ -417,6 +477,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
   private readonly settingsScope: SettingsScope<ShadowMindSettings>
   private random: RandomSource
   private readonly owners = new Map<Agent, OwnerState>()
+  private readonly gate: CommandGate
   private stopped = false
 
   /** @param ctx Cordis context carrying agents, subagents, and settings. @param config Deployment base settings. */
@@ -442,14 +503,24 @@ export class ShadowMindRuntime extends TypertRemoteService {
       if (!next.valueLoopEnabled && previous.valueLoopEnabled) {
         for (const state of this.owners.values()) state.pendingChallenges.clear()
       }
+      this.gate.reset()
     })
     ctx.effect(() => unwatch, 'shadow-mind settings watcher')
+    const gateRuntime: CommandGateRuntime = {
+      settings: () => this.settingsValue,
+      isRoot: agent => this.isRoot(agent),
+      judgeVerdict: (agent, command, signal) => this.judgeVerdict(agent, command, signal),
+      appendGateLog: (agent, record) => this.appendGateLog(agent, record),
+    }
+    this.gate = new CommandGate(ctx, gateRuntime)
+    ctx.effect(() => this.gate.install(), 'shadow-mind command gate')
 
     ctx.on('agent/inbox/inserted', ({ agent, message }) => {
       if (!this.isRoot(agent) || message.source.kind !== 'user') return
       const state = this.owner(agent)
       this.resetSessionGovernance(state)
       this.cancelOwner(state, { reasonCode: 'USER_MESSAGE_RECEIVED', source: 'user-input' })
+      this.gate.reset()
     })
     ctx.on('session/event', (session, event) => { this.onSessionEvent(session, event) })
     ctx.on('agent/status', ({ agent, status }) => {
@@ -484,12 +555,21 @@ export class ShadowMindRuntime extends TypertRemoteService {
 
   /**
    * Load definitions and their storage directory for the trusted Web administration page.
-   * @returns Current catalog and definition directory.
+   * @returns Current catalog, definition directory, and the live DSH model directory.
    */
   @Remote('catalog')
   async remoteExportCatalog(): Promise<ShadowAdministrationSnapshot> {
     const catalog = await this.registry.list()
-    return { definitionRoot: this.registry.root, ...catalog }
+    return { definitionRoot: this.registry.root, modelCatalog: await this.modelCatalog(), ...catalog }
+  }
+
+  /**
+   * Load the live DSH provider/model/effort directory plus the agent-preset roster.
+   * @returns Detached directory for the Web settings dropdowns.
+   */
+  @Remote('modelCatalog')
+  modelCatalog(): Promise<ShadowModelCatalog> {
+    return buildShadowModelCatalog(this.ctx)
   }
 
   /**
@@ -600,6 +680,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
   status(agent: Agent): ShadowMindStatus {
     this.assertRoot(agent)
     const state = this.owners.get(agent)
+    const gate = this.gateStats(agent)
     if (state === undefined) {
       return {
         paused: false,
@@ -617,6 +698,10 @@ export class ShadowMindRuntime extends TypertRemoteService {
         recentReviews: [],
         synthesisRuns: 0,
         synthesisFailures: 0,
+        gateDenies: gate.denies,
+        gateAllows: gate.allows,
+        gateJudgeRuns: gate.judgeRuns,
+        gateJudgeFailures: gate.judgeFailures,
       }
     }
     return {
@@ -658,6 +743,10 @@ export class ShadowMindRuntime extends TypertRemoteService {
       recentReviews: [...state.reviewEntries],
       synthesisRuns: state.synthesisRuns,
       synthesisFailures: state.synthesisFailures,
+      gateDenies: gate.denies,
+      gateAllows: gate.allows,
+      gateJudgeRuns: gate.judgeRuns,
+      gateJudgeFailures: gate.judgeFailures,
       ...state.lastSynthesisFailure === undefined
         ? {}
         : { lastSynthesisFailure: state.lastSynthesisFailure },
@@ -1046,6 +1135,8 @@ export class ShadowMindRuntime extends TypertRemoteService {
       stage = 'start'
       nextFailureCode = 'SUBAGENT_START_FAILED'
       entry.view = { ...entry.view, stage }
+      const presetId = definition.agentPreset ?? settings.defaultAgentPreset
+      const persona = presetId === undefined ? undefined : await this.resolveAgentPresetPersona(presetId)
       run = await this.ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
         label: `shadow:${definition.id}`,
         parent: agent,
@@ -1056,6 +1147,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
         outputSchema: OUTPUT_SCHEMA,
         ...definition.context === 'minimal' ? { contextInheritance: 'none' as const } : {},
         ...definition.thinkFirst ? { thinkFirst: true } : {},
+        ...persona === undefined ? {} : { persona },
         ...selection === undefined ? {} : { modelSelection: selection },
       })
       entry.childSessionId = run.id
@@ -1558,13 +1650,21 @@ export class ShadowMindRuntime extends TypertRemoteService {
         ? this.settingsValue.frugalShadowModel
         : undefined
       const selection = modelSelection(definition, this.settingsValue, agent, {
+        ...this.settingsValue.synthesisModel === undefined ? {} : { route: this.settingsValue.synthesisModel },
         ...frugalRoute === undefined ? {} : { route: frugalRoute },
+        ...this.settingsValue.synthesisReasoningEffort === undefined
+          ? {}
+          : { effort: this.settingsValue.synthesisReasoningEffort },
       })
       assertConditioningCapabilities(this.ctx, {
         modelSelection: selection !== undefined,
         minimalContext: definition.context === 'minimal',
         thinkFirst: definition.thinkFirst,
       })
+      const presetId = this.settingsValue.synthesisAgentPreset
+        ?? definition.agentPreset
+        ?? this.settingsValue.defaultAgentPreset
+      const persona = presetId === undefined ? undefined : await this.resolveAgentPresetPersona(presetId)
       run = await this.ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
         label: 'shadow:synthesizer',
         parent: agent,
@@ -1575,6 +1675,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
         outputSchema: OUTPUT_SCHEMA,
         ...definition.context === 'minimal' ? { contextInheritance: 'none' as const } : {},
         ...definition.thinkFirst ? { thinkFirst: true } : {},
+        ...persona === undefined ? {} : { persona },
         ...selection === undefined ? {} : { modelSelection: selection },
       })
       result = await run.result
@@ -1926,6 +2027,164 @@ export class ShadowMindRuntime extends TypertRemoteService {
   /** Whether an asynchronous run may still affect this exact root. */
   private accepts(agent: Agent, state: OwnerState, epoch: number): boolean {
     return !this.stopped && !state.paused && state.epoch === epoch && this.ctx.agents.get(agent.id) === agent
+  }
+
+  /** Per-root command-gate counters for runtime status. */
+  private gateStats(agent: Agent): CommandGateStats {
+    return this.gate.statsFor(agent)
+  }
+
+  /** Resolve the model selection the gate judge runs under. */
+  private gateModelSelection(settings: ShadowMindSettings, root: Agent): ModelSelection | undefined {
+    const route = settings.commandGateModel ?? settings.defaultShadowModel ?? rootModelRoute(root)
+    if (route === undefined) return undefined
+    const slash = route.indexOf('/')
+    if (slash <= 0 || slash === route.length - 1) return undefined
+    const effort = settings.commandGateReasoningEffort ?? settings.defaultReasoningEffort
+    return {
+      provider: route.slice(0, slash),
+      model: route.slice(slash + 1),
+      ...effort === undefined ? {} : { reasoningEffort: ReasoningEffortId(effort) },
+    }
+  }
+
+  /**
+   * Settle one intercepted command through a fresh gate-judge child. Every
+   * failure path returns a `failure` outcome instead of throwing, so the
+   * gate's fail-open/fail-closed policy stays the only decision maker.
+   * @param agent Root agent whose command is under review.
+   * @param command Extracted command under review.
+   * @param signal Root turn signal; the judge aborts with it.
+   * @returns One judge settlement.
+   */
+  private async judgeVerdict(
+    agent: Agent,
+    command: GateCommand,
+    signal: AbortSignal,
+  ): Promise<GateJudgeOutcome> {
+    const settings = this.settingsValue
+    const selection = this.gateModelSelection(settings, agent)
+    const presetId = settings.commandGateAgentPreset ?? settings.defaultAgentPreset
+    const controller = new AbortController()
+    const onAbort = (): void => { controller.abort(signal.reason) }
+    if (signal.aborted) onAbort()
+    else signal.addEventListener('abort', onAbort, { once: true })
+    const timeout = setTimeout(
+      () => controller.abort(new Error('command gate judge timed out')),
+      settings.commandGateJudgeTimeoutSeconds * 1_000,
+    )
+    let run: SubagentRun | undefined
+    try {
+      const persona = presetId === undefined ? undefined : await this.resolveAgentPresetPersona(presetId)
+      run = await this.ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+        label: 'shadow:command-gate',
+        parent: agent,
+        prompt: [{ type: 'text', text: this.buildGateJudgePrompt(settings, agent, command) }],
+        signal: controller.signal,
+        maxDepth: 1,
+        toolFilter: { allow: [] },
+        outputSchema: GATE_OUTPUT_SCHEMA,
+        contextInheritance: 'none' as const,
+        ...persona === undefined ? {} : { persona },
+        ...selection === undefined ? {} : { modelSelection: selection },
+      })
+      const result = await run.result
+      const output = result.stopReason === 'completed' ? parseGateOutput(result.structured) : undefined
+      if (output === undefined) {
+        return { kind: 'failure', reason: `judge produced no valid verdict (${result.stopReason})` }
+      }
+      return { kind: 'verdict', allow: output.allow, reason: output.reason }
+    } catch (error: unknown) {
+      return { kind: 'failure', reason: error instanceof Error ? error.message : String(error) }
+    } finally {
+      clearTimeout(timeout)
+      signal.removeEventListener('abort', onAbort)
+      if (run !== undefined) {
+        try {
+          await run.dispose()
+        } catch (error: unknown) {
+          this.ctx.logger.warn('dsh-shadow-mind: command-gate judge disposal failed: %o', error)
+        }
+      }
+    }
+  }
+
+  /** Build the bounded judge prompt from the environment declaration and recent trajectory. */
+  private buildGateJudgePrompt(
+    settings: ShadowMindSettings,
+    agent: Agent,
+    command: GateCommand,
+  ): string {
+    const header = [
+      'You are the Shadow Mind command gate judge.',
+      'Decide whether the root agent\'s pending shell command may execute.',
+      '- The protected environment declaration is authoritative: never allow a command that kills, stops, restarts, or degrades protected processes or services, or otherwise damages the protected environment.',
+      '- Also deny commands whose side effects could irreversibly delete data or disrupt the machine the root agent works on.',
+      '- When uncertain, deny.',
+      'Call structured_output exactly once with decision "allow" or "deny" and a concise reason.',
+    ].join('\n')
+    const protectedLines: string[] = []
+    if (settings.commandGateContext !== undefined && settings.commandGateContext.trim() !== '') {
+      protectedLines.push(settings.commandGateContext.trim())
+    }
+    if (settings.commandGateProtectedProcesses.length > 0) {
+      protectedLines.push(`Protected processes: ${settings.commandGateProtectedProcesses.join(', ')}`)
+    }
+    if (settings.commandGateProtectedServices.length > 0) {
+      protectedLines.push(`Protected services: ${settings.commandGateProtectedServices.join(', ')}`)
+    }
+    const environment = protectedLines.length === 0 ? 'None declared.' : protectedLines.join('\n')
+    const facts = [
+      `## Pending ${command.toolName} command`,
+      `command: ${command.command}`,
+      ...command.description === undefined ? [] : [`description: ${command.description}`],
+      ...command.workdir === undefined ? [] : [`workdir: ${command.workdir}`],
+      '',
+      '## Environment',
+      `workspace: ${agent.session.header.cwd ?? 'unknown'}`,
+      // The environment declaration is user prose and may be long; bound it
+      // before the complete-prompt bound is applied, so the rules and the
+      // exact command never lose their place to a verbose declaration.
+      tailChars(environment, Math.max(0, settings.maxPromptChars - 2_000)),
+    ].join('\n')
+    const prefix = `${header}\n\n${facts}\n\n## Recent root trajectory`
+    const available = settings.maxPromptChars - prefix.length - 2
+    if (available <= 0) {
+      // Even the header and facts alone exceed the bound: keep the newest
+      // portion and let the judge settle or fail against its own budget.
+      return tailChars(prefix, settings.maxPromptChars - 2)
+    }
+    const lastSeq = agent.session.events.at(-1)?.seq ?? 0
+    const trajectory = projectTrajectory(agent.session.events, lastSeq, settings.argumentDisclosure, 'full')
+    return `${prefix}\n${tailChars(trajectory, available)}`
+  }
+
+  /** Append one gate diagnostic record without letting storage failures escape. */
+  private appendGateLog(agent: Agent, record: Record<string, unknown>): void {
+    void this.registry.appendDebug('command-gate', { rootSessionId: agent.id, ...record })
+      .catch((error: unknown) => {
+        this.ctx.logger.warn('dsh-shadow-mind: failed to write command-gate debug log: %o', error)
+      })
+  }
+
+  /**
+   * Resolve one DSH agent preset's persona text for a child request. Presets
+   * are plugin compositions; the `persona` row carries the prose the child
+   * installs as its shadowing `deployment:persona` section. Resolution
+   * failures fall back to inheriting the root persona and only warn.
+   * @param presetId Configured preset id.
+   * @returns The preset's persona prose, or undefined without one.
+   */
+  private async resolveAgentPresetPersona(presetId: string): Promise<string | undefined> {
+    const presets = this.ctx.get('agentPresets') as { read(id: string): Promise<string> } | undefined
+    if (presets === undefined) return undefined
+    try {
+      const composition = await presets.read(presetId)
+      return personaFromComposition(parseYaml(composition) as unknown)
+    } catch (error: unknown) {
+      this.ctx.logger.warn('dsh-shadow-mind: agent preset %s persona resolution failed: %o', presetId, error)
+      return undefined
+    }
   }
 
   /** Whether an agent is a top-level root rather than a subagent child. */

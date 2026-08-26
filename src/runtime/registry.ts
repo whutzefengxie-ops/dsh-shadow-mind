@@ -20,6 +20,8 @@ import type {
 /** Valid Shadow identifiers and canonical definition filenames. */
 export const SHADOW_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/u
 const TOOL_NAME_PATTERN = /^[a-z][a-z0-9_-]*$/u
+/** DSH agent-preset id shape (mirrors the agent-presets PRESET_ID boundary). */
+const PRESET_ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/u
 const FRONTMATTER_KEYS = new Set([
   'id',
   'name',
@@ -29,6 +31,7 @@ const FRONTMATTER_KEYS = new Set([
   'active_for_models',
   'run_with_model',
   'reasoning_effort',
+  'agent_preset',
   'timeout_seconds',
   'tools',
   'capture',
@@ -140,6 +143,10 @@ export function parseShadowDefinition(source: string, sourcePath: string): Shado
 
   const runWithModel = optionalModelRoute(optionalString(parsed, 'run_with_model'), 'run_with_model')
   const reasoningEffort = optionalString(parsed, 'reasoning_effort')
+  const agentPreset = optionalString(parsed, 'agent_preset')
+  if (agentPreset !== undefined && !PRESET_ID_PATTERN.test(agentPreset)) {
+    throw new Error('agent_preset must match a DSH preset id (lowercase letters, digits, and dashes)')
+  }
   const preFilters = stringArray(parsed, 'pre_filter')
   const unknownPreFilters = preFilters.filter(name => !prefilterPredicates.has(name))
   if (unknownPreFilters.length > 0) throw new Error(`unknown pre_filter predicate(s): ${unknownPreFilters.join(', ')}`)
@@ -159,6 +166,7 @@ export function parseShadowDefinition(source: string, sourcePath: string): Shado
     activeForModels: Object.freeze(stringArray(parsed, 'active_for_models')),
     ...runWithModel === undefined ? {} : { runWithModel },
     ...reasoningEffort === undefined ? {} : { reasoningEffort },
+    ...agentPreset === undefined ? {} : { agentPreset },
     ...timeout === undefined ? {} : { timeoutSeconds: timeout },
     tools: Object.freeze(tools),
     capture: optionalChoice(parsed, 'capture', ['full', 'since-compaction'] as const, 'full'),
@@ -185,6 +193,7 @@ function serializeDefinition(definition: CreateShadowDefinition): string {
   if (definition.activeForModels.length > 0) metadata['active_for_models'] = [...definition.activeForModels]
   if (definition.runWithModel !== undefined) metadata['run_with_model'] = definition.runWithModel
   if (definition.reasoningEffort !== undefined) metadata['reasoning_effort'] = definition.reasoningEffort
+  if (definition.agentPreset !== undefined) metadata['agent_preset'] = definition.agentPreset
   if (definition.timeoutSeconds !== undefined) metadata['timeout_seconds'] = definition.timeoutSeconds
   if (definition.tools.length > 0) metadata['tools'] = [...definition.tools]
   if (definition.capture !== undefined && definition.capture !== 'full') metadata['capture'] = definition.capture
@@ -212,6 +221,7 @@ function editable(definition: ShadowDefinition): CreateShadowDefinition {
     activeForModels: [...definition.activeForModels],
     ...definition.runWithModel === undefined ? {} : { runWithModel: definition.runWithModel },
     ...definition.reasoningEffort === undefined ? {} : { reasoningEffort: definition.reasoningEffort },
+    ...definition.agentPreset === undefined ? {} : { agentPreset: definition.agentPreset },
     ...definition.timeoutSeconds === undefined ? {} : { timeoutSeconds: definition.timeoutSeconds },
     tools: [...definition.tools],
     capture: definition.capture,
@@ -237,6 +247,7 @@ function updatedDefinition(current: ShadowDefinition, patch: UpdateShadowDefinit
     activeForModels: merged.activeForModels,
     ...merged.runWithModel === undefined ? {} : { runWithModel: merged.runWithModel },
     ...merged.reasoningEffort === undefined ? {} : { reasoningEffort: merged.reasoningEffort },
+    ...merged.agentPreset === undefined ? {} : { agentPreset: merged.agentPreset },
     ...merged.timeoutSeconds === undefined ? {} : { timeoutSeconds: merged.timeoutSeconds },
     tools: merged.tools,
     capture: patch.capture ?? current.capture,

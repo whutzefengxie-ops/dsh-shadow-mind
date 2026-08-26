@@ -87,6 +87,10 @@ describe('Shadow Remote descriptors', () => {
       synthesisRuns: 1,
       synthesisFailures: 1,
       lastSynthesisFailure: 'timeout',
+      gateDenies: 2,
+      gateAllows: 5,
+      gateJudgeRuns: 3,
+      gateJudgeFailures: 1,
       lastRun: {
         runId: 'run-1',
         shadowId: 'reviewer',
@@ -119,6 +123,7 @@ describe('Shadow Remote descriptors', () => {
       debug: false,
       activationProbability: 1,
       activeForModels: ['*'],
+      agentPreset: 'standard',
       tools: ['read'],
       capture: 'since-compaction',
       context: 'minimal',
@@ -133,10 +138,31 @@ describe('Shadow Remote descriptors', () => {
       ...shared,
       runWithModel: null,
       reasoningEffort: null,
+      agentPreset: null,
       timeoutSeconds: null,
     }
     const definition = { ...shared, sourcePath: '/definitions/reviewer.md' }
-    const catalog = { definitionRoot: '/definitions', definitions: [definition], diagnostics: [] }
+    const catalog = {
+      definitionRoot: '/definitions',
+      definitions: [definition],
+      diagnostics: [],
+      modelCatalog: {
+        groups: [{
+          id: 'deepseek-official',
+          name: 'DeepSeek',
+          models: [{
+            id: 'deepseek-v4-flash',
+            name: 'DeepSeek V4 Flash',
+            reasoning: {
+              efforts: [{ id: 'high', name: 'High' }],
+              defaultEffort: 'high',
+            },
+          }],
+        }],
+        failures: [],
+        agentPresets: [{ id: 'standard', name: 'Standard' }],
+      },
+    }
 
     for (const descriptors of descriptorSets) {
       const catalogDescriptor = descriptors.find(candidate => candidate.method === 'catalog')
