@@ -5,7 +5,7 @@
  * @module @whutzefengxie-ops/dsh-shadow-mind
  */
 
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -1189,6 +1189,18 @@ export class ShadowMindRuntime extends TypertRemoteService {
           output.status,
           entry.runId,
         )
+        // Keep the discarded body reconstructable without persisting model text:
+        // record its presence, length, and a content hash in the opt-in debug log.
+        await this.debugMetadata(definition, {
+          time: new Date().toISOString(),
+          runId: entry.runId,
+          rootSessionId: agent.id,
+          childSessionId: entry.childSessionId,
+          capturedThroughSeq: entry.capturedThroughSeq,
+          status: output.status,
+          discardedBodyChars: rawContent.length,
+          discardedBodyHash: createHash('sha256').update(rawContent).digest('hex'),
+        }, 'non-report-body-discarded')
       }
       await this.finishRun(state, entry, output.status, {
         stage: 'validate',
@@ -1386,10 +1398,14 @@ export class ShadowMindRuntime extends TypertRemoteService {
   }
 
   /** Append an opt-in metadata record without letting diagnostics fail a run. */
-  private async debugMetadata(definition: ShadowDefinition, record: Record<string, unknown>): Promise<void> {
+  private async debugMetadata(
+    definition: ShadowDefinition,
+    record: Record<string, unknown>,
+    event = 'quality-metadata',
+  ): Promise<void> {
     if (!definition.debug) return
     try {
-      await this.registry.appendDebug(definition.id, { event: 'quality-metadata', ...record })
+      await this.registry.appendDebug(definition.id, { event, ...record })
     } catch (error: unknown) {
       this.ctx.logger.warn('dsh-shadow-mind: failed to write debug log for %s: %o', definition.id, error)
     }

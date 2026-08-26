@@ -596,6 +596,19 @@ Review the completed turn.
       'silent',
       expect.any(String),
     )
+
+    const records = (await readFile(
+      join(harness.dshHome, 'shadow-minds', 'logs', 'reviewer.jsonl'),
+      'utf8',
+    )).trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
+    const discarded = records.find(record => record['event'] === 'non-report-body-discarded')
+    expect(discarded).toMatchObject({
+      status: 'silent',
+      discardedBodyChars: 'Nothing actionable after reviewing the turn.'.length,
+    })
+    expect(discarded?.['discardedBodyHash']).toBe('d6ed8049f11cbbcbe38047ebbd5f60888a11d87351b1984ba66b1b0ae0c48d10')
+    // The body text itself must never be persisted to the debug log.
+    expect(JSON.stringify(records)).not.toContain('Nothing actionable after reviewing the turn.')
   })
 
   it('settles not_relevant with an explanatory body instead of failing validation', async () => {
