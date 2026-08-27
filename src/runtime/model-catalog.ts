@@ -114,7 +114,18 @@ export async function buildShadowModelCatalog(ctx: Context): Promise<ShadowModel
   const groups: ShadowModelGroup[] = []
   const failures: ShadowModelFailure[] = []
   if (llm !== undefined) {
-    const providers = llm.listProviders()
+    let providers: { id: string; name: string }[] = []
+    try {
+      providers = [...llm.listProviders()]
+    } catch (error: unknown) {
+      // A throwing provider enumeration must not break the administration
+      // snapshot: surface it as a named failure instead.
+      failures.push({
+        id: '(providers)',
+        name: '(providers)',
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
     for (const provider of providers) {
       try {
         const models = await llm.listModels(provider.id)

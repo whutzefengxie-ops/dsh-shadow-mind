@@ -6,9 +6,9 @@
  * management tools keep their unchanged contract.
  *
  * The dropdowns own local selection state so a user can pick a provider
- * before picking a model (a half-composed route is emitted as an empty
- * route). External value changes — a fresh load or a discard — are adopted
- * whenever they differ from what this component last emitted.
+ * before picking a model; the half-selection travels as a trailing-slash
+ * route (`provider/`) so a discard or reload can distinguish it from the
+ * genuinely empty route and resets the UI to match the stored value.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
@@ -17,7 +17,11 @@ import css from './ShadowMindSettingsTab.module.css'
 
 /** Selection state the component owns and reports back. */
 export interface ModelRouteValue {
-  /** `provider/model` route string; empty inherits. */
+  /**
+   * Route string; empty inherits. A trailing-slash form (`provider/`) is the
+   * half-selection encoding: the provider is chosen while the model is still
+   * pending. Persistence normalizes it back to the empty route.
+   */
   route: string
   /** Adapter-owned reasoning effort id; empty inherits. */
   effort: string
@@ -91,7 +95,9 @@ export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
   const advertisedEfforts = modelEntry?.reasoning?.efforts.map(entry => entry.id) ?? effortFallback
   const effortKnown = effort === '' || advertisedEfforts.includes(effort)
   const controlsDisabled = props.disabled === true || catalog === null
-  const currentRoute = model === '' ? '' : `${provider}/${model}`
+  // Preserve the half-selection (provider picked, model pending) whenever a
+  // sibling dropdown changes, so the pending provider survives the round trip.
+  const currentRoute = provider === '' ? '' : model === '' ? `${provider}/` : `${provider}/${model}`
 
   const emit = (next: ModelRouteValue): void => {
     lastEmitted.current = next
@@ -123,7 +129,9 @@ export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
             const nextModel = next === '' || nextModels.some(candidate => candidate.id === model) ? model : ''
             setProvider(next)
             setModel(nextModel)
-            adoptRoute(next === '' || nextModel === '' ? '' : `${next}/${nextModel}`)
+            if (next === '') adoptRoute('')
+            else if (nextModel === '') adoptRoute(`${next}/`)
+            else adoptRoute(`${next}/${nextModel}`)
           }}
         >
           <option value="">—</option>
@@ -141,8 +149,15 @@ export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
           value={model}
           onChange={(event) => {
             const next = event.currentTarget.value
+            if (next === '') {
+              // Clearing the model clears the whole selection.
+              setProvider('')
+              setModel('')
+              adoptRoute('')
+              return
+            }
             setModel(next)
-            adoptRoute(next === '' ? '' : `${provider}/${next}`)
+            adoptRoute(`${provider}/${next}`)
           }}
         >
           <option value="">—</option>

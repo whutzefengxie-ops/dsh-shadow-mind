@@ -79,7 +79,7 @@ Review the completed task. If there is a concrete defect or missing requirement,
 2. **放行模式**——只读命令（默认覆盖 `Get-*`、`pwd`、`git status/diff/log` 等）在未命中拒绝模式时立即执行。
 3. **闸门法官**——其余命令唤起绑定到法官模型（未配置时继承主 agent 模型）的全新 Shadow 子代理，返回结构化 `allow`/`deny` 与理由。法官提示词包含你的环境声明、受保护进程/服务名单、工作区、完整命令与有界的近期轨迹；主 agent 的 turn 会阻塞等待裁决。法官超时或失败时按失败策略处理（`deny` 为 fail-closed 默认值，`allow` 为 fail-open）。相同命令在 TTL 窗口内复用上次裁决，法官并发有上限。
 
-首要场景是防止改项目时主 agent 误杀生产环境服务：在 **设置 → 插件 → Shadow Mind → 命令闸门** 中声明保护名单（或环境说明），启用闸门后，破坏性命令在到达 shell 之前就会被拦下。裁决会审计到 `$DSH_HOME/shadow-minds/logs/command-gate.jsonl`，`/shadow status` 会报告闸门拒绝/放行/法官计数。闸门**默认关闭**，且永远不会审查 Shadow 子代理自身。
+首要场景是防止改项目时主 agent 误杀生产环境服务：在 **设置 → 插件 → Shadow Mind → 命令闸门** 中声明保护名单（或环境说明），启用闸门后，破坏性命令在到达 shell 之前就会被拦下。裁决会审计到 `$DSH_HOME/shadow-minds/logs/command-gate.jsonl`，`/shadow status` 会报告闸门拒绝/放行/法官计数。闸门**默认关闭**。默认 `root-only` 作用域只审查主 agent（Shadow 子代理不会被重复审查）；`root-and-subagents` 作用域还会审查普通子代理，其法官按正确的深度运行。放行模式不会放行链式/管道命令：`git status; <任意命令>` 会进入法官裁决。
 
 验证级别：常规测试套件用 mock 模型 + 真实 PowerShell 完成了机制级端到端验证（含隔离 fixture 服务的 kill 拦截测试）。Tier-2 法官的**真实模型裁决质量**由门控冒烟验证：法官由实际绑定的 provider/model 经真实 DeepSeek API 回答——发版前执行 `DSH_REAL_MODEL_GATE=1 pnpm exec vitest run tests/command-gate-real-model.spec.ts`，它会喂入一条伪装 kill（期望 deny、fixture 存活）与一条良性命令（期望 allow），并打印两条裁决及其审计记录。设置页下拉框有 jsdom 组件测试覆盖供应商/模型联动、思考强度失效重置与预设绑定。
 

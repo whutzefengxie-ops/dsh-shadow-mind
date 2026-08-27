@@ -9,6 +9,35 @@ const descriptorSets = [
 ]
 
 describe('Shadow Remote descriptors', () => {
+  it('publishes the modelCatalog remote with a strict directory codec', () => {
+    const descriptor = TYPERT_REMOTE.descriptors.find(candidate => candidate.method === 'modelCatalog')
+
+    expect(descriptor).toMatchObject({
+      service: 'shadowMind',
+      namespace: 'shadowMind',
+      implementation: 'modelCatalog',
+      invocation: { kind: 'direct' },
+    })
+    if (descriptor?.result.mode !== 'strict') throw new Error('modelCatalog must use a strict result codec')
+    const directory = {
+      groups: [{
+        id: 'deepseek-official',
+        name: 'DeepSeek',
+        models: [{
+          id: 'deepseek-v4',
+          name: 'DeepSeek V4',
+          reasoning: {
+            efforts: [{ id: 'high', name: 'High' }],
+            defaultEffort: 'high',
+          },
+        }],
+      }],
+      failures: [],
+      agentPresets: [{ id: 'standard', name: 'Standard' }],
+    }
+    expect(descriptor.result.schema.parse(directory)).toEqual(directory)
+  })
+
   it('publishes the scoped lifecycle snapshot method', () => {
     const descriptor = TYPERT_REMOTE.descriptors.find(candidate => candidate.method === 'cycles')
 

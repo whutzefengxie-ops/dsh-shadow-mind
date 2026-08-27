@@ -11,6 +11,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { PreToolDecision, ToolExecution } from '@deepseek-ai/dsh-tools'
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
+import { COMMAND_GATE_SEPARATOR_PATTERN } from './config.ts'
 import type { ShadowMindSettings } from './types.ts'
 
 /** Structured verdict schema the gate judge must answer with. */
@@ -161,6 +162,7 @@ export class CommandGate {
     const cached = this.cache.get(key)
     if (cached !== undefined && cached.until > Date.now()) {
       const verdict: GateVerdict = { ...cached.verdict, tier: 'cached' }
+      this.log(agent, exec, command, verdict)
       if (verdict.allow) stats.allows += 1
       else stats.denies += 1
       return verdict
@@ -183,10 +185,7 @@ export class CommandGate {
       }
       try {
         stats.judgeRuns += 1
-        const outcome = await Promise.race([
-          this.runtime.judgeVerdict(agent, command, exec.signal),
-          this.timeoutFailure(settings, exec.signal),
-        ])
+        const outcome = await this.raceJudge(agent, command, exec.signal, settings)
         if (outcome.kind === 'verdict') {
           const verdict: GateVerdict = {
             allow: outcome.allow,
@@ -220,6 +219,42 @@ export class CommandGate {
     }
   }
 
+  /**
+   * Race the judge against its configured deadline. The timeout timer and
+   * abort listener are torn down the moment either side settles, and an
+   * already-aborted signal fails immediately instead of waiting for a slot.
+   */
+  private async raceJudge(
+    agent: Agent,
+    command: GateCommand,
+    signal: AbortSignal,
+    settings: ShadowMindSettings,
+  ): Promise<GateJudgeOutcome> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const onAbort = (): void => {
+      if (timer !== undefined) clearTimeout(timer)
+      timer = undefined
+    }
+    if (signal.aborted) return { kind: 'failure', reason: 'judge aborted with the root turn' }
+    signal.addEventListener('abort', onAbort, { once: true })
+    const timeout = new Promise<GateJudgeOutcome>((resolve) => {
+      timer = setTimeout(() => {
+        signal.removeEventListener('abort', onAbort)
+        timer = undefined
+        resolve({
+          kind: 'failure',
+          reason: `judge timed out after ${String(settings.commandGateJudgeTimeoutSeconds)}s`,
+        })
+      }, settings.commandGateJudgeTimeoutSeconds * 1_000)
+    })
+    try {
+      return await Promise.race([this.runtime.judgeVerdict(agent, command, signal), timeout])
+    } finally {
+      signal.removeEventListener('abort', onAbort)
+      if (timer !== undefined) clearTimeout(timer)
+    }
+  }
+
   /** Deterministic denial; protected targets sharpen the reason. */
   private denyVerdict(settings: ShadowMindSettings, command: GateCommand): GateVerdict | undefined {
     for (const pattern of settings.commandGateDenyPatterns) {
@@ -227,6 +262,9 @@ export class CommandGate {
       try {
         regex = new RegExp(pattern, 'iu')
       } catch {
+        // A typo'd deny pattern is a silently missing protection: warn so the
+        // operator can fix it instead of trusting a broken rule.
+        this.ctx.logger.warn('dsh-shadow-mind: invalid command-gate deny pattern %j skipped', pattern)
         continue
       }
       if (!regex.test(command.command)) continue
@@ -256,11 +294,15 @@ export class CommandGate {
 
   /** Deterministic read-only allowance. */
   private allows(settings: ShadowMindSettings, command: GateCommand): boolean {
+    // A chained or piped command is never "pure read-only" on a prefix match:
+    // `git status; spsv prod-svc` must reach the judge, not the allow tier.
+    if (COMMAND_GATE_SEPARATOR_PATTERN.test(command.command)) return false
     for (const pattern of settings.commandGateAllowPatterns) {
       let regex: RegExp
       try {
         regex = new RegExp(pattern, 'iu')
       } catch {
+        this.ctx.logger.warn('dsh-shadow-mind: invalid command-gate allow pattern %j skipped', pattern)
         continue
       }
       if (regex.test(command.command)) return true
@@ -270,6 +312,7 @@ export class CommandGate {
 
   /** Wait for a judge slot; the caller signal releases the wait immediately. */
   private acquire(signal: AbortSignal): Promise<void> {
+    if (signal.aborted) return Promise.reject(new Error('aborted while queued for the command gate judge'))
     if (this.active < this.runtime.settings().commandGateMaxParallel) {
       this.active += 1
       return Promise.resolve()
@@ -299,24 +342,6 @@ export class CommandGate {
       return
     }
     next()
-  }
-
-  /** Failure policy applied when the judge exceeds its configured deadline. */
-  private timeoutFailure(settings: ShadowMindSettings, signal: AbortSignal): Promise<GateJudgeOutcome> {
-    return new Promise<GateJudgeOutcome>((resolve) => {
-      const onAbort = (): void => {
-        clearTimeout(timer)
-        resolve({ kind: 'failure', reason: 'judge aborted with the root turn' })
-      }
-      const timer = setTimeout(() => {
-        signal.removeEventListener('abort', onAbort)
-        resolve({
-          kind: 'failure',
-          reason: `judge timed out after ${String(settings.commandGateJudgeTimeoutSeconds)}s`,
-        })
-      }, settings.commandGateJudgeTimeoutSeconds * 1_000)
-      signal.addEventListener('abort', onAbort, { once: true })
-    })
   }
 
   /** Append one diagnostic record; storage failures are contained. */

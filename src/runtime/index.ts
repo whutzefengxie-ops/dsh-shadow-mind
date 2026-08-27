@@ -2076,12 +2076,15 @@ export class ShadowMindRuntime extends TypertRemoteService {
     let run: SubagentRun | undefined
     try {
       const persona = presetId === undefined ? undefined : await this.resolveAgentPresetPersona(presetId)
+      // The judge never delegates (its tool filter is empty), so its own
+      // depth is the exact cap: a subagent-scoped gate judges at depth+1.
+      const judgeMaxDepth = (agent.session.header.delegationDepth ?? 0) + 1
       run = await this.ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
         label: 'shadow:command-gate',
         parent: agent,
         prompt: [{ type: 'text', text: this.buildGateJudgePrompt(settings, agent, command) }],
         signal: controller.signal,
-        maxDepth: 1,
+        maxDepth: judgeMaxDepth,
         toolFilter: { allow: [] },
         outputSchema: GATE_OUTPUT_SCHEMA,
         contextInheritance: 'none' as const,

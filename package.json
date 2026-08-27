@@ -77,7 +77,8 @@
     "build:smoke": "node --check lib/index.js && node --check lib/tool.js && node --check lib/typert.js && node --check lib/client.js",
     "typecheck": "tsc -p tsconfig.host.json && tsc -p tsconfig.client.json",
     "test": "vitest run",
-    "check": "pnpm run typecheck && pnpm run test && pnpm run build && pnpm run build:smoke"
+    "check:typert": "node scripts/patch-typert.mjs --check",
+    "check": "pnpm run check:typert && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run build:smoke"
   },
   "dependencies": {
     "yaml": "^2.8.1",

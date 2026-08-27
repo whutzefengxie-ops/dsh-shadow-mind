@@ -96,43 +96,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_create_result$schema = z.o
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_delete_parameter_0$schema = z.string()
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_delete_result$schema = z.void()
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_pause_parameter_0$schema = z.intersection(z.string(), z.unknown())
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_pause_result$schema = z.object({
-  'paused': z.boolean().readonly(),
-  'active': z.array(z.object({
-  'shadowId': z.string().readonly(),
-  'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
-  'capturedThroughSeq': z.number().readonly(),
-})).readonly(),
-  'pendingSchedules': z.number().readonly(),
-  'epoch': z.number().readonly(),
-  'totalRuns': z.number().readonly(),
-  'lastRun': z.object({
-  'shadowId': z.string().readonly(),
-  'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
-  'capturedThroughSeq': z.number().readonly(),
-  'finishedAt': z.string().readonly(),
-  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("aborted")]).readonly(),
-}).readonly().optional(),
-})
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_resume_parameter_0$schema = z.intersection(z.string(), z.unknown())
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_resume_result$schema = z.object({
-  'paused': z.boolean().readonly(),
-  'active': z.array(z.object({
-  'shadowId': z.string().readonly(),
-  'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
-  'capturedThroughSeq': z.number().readonly(),
-})).readonly(),
-  'pendingSchedules': z.number().readonly(),
-  'epoch': z.number().readonly(),
-  'totalRuns': z.number().readonly(),
-  'lastRun': z.object({
-  'shadowId': z.string().readonly(),
-  'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
-  'capturedThroughSeq': z.number().readonly(),
-  'finishedAt': z.string().readonly(),
-  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("aborted")]).readonly(),
-}).readonly().optional(),
-})
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_parameter_0$schema = z.string()
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_parameter_1$schema = z.boolean()
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_result$schema = z.object({
@@ -152,43 +116,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_result$schema =
   'sourcePath': z.string().readonly(),
 })
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_status_parameter_0$schema = z.intersection(z.string(), z.unknown())
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_status_result$schema = z.object({
-  'paused': z.boolean().readonly(),
-  'active': z.array(z.object({
-  'shadowId': z.string().readonly(),
-  'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
-  'capturedThroughSeq': z.number().readonly(),
-})).readonly(),
-  'pendingSchedules': z.number().readonly(),
-  'epoch': z.number().readonly(),
-  'totalRuns': z.number().readonly(),
-  'lastRun': z.object({
-  'shadowId': z.string().readonly(),
-  'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
-  'capturedThroughSeq': z.number().readonly(),
-  'finishedAt': z.string().readonly(),
-  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("aborted")]).readonly(),
-}).readonly().optional(),
-})
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_toggle_parameter_0$schema = z.intersection(z.string(), z.unknown())
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_toggle_result$schema = z.object({
-  'paused': z.boolean().readonly(),
-  'active': z.array(z.object({
-  'shadowId': z.string().readonly(),
-  'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
-  'capturedThroughSeq': z.number().readonly(),
-})).readonly(),
-  'pendingSchedules': z.number().readonly(),
-  'epoch': z.number().readonly(),
-  'totalRuns': z.number().readonly(),
-  'lastRun': z.object({
-  'shadowId': z.string().readonly(),
-  'childSessionId': z.intersection(z.string(), z.unknown()).readonly().optional(),
-  'capturedThroughSeq': z.number().readonly(),
-  'finishedAt': z.string().readonly(),
-  'outcome': z.union([z.literal("failed"), z.literal("report"), z.literal("silent"), z.literal("not_relevant"), z.literal("aborted")]).readonly(),
-}).readonly().optional(),
-})
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_update_parameter_0$schema = z.object({
   'id': z.string().readonly(),
   'name': z.string().readonly(),
@@ -378,7 +306,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowAdministrationSnapshot',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_catalog_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":254,"column":9},
+      sourceLocation: {"file":"src/runtime/index.ts","line":560,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/modelCatalog',
@@ -387,14 +315,13 @@ export const TYPERT_REMOTE = {
       method: 'modelCatalog',
       implementation: 'modelCatalog',
       invocation: { kind: 'direct' },
-      parameters: [
-      ],
+      parameters: [],
       result: {
         mode: 'strict',
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowModelCatalog',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":521,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":570,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/cycles',
@@ -425,7 +352,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowReviewCycle[]',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_cycles_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":421,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":762,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/create',
@@ -451,7 +378,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowDefinition',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_create_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":265,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":580,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/delete',
@@ -477,7 +404,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/delete:result',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_delete_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":295,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":610,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/pause',
@@ -507,7 +434,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":384,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":780,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/resume',
@@ -537,7 +464,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":400,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":797,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/setEnabled',
@@ -573,7 +500,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowDefinition',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":286,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":601,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/status',
@@ -603,7 +530,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":358,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":679,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/toggle',
@@ -633,7 +560,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":412,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":811,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/update',
@@ -659,7 +586,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowDefinition',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_update_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":275,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":590,"column":3},
     },
   ],
 }

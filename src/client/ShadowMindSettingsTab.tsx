@@ -328,6 +328,15 @@ function lines(text: string): string[] {
   return text.split(/\r?\n/u).map(value => value.trim()).filter(value => value !== '')
 }
 
+/**
+ * Normalize a route draft: trim, and map a trailing-slash half-selection
+ * (`provider/`) back to the empty inherit route.
+ */
+function normalizeRoute(text: string): string {
+  const trimmed = text.trim()
+  return /^[^/\s]+\/$/u.test(trimmed) ? '' : trimmed.replace(/\/+$/u, '')
+}
+
 /** Parse one finite numeric draft. */
 function finite(text: string): number | undefined {
   if (text.trim() === '') return undefined
@@ -358,7 +367,7 @@ export function definitionInput(draft: DefinitionDraft): ShadowDefinitionInput |
     debug: draft.debug,
     activationProbability: probability,
     activeForModels: lines(draft.activeForModels),
-    runWithModel: draft.runWithModel.trim() || null,
+    runWithModel: normalizeRoute(draft.runWithModel) || null,
     reasoningEffort: draft.reasoningEffort.trim() || null,
     agentPreset: draft.agentPreset.trim() || null,
     timeoutSeconds: timeout ?? null,
@@ -401,7 +410,10 @@ export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefi
   const effortLadder = lines(draft.reasoningEffortLadder)
   const soft = numbers.sessionShadowSoftBudgetChars
   const hard = numbers.sessionShadowHardBudgetChars
-  const frugalRoute = draft.frugalShadowModel.trim()
+  const defaultRoute = normalizeRoute(draft.defaultShadowModel)
+  const synthesisRoute = normalizeRoute(draft.synthesisModel)
+  const gateRoute = normalizeRoute(draft.commandGateModel)
+  const frugalRoute = normalizeRoute(draft.frugalShadowModel)
   const gateJudgeTimeout = numbers.commandGateJudgeTimeoutSeconds
   const gateMaxParallel = integerAtLeast(numbers.commandGateMaxParallel, 1)
   const gateVerdictTtl = numbers.commandGateVerdictTtlSeconds
@@ -449,10 +461,10 @@ export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefi
     defaultShadowTimeoutSeconds,
     headlessDrainTimeoutSeconds,
     resultBatchWindowMs,
-    ...(draft.defaultShadowModel.trim() === '' ? {} : { defaultShadowModel: draft.defaultShadowModel.trim() }),
+    ...(defaultRoute === '' ? {} : { defaultShadowModel: defaultRoute }),
     ...(draft.defaultReasoningEffort.trim() === '' ? {} : { defaultReasoningEffort: draft.defaultReasoningEffort.trim() }),
     ...(draft.defaultAgentPreset.trim() === '' ? {} : { defaultAgentPreset: draft.defaultAgentPreset.trim() }),
-    ...(draft.synthesisModel.trim() === '' ? {} : { synthesisModel: draft.synthesisModel.trim() }),
+    ...(synthesisRoute === '' ? {} : { synthesisModel: synthesisRoute }),
     ...(draft.synthesisReasoningEffort.trim() === '' ? {} : { synthesisReasoningEffort: draft.synthesisReasoningEffort.trim() }),
     ...(draft.synthesisAgentPreset.trim() === '' ? {} : { synthesisAgentPreset: draft.synthesisAgentPreset.trim() }),
     argumentDisclosure: draft.argumentDisclosure === 'full' ? 'full' : 'redacted',
@@ -488,7 +500,7 @@ export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefi
     commandGateProtectedProcesses: lines(draft.commandGateProtectedProcesses),
     commandGateProtectedServices: lines(draft.commandGateProtectedServices),
     ...(draft.commandGateContext.trim() === '' ? {} : { commandGateContext: draft.commandGateContext.trim() }),
-    ...(draft.commandGateModel.trim() === '' ? {} : { commandGateModel: draft.commandGateModel.trim() }),
+    ...(gateRoute === '' ? {} : { commandGateModel: gateRoute }),
     ...(draft.commandGateReasoningEffort.trim() === '' ? {} : { commandGateReasoningEffort: draft.commandGateReasoningEffort.trim() }),
     ...(draft.commandGateAgentPreset.trim() === '' ? {} : { commandGateAgentPreset: draft.commandGateAgentPreset.trim() }),
     commandGateJudgeTimeoutSeconds: gateJudgeTimeout,
@@ -588,6 +600,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
   }, [currentSession, currentSessionUpdatedAt, props.status])
 
   const validSettings = settingsEdit === null ? undefined : settingsInput(settingsEdit)
+  const effortLadderFallback = settingsEdit === null ? [] : lines(settingsEdit.reasoningEffortLadder)
   const validDefinition = definitionEdit === null ? undefined : definitionInput(definitionEdit)
   const resolvedSettings = settings.status === 'ready' ? settings.value : undefined
   const settingsDirty = useMemo(() => settings.status === 'ready' && settings.value !== undefined
@@ -718,6 +731,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                     effort: t('effortLabel'),
                     preset: t('presetLabel'),
                   }}
+                  effortFallback={effortLadderFallback}
                   value={{
                     route: settingsEdit.defaultShadowModel,
                     effort: settingsEdit.defaultReasoningEffort,
@@ -797,6 +811,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                       effort: t('effortLabel'),
                       preset: t('presetLabel'),
                     }}
+                    effortFallback={effortLadderFallback}
                     value={{
                       route: settingsEdit.synthesisModel,
                       effort: settingsEdit.synthesisReasoningEffort,
@@ -886,6 +901,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                     effort: t('effortLabel'),
                     preset: t('presetLabel'),
                   }}
+                  effortFallback={effortLadderFallback}
                   value={{
                     route: settingsEdit.commandGateModel,
                     effort: settingsEdit.commandGateReasoningEffort,
@@ -998,6 +1014,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                     effort: t('effortLabel'),
                     preset: t('presetLabel'),
                   }}
+                  effortFallback={effortLadderFallback}
                   value={{
                     route: definitionEdit.runWithModel,
                     effort: definitionEdit.reasoningEffort,

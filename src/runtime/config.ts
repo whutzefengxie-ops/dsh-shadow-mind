@@ -52,19 +52,23 @@ export const DEFAULT_COMMAND_GATE_VERDICT_TTL_SECONDS = 120
 /** Commands matching one of these are denied before any judge runs. */
 export const DEFAULT_COMMAND_GATE_DENY_PATTERNS: readonly string[] = [
   // Process and service termination: the primary production-protection class.
+  // Cmdlet names match anywhere so chained kills still fail closed.
   '\\bStop-Process\\b',
   '\\bStop-Service\\b',
   '\\bRestart-Service\\b',
   '\\bSuspend-Service\\b',
-  '\\btaskkill\\b',
-  '\\bkill(?:all)?\\b',
+  // Aliased or host-level killers match at COMMAND position only, so
+  // arguments like `git log --grep kill` or `Get-Content kill.log` pass.
+  '(?:^|[;&|\\n])\\s*taskkill(?:\\.exe)?\\b',
+  '(?:^|[;&|\\n])\\s*kill(?:all)?\\b',
+  '(?:^|[;&|\\n])\\s*shutdown(?:\\.exe)?\\b',
   // Host and session shutdown.
   '\\bStop-Computer\\b',
   '\\bRestart-Computer\\b',
-  '\\bshutdown\\b',
   '\\bStop-VM\\b',
-  // Irreversible storage operations.
-  '\\bFormat-\\w+',
+  // Irreversible storage operations. Format-Volume is enumerated rather than
+  // `Format-\w+` so read-only Format-List/Format-Table/Format-Hex still run.
+  '\\bFormat-Volume\\b',
   '\\bClear-Disk\\b',
   '\\bRemove-Item\\b[\\s\\S]*\\b-Recurse\\b',
   '\\brm\\s+(-[a-zA-Z]*r[a-zA-Z]*|-r|--recursive)\\b',
@@ -74,18 +78,29 @@ export const DEFAULT_COMMAND_GATE_DENY_PATTERNS: readonly string[] = [
   '\\bUninstall-Package\\b',
 ]
 
-/** Pure-read commands allowed without a judge when no deny pattern matches. */
+/**
+ * Pure-read commands allowed without a judge when no deny pattern matches.
+ * A command containing a shell separator (`;`, `&`, `|`, backtick, newline)
+ * never qualifies: prefix matching must not bless `git status; <anything>`.
+ */
 export const DEFAULT_COMMAND_GATE_ALLOW_PATTERNS: readonly string[] = [
   '^(Get-|Select-|Where-|Measure-|Compare-|Format-List|Format-Table|Write-Output|Write-Host|echo|pwd|ls|dir|cat|type)\\b',
   '^\\s*(gci|gl|gp|gm|gsv|gps|history|alias)\\b',
-  '^\\s*(git|gh)\\s+(status|diff|log|show|branch|remote|ls-files|config)\\b',
-  '^\\s*node\\s+(-v|--version)\\b',
-  '^\\s*(npm|pnpm|yarn)\\s+(-v|--version|list|ls)\\b',
-  '^\\s*(dotnet|java|python|py|go|rustc|cargo)\\s+(-|--)?v(ersion)?\\b',
+  '^\\s*(git|gh)\\s+(status|diff|log|show|remote|ls-files|config)\\b',
+  // git branch is read-only only with listing/showing flags; -D/-d/-m delete
+  // or rename branches and fall through to the judge.
+  '^\\s*git\\s+branch\\s*(?:-{1,2}(?:a|all|r|remotes|list|show-current|v|vv|verbose|merged|no-merged|contains|no-contains)\\b\\s*)*$',
+  '^\\s*node\\s+(-v|--version)\\s*$',
+  '^\\s*(npm|pnpm|yarn)\\s+(-v|--version)\\s*$',
+  '^\\s*(npm|pnpm|yarn)\\s+(?:list|ls)\\b',
+  '^\\s*(dotnet|java|python|py|go|rustc|cargo)\\s+--?v(?:ersion)?\\s*$',
   '^\\s*(where|which|whereis)\\b',
   '^\\s*\\$?(env|PATH|PSVersionTable|Host)\\b',
   '^\\s*Test-Path\\b',
 ]
+
+/** Shell separators that disqualify a Tier-1 read-only allowance. */
+export const COMMAND_GATE_SEPARATOR_PATTERN = /[;&|`\r\n]/u
 
 /** User-editable Shadow Mind settings schema. */
 const SHADOW_MIND_SETTINGS_OBJECT = z.object({

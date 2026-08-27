@@ -88,6 +88,14 @@ const DEFINITION: ShadowDefinition = {
 }
 
 describe('Shadow Mind form conversion', () => {
+  it('normalizes half-selection trailing-slash routes into inherit on save', () => {
+    const settings = settingsInput(settingsDraft({ ...SETTINGS, defaultShadowModel: 'deepseek/' }))
+    expect(settings?.defaultShadowModel).toBeUndefined()
+
+    const definition = definitionInput({ ...definitionDraft(DEFINITION), runWithModel: 'deepseek/' })
+    expect(definition?.runWithModel).toBeNull()
+  })
+
   it('round-trips complete and defaulted settings drafts', () => {
     expect(settingsInput(settingsDraft(SETTINGS))).toEqual(SETTINGS)
 

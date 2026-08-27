@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { CallId } from '@deepseek-ai/dsh-llm'
@@ -113,10 +113,92 @@ describe('CommandGate', () => {
       settings: resolveSettings({ commandGateEnabled: true }),
     })
     try {
-      const result = await execute(ctx, agent, 'Get-Process | Select-Object Name')
+      const result = await execute(ctx, agent, 'Get-Process')
       expect(result.isError).toBe(false)
       expect(gate.statsFor(agent)).toMatchObject({ allows: 1, denies: 0, judgeRuns: 0 })
     } finally {
+      dispose()
+    }
+  })
+
+  it('sends piped or chained commands to the judge instead of prefix-allowing them', async () => {
+    let judged: string[] = []
+    const { ctx, agent, gate, dispose } = await harness({
+      settings: resolveSettings({ commandGateEnabled: true }),
+      judge: async (command) => {
+        judged.push(command.command)
+        return { kind: 'verdict', allow: false, reason: 'chained commands need a judge' }
+      },
+    })
+    try {
+      const chained = await execute(ctx, agent, 'git status; spsv prod-svc')
+      expect(chained.isError).toBe(true)
+      const piped = await execute(ctx, agent, 'Get-Process | spsv prod-svc')
+      expect(piped.isError).toBe(true)
+      expect(judged).toEqual(['git status; spsv prod-svc', 'Get-Process | spsv prod-svc'])
+      expect(gate.statsFor(agent)).toMatchObject({ denies: 2, judgeRuns: 2 })
+    } finally {
+      dispose()
+    }
+  })
+
+  it('does not prefix-allow version probes with trailing work or destructive git branch flags', async () => {
+    let judged: string[] = []
+    const { ctx, agent, dispose } = await harness({
+      settings: resolveSettings({ commandGateEnabled: true }),
+      judge: async (command) => {
+        judged.push(command.command)
+        return { kind: 'verdict', allow: false, reason: 'not a read-only probe' }
+      },
+    })
+    try {
+      await execute(ctx, agent, 'cargo -v run')
+      await execute(ctx, agent, 'git branch -D hotfix')
+      expect(judged).toEqual(['cargo -v run', 'git branch -D hotfix'])
+    } finally {
+      dispose()
+    }
+  })
+
+  it('allows the read-only format cmdlets and git branch listing flags', async () => {
+    const { ctx, agent, gate, dispose } = await harness({
+      settings: resolveSettings({ commandGateEnabled: true }),
+    })
+    try {
+      expect((await execute(ctx, agent, 'Format-List Name,Id')).isError).toBe(false)
+      expect((await execute(ctx, agent, 'Format-Table')).isError).toBe(false)
+      expect((await execute(ctx, agent, 'git branch --list')).isError).toBe(false)
+      expect(gate.statsFor(agent)).toMatchObject({ allows: 3, denies: 0, judgeRuns: 0 })
+    } finally {
+      dispose()
+    }
+  })
+
+  it('keeps kill/taskkill/shutdown at command position while allowing them inside arguments', async () => {
+    const { ctx, agent, gate, dispose } = await harness({
+      settings: resolveSettings({ commandGateEnabled: true }),
+    })
+    try {
+      expect((await execute(ctx, agent, 'git log --grep kill')).isError).toBe(false)
+      expect((await execute(ctx, agent, 'Get-Content kill.log')).isError).toBe(false)
+      expect((await execute(ctx, agent, 'Write-Output kill switch')).isError).toBe(false)
+      expect((await execute(ctx, agent, 'kill 1234')).isError).toBe(true)
+      expect(gate.statsFor(agent)).toMatchObject({ allows: 3, denies: 1 })
+    } finally {
+      dispose()
+    }
+  })
+
+  it('warns instead of silently skipping an invalid deny pattern', async () => {
+    const { ctx, agent, dispose } = await harness({
+      settings: resolveSettings({ commandGateEnabled: true, commandGateDenyPatterns: ['[unterminated'] }),
+    })
+    const warn = vi.spyOn(ctx.logger, 'warn').mockImplementation(() => undefined)
+    try {
+      await execute(ctx, agent, 'Some Ambiguous Command')
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('invalid command-gate deny pattern'), '[unterminated')
+    } finally {
+      warn.mockRestore()
       dispose()
     }
   })
@@ -272,6 +354,159 @@ describe('CommandGate', () => {
       expect(logs[0]).toMatchObject({ tier: 'allow-pattern', allow: true, tool: 'pwsh' })
       expect(logs[1]).toMatchObject({ tier: 'deny-pattern', allow: false })
     } finally {
+      dispose()
+    }
+  })
+
+  it('audits cached verdict hits instead of staying silent', async () => {
+    const { ctx, agent, logs, dispose } = await harness({
+      settings: resolveSettings({
+        commandGateEnabled: true,
+        commandGateVerdictTtlSeconds: 60,
+      }),
+      judge: async () => ({ kind: 'verdict', allow: true, reason: 'safe' }),
+    })
+    try {
+      await execute(ctx, agent, 'Invoke-Build -Task Deploy')
+      await execute(ctx, agent, 'Invoke-Build -Task Deploy')
+      expect(logs).toHaveLength(2)
+      expect(logs[1]).toMatchObject({ tier: 'cached', allow: true })
+    } finally {
+      dispose()
+    }
+  })
+
+  it('re-judges after the TTL expires and after reset()', async () => {
+    let calls = 0
+    const { ctx, agent, gate, dispose } = await harness({
+      settings: resolveSettings({
+        commandGateEnabled: true,
+        commandGateVerdictTtlSeconds: 0,
+      }),
+      judge: async () => {
+        calls += 1
+        return { kind: 'verdict', allow: true, reason: 'safe' }
+      },
+    })
+    try {
+      await execute(ctx, agent, 'Invoke-Build -Task Deploy')
+      await execute(ctx, agent, 'Invoke-Build -Task Deploy')
+      expect(calls).toBe(2)
+      gate.reset()
+      await execute(ctx, agent, 'Invoke-Build -Task Deploy')
+      expect(calls).toBe(3)
+    } finally {
+      dispose()
+    }
+  })
+
+  it('deduplicates identical in-flight judge requests', async () => {
+    let calls = 0
+    let release: (() => void) | undefined
+    const { ctx, agent, dispose } = await harness({
+      settings: resolveSettings({ commandGateEnabled: true }),
+      judge: () => {
+        calls += 1
+        return new Promise(resolveJudge => {
+          release = () => resolveJudge({ kind: 'verdict', allow: true, reason: 'safe' })
+        })
+      },
+    })
+    try {
+      const first = execute(ctx, agent, 'Invoke-Build -Task Deploy')
+      const second = execute(ctx, agent, 'Invoke-Build -Task Deploy')
+      await vi.waitFor(() => { expect(release).toBeDefined() })
+      release?.()
+      const results = await Promise.all([first, second])
+      expect(results.every(result => !result.isError)).toBe(true)
+      expect(calls).toBe(1)
+    } finally {
+      dispose()
+    }
+  })
+
+  it('queues surplus judges behind the concurrency cap', async () => {
+    const order: string[] = []
+    let releaseFirst: (() => void) | undefined
+    const { ctx, agent, dispose } = await harness({
+      settings: resolveSettings({
+        commandGateEnabled: true,
+        commandGateMaxParallel: 1,
+        commandGateJudgeTimeoutSeconds: 10,
+      }),
+      judge: async (command) => {
+        order.push(command.command)
+        if (command.command.startsWith('First')) {
+          await new Promise<void>(resolveJudge => {
+            releaseFirst = () => resolveJudge()
+          })
+        }
+        return { kind: 'verdict', allow: true, reason: 'safe' }
+      },
+    })
+    try {
+      const first = execute(ctx, agent, 'First Ambiguous Command')
+      await new Promise<void>(resolveTick => setTimeout(resolveTick, 10))
+      const second = execute(ctx, agent, 'Second Ambiguous Command')
+      await new Promise<void>(resolveTick => setTimeout(resolveTick, 10))
+      expect(order).toEqual(['First Ambiguous Command'])
+      releaseFirst?.()
+      await Promise.all([first, second])
+      expect(order).toEqual(['First Ambiguous Command', 'Second Ambiguous Command'])
+    } finally {
+      dispose()
+    }
+  })
+
+  it('releases an aborted queued waiter without waiting for the slot', async () => {
+    let releaseFirst: (() => void) | undefined
+    const { ctx, agent, gate, dispose } = await harness({
+      settings: resolveSettings({
+        commandGateEnabled: true,
+        commandGateMaxParallel: 1,
+        commandGateJudgeTimeoutSeconds: 10,
+      }),
+      judge: async (command) => {
+        if (command.command.startsWith('First')) {
+          await new Promise<GateJudgeOutcome>(resolveJudge => {
+            releaseFirst = () => resolveJudge({ kind: 'verdict', allow: true, reason: 'safe' })
+          })
+        }
+        return { kind: 'verdict', allow: true, reason: 'safe' }
+      },
+    })
+    const firstController = new AbortController()
+    try {
+      const first = ctx.tools.execute({
+        signal: firstController.signal,
+        callId: CallId('gate-first'),
+        name: 'pwsh',
+        arguments: { command: 'First Ambiguous Command' },
+        agent,
+      })
+      await new Promise<void>(resolveTick => setTimeout(resolveTick, 10))
+      const secondController = new AbortController()
+      const second = ctx.tools.execute({
+        signal: secondController.signal,
+        callId: CallId('gate-second'),
+        name: 'pwsh',
+        arguments: { command: 'Second Ambiguous Command' },
+        agent,
+      })
+      await new Promise<void>(resolveTick => setTimeout(resolveTick, 10))
+      secondController.abort(new Error('turn aborted'))
+      const secondResult = await second
+      expect(secondResult.isError).toBe(true)
+      // The aborted waiter never reached a judge: it counts as a denial, not
+      // as a judge run or a judge failure.
+      expect(gate.statsFor(agent)).toMatchObject({ denies: 1, judgeRuns: 1, judgeFailures: 0 })
+      releaseFirst?.()
+      await first
+      // The first still settles through the judge; the second never waited
+      // for the slot release because its abort path removed it from the queue.
+      expect(gate.statsFor(agent)).toMatchObject({ judgeRuns: 1 })
+    } finally {
+      releaseFirst?.()
       dispose()
     }
   })

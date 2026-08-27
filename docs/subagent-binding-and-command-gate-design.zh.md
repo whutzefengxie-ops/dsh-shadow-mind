@@ -102,9 +102,9 @@ ctx.on('tools/pre-execute', async (exec, next) => {
 
 | 层 | 判定 | 说明 |
 | --- | --- | --- |
-| Tier 0 硬拒 | 确定性，0 延迟 | 命令命中 `commandGateDenyPatterns`（默认覆盖 `Stop-Process`/`Stop-Service`/`Restart-Service`/`taskkill`/`kill`/`shutdown`/`Stop-Computer`/`Restart-Computer`/`Remove-Item -Recurse`/`Format-*`/`Clear-Disk` 等），或同时命中破坏性动词与 `commandGateProtectedProcesses`/`commandGateProtectedServices`（用户声明要保护的生产进程/服务名）→ 直接拒绝，附命中原因。 |
-| Tier 1 硬放 | 确定性，0 延迟 | 命令命中 `commandGateAllowPatterns`（纯只读：`Get-*`/`pwd`/`ls`/`git status|diff|log`/`Write-Output` 等）且未命中任何拒绝模式 → 直接放行。 |
-| Tier 2 法官 | LLM 裁决，阻塞主 Agent | 其余命令唤起**闸门法官**（Shadow 子代理，复用 `shadow-mind` provider + `structured_output`），返回 `{ decision: 'allow'|'deny', reason }`。 |
+| Tier 0 硬拒 | 确定性，0 延迟 | 命令命中 `commandGateDenyPatterns`（默认覆盖 `Stop-Process`/`Stop-Service`/`Restart-Service`/`taskkill`/`shutdown`/`Stop-Computer`/`Restart-Computer`/`Remove-Item -Recurse`/`Format-Volume` 等；`kill`/`taskkill`/`shutdown` 仅在命令位置匹配，避免误伤 `git log --grep kill` 等参数用法）；或同时命中破坏性动词与 `commandGateProtectedProcesses`/`commandGateProtectedServices`（用户声明要保护的生产进程/服务名）→ 直接拒绝，附命中原因。 |
+| Tier 1 硬放 | 确定性，0 延迟 | 命令命中 `commandGateAllowPatterns`（纯只读：`Get-*`/`pwd`/`ls`/`git status|diff|log`/版本探测/`git branch --list` 等）且**不含任何 shell 分隔符**（`;` `&` `|` 反引号 换行——链式/管道命令一律交法官）、未命中任何拒绝模式 → 直接放行。版本探测带尾锚（`cargo -v run` 不放行），`git branch -D` 不放行，`Format-List`/`Format-Table` 不再被 `Format-*` 误拒。 |
+| Tier 2 法官 | LLM 裁决，阻塞主 Agent | 其余命令唤起**闸门法官**（Shadow 子代理，复用 `shadow-mind` provider + `structured_output`），返回 `{ decision: 'allow'|'deny', reason }`。`root-and-subagents` 作用域下子代理触发的法官按 `父深度+1` 的 maxDepth 运行（不会触发 SubagentDepthError）；法官超时/失败默认 fail-closed，TTL 复用裁决，并发有上限，裁决全部写审计日志。 |
 
 ### 3.3 闸门法官（subagent）
 

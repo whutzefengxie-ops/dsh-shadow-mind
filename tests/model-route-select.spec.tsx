@@ -63,8 +63,12 @@ function mount(initial: ModelRouteValue, props: Partial<Parameters<typeof ModelR
   )
   const utils = render(renderElement())
   const value = (): ModelRouteValue => current
+  const setExternal = (next: ModelRouteValue): void => {
+    current = next
+    utils.rerender(renderElement())
+  }
   const select = (label: string): HTMLSelectElement => screen.getByLabelText(label) as HTMLSelectElement
-  return { calls, value, select }
+  return { calls, value, setExternal, select }
 }
 
 describe('ModelRouteSelect', () => {
@@ -98,13 +102,49 @@ describe('ModelRouteSelect', () => {
     expect(harness.select('Model').disabled).toBe(true)
 
     fireEvent.change(harness.select('Provider'), { target: { value: 'deepseek-official' } })
-    expect(harness.value().route).toBe('')
+    // Half-selection travels as a trailing-slash route so the parent can
+    // distinguish it from the genuinely empty route on a later reset.
+    expect(harness.value().route).toBe('deepseek-official/')
     expect(harness.select('Model').disabled).toBe(false)
     expect([...harness.select('Model').options].map(option => option.value))
       .toEqual(['', 'deepseek-v4-pro', 'deepseek-v4-flash'])
 
     fireEvent.change(harness.select('Model'), { target: { value: 'deepseek-v4-pro' } })
     expect(harness.value().route).toBe('deepseek-official/deepseek-v4-pro')
+  })
+
+  it('adopts an external reset and drops the pending provider selection', () => {
+    const harness = mount({ route: '', effort: '', preset: '' })
+    fireEvent.change(harness.select('Provider'), { target: { value: 'deepseek-official' } })
+    expect((harness.select('Provider')).value).toBe('deepseek-official')
+    // Simulate a discard/reload that restores the stored (empty) value.
+    harness.setExternal({ route: '', effort: '', preset: '' })
+    expect((harness.select('Provider')).value).toBe('')
+    expect(harness.select('Model').disabled).toBe(true)
+  })
+
+  it('clearing the model clears the whole selection', () => {
+    const harness = mount({ route: 'deepseek-official/deepseek-v4-pro', effort: '', preset: '' })
+    fireEvent.change(harness.select('Model'), { target: { value: '' } })
+    expect(harness.value()).toEqual({ route: '', effort: '', preset: '' })
+    expect((harness.select('Provider')).value).toBe('')
+  })
+
+  it('uses the effort fallback ladder for models without reasoning metadata', () => {
+    const harness = mount(
+      { route: 'deepseek-official/deepseek-v4-flash', effort: 'low', preset: '' },
+      { effortFallback: ['low', 'medium', 'high'] },
+    )
+    const options = [...harness.select('Effort').options].map(option => ({
+      value: option.value,
+      disabled: option.disabled,
+    }))
+    expect(options).toEqual([
+      { value: '', disabled: false },
+      { value: 'low', disabled: false },
+      { value: 'medium', disabled: false },
+      { value: 'high', disabled: false },
+    ])
   })
 
   it('advertises only the selected model\'s reasoning efforts and resets a stale effort', () => {

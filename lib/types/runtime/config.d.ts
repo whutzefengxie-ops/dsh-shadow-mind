@@ -45,8 +45,14 @@ export declare const DEFAULT_COMMAND_GATE_MAX_PARALLEL = 1;
 export declare const DEFAULT_COMMAND_GATE_VERDICT_TTL_SECONDS = 120;
 /** Commands matching one of these are denied before any judge runs. */
 export declare const DEFAULT_COMMAND_GATE_DENY_PATTERNS: readonly string[];
-/** Pure-read commands allowed without a judge when no deny pattern matches. */
+/**
+ * Pure-read commands allowed without a judge when no deny pattern matches.
+ * A command containing a shell separator (`;`, `&`, `|`, backtick, newline)
+ * never qualifies: prefix matching must not bless `git status; <anything>`.
+ */
 export declare const DEFAULT_COMMAND_GATE_ALLOW_PATTERNS: readonly string[];
+/** Shell separators that disqualify a Tier-1 read-only allowance. */
+export declare const COMMAND_GATE_SEPARATOR_PATTERN: RegExp;
 /** User-editable settings plus cross-field budget and window validation. */
 export declare const SHADOW_MIND_SETTINGS_SCHEMA: Schema<ShadowMindSettings>;
 /** Cordis plugin configuration schema. */

@@ -85,6 +85,12 @@ export declare class CommandGate {
     private interested;
     /** Run the tiered pipeline for one intercepted command. */
     private decide;
+    /**
+     * Race the judge against its configured deadline. The timeout timer and
+     * abort listener are torn down the moment either side settles, and an
+     * already-aborted signal fails immediately instead of waiting for a slot.
+     */
+    private raceJudge;
     /** Deterministic denial; protected targets sharpen the reason. */
     private denyVerdict;
     /** Named protected process or service the command mentions, when one does. */
@@ -95,8 +101,6 @@ export declare class CommandGate {
     private acquire;
     /** Hand one freed slot to the oldest queued waiter. */
     private release;
-    /** Failure policy applied when the judge exceeds its configured deadline. */
-    private timeoutFailure;
     /** Append one diagnostic record; storage failures are contained. */
     private log;
 }
