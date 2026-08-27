@@ -131,9 +131,9 @@ export interface ShadowMindSettings {
     readonly argumentDisclosure: 'redacted' | 'full';
     /** Optional deterministic random seed. */
     readonly randomSeed?: number;
-    /** Maximum complete framed prompt size. */
+    /** Maximum complete framed prompt size; 0 disables the limit. */
     readonly maxPromptChars: number;
-    /** Maximum accepted report size. */
+    /** Maximum accepted report size; 0 disables the limit. */
     readonly maxReportChars: number;
     /** Prefer positively independent reviewer vendors without collapsing the candidate jury. */
     readonly preferIndependentVendor: boolean;

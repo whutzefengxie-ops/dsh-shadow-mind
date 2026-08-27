@@ -11,10 +11,10 @@ export declare const DEFAULT_SHADOW_TIMEOUT_SECONDS = 300;
 export declare const DEFAULT_HEADLESS_DRAIN_TIMEOUT_SECONDS = 120;
 /** Default report batching window. */
 export declare const DEFAULT_RESULT_BATCH_WINDOW_MS = 400;
-/** Default maximum framed prompt size. */
-export declare const DEFAULT_MAX_PROMPT_CHARS = 120000;
-/** Default maximum accepted report size. */
-export declare const DEFAULT_MAX_REPORT_CHARS = 20000;
+/** Default maximum framed prompt size; 0 disables the limit. */
+export declare const DEFAULT_MAX_PROMPT_CHARS = 0;
+/** Default maximum accepted report size; 0 disables the limit. */
+export declare const DEFAULT_MAX_REPORT_CHARS = 0;
 /** Default result size that activates the long-output review boost. */
 export declare const DEFAULT_LONG_OUTPUT_BOOST_CHARS = 50000;
 /** Default identical-envelope count required for last-report suppression. */

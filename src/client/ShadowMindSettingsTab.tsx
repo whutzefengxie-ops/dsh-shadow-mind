@@ -382,8 +382,8 @@ export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefi
     Record<(typeof NUMBER_FIELDS)[number], number | undefined>
   const heartbeatProbability = numbers.heartbeatProbability
   const maxParallelShadows = integerAtLeast(numbers.maxParallelShadows, 1)
-  const maxPromptChars = integerAtLeast(numbers.maxPromptChars, 1)
-  const maxReportChars = integerAtLeast(numbers.maxReportChars, 1)
+  const maxPromptChars = integerAtLeast(numbers.maxPromptChars, 0)
+  const maxReportChars = integerAtLeast(numbers.maxReportChars, 0)
   const longOutputBoostChars = integerAtLeast(numbers.longOutputBoostChars, 1)
   const valueLoopWindowTurns = integerAtLeast(numbers.valueLoopWindowTurns, 1)
   const reviewWindowSize = integerAtLeast(numbers.reviewWindowSize, 1)

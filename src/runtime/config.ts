@@ -15,10 +15,10 @@ export const DEFAULT_SHADOW_TIMEOUT_SECONDS = 300
 export const DEFAULT_HEADLESS_DRAIN_TIMEOUT_SECONDS = 120
 /** Default report batching window. */
 export const DEFAULT_RESULT_BATCH_WINDOW_MS = 400
-/** Default maximum framed prompt size. */
-export const DEFAULT_MAX_PROMPT_CHARS = 120_000
-/** Default maximum accepted report size. */
-export const DEFAULT_MAX_REPORT_CHARS = 20_000
+/** Default maximum framed prompt size; 0 disables the limit. */
+export const DEFAULT_MAX_PROMPT_CHARS = 0
+/** Default maximum accepted report size; 0 disables the limit. */
+export const DEFAULT_MAX_REPORT_CHARS = 0
 /** Default result size that activates the long-output review boost. */
 export const DEFAULT_LONG_OUTPUT_BOOST_CHARS = 50_000
 /** Default identical-envelope count required for last-report suppression. */
@@ -115,8 +115,8 @@ const SHADOW_MIND_SETTINGS_OBJECT = z.object({
   synthesisReasoningEffort: z.string(),
   argumentDisclosure: z.union(['redacted', 'full'] as const).default('redacted'),
   randomSeed: z.number(),
-  maxPromptChars: z.number().step(1).min(1).default(DEFAULT_MAX_PROMPT_CHARS),
-  maxReportChars: z.number().step(1).min(1).default(DEFAULT_MAX_REPORT_CHARS),
+  maxPromptChars: z.number().step(1).min(0).default(DEFAULT_MAX_PROMPT_CHARS),
+  maxReportChars: z.number().step(1).min(0).default(DEFAULT_MAX_REPORT_CHARS),
   preferIndependentVendor: z.boolean().default(false),
   longOutputBoostChars: z.number().step(1).min(1).default(DEFAULT_LONG_OUTPUT_BOOST_CHARS),
   lastReportCoversCount: z.number().step(1).min(2).default(DEFAULT_LAST_REPORT_COVERS_COUNT),

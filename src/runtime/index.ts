@@ -1293,7 +1293,9 @@ export class ShadowMindRuntime extends TypertRemoteService {
     }
 
     const reportContent = redactHoldoutLiterals(output.content.trim(), holdoutKeys)
-    if (reportContent === '' || reportContent.length > settings.maxReportChars || entry.childSessionId === undefined) {
+    if (reportContent === ''
+      || (settings.maxReportChars > 0 && reportContent.length > settings.maxReportChars)
+      || entry.childSessionId === undefined) {
       await this.finishRun(state, entry, 'failed', {
         stage: 'validate',
         reasonCode: 'INVALID_REPORT',
@@ -1677,7 +1679,8 @@ export class ShadowMindRuntime extends TypertRemoteService {
       return accepted
     }
     const content = redactHoldoutLiterals(output.content.trim(), reportKeys)
-    if (content === '' || content.length > this.settingsValue.maxReportChars
+    if (content === ''
+      || (this.settingsValue.maxReportChars > 0 && content.length > this.settingsValue.maxReportChars)
       || containsHoldoutLiteral(content, reportKeys)) {
       await this.recordSynthesisFailure(state, conflict, 'invalid_report')
       return accepted
@@ -2117,6 +2120,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
       protectedLines.push(`Protected services: ${settings.commandGateProtectedServices.join(', ')}`)
     }
     const environment = protectedLines.length === 0 ? 'None declared.' : protectedLines.join('\n')
+    const bound = settings.maxPromptChars
     const facts = [
       `## Pending ${command.toolName} command`,
       `command: ${command.command}`,
@@ -2128,17 +2132,22 @@ export class ShadowMindRuntime extends TypertRemoteService {
       // The environment declaration is user prose and may be long; bound it
       // before the complete-prompt bound is applied, so the rules and the
       // exact command never lose their place to a verbose declaration.
-      tailChars(environment, Math.max(0, settings.maxPromptChars - 2_000)),
+      bound > 0 ? tailChars(environment, Math.max(0, bound - 2_000)) : environment,
     ].join('\n')
     const prefix = `${header}\n\n${facts}\n\n## Recent root trajectory`
-    const available = settings.maxPromptChars - prefix.length - 2
+    const lastSeq = agent.session.events.at(-1)?.seq ?? 0
+    const trajectory = projectTrajectory(agent.session.events, lastSeq, settings.argumentDisclosure, 'full')
+    if (bound <= 0) {
+      // A non-positive bound disables the limit: the judge sees the complete
+      // trajectory, matching the default unlimited prompt budget.
+      return `${prefix}\n${trajectory}`
+    }
+    const available = bound - prefix.length - 2
     if (available <= 0) {
       // Even the header and facts alone exceed the bound: keep the newest
       // portion and let the judge settle or fail against its own budget.
-      return tailChars(prefix, settings.maxPromptChars - 2)
+      return tailChars(prefix, bound - 2)
     }
-    const lastSeq = agent.session.events.at(-1)?.seq ?? 0
-    const trajectory = projectTrajectory(agent.session.events, lastSeq, settings.argumentDisclosure, 'full')
     return `${prefix}\n${tailChars(trajectory, available)}`
   }
 

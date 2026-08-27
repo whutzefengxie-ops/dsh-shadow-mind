@@ -92,6 +92,12 @@ describe('Shadow Mind form conversion', () => {
     expect(definition?.runWithModel).toBeNull()
   })
 
+  it('round-trips the unlimited (zero) prompt and report bounds', () => {
+    const unlimited = settingsInput(settingsDraft({ ...SETTINGS, maxPromptChars: 0, maxReportChars: 0 }))
+    expect(unlimited?.maxPromptChars).toBe(0)
+    expect(unlimited?.maxReportChars).toBe(0)
+  })
+
   it('round-trips complete and defaulted settings drafts', () => {
     expect(settingsInput(settingsDraft(SETTINGS))).toEqual(SETTINGS)
 

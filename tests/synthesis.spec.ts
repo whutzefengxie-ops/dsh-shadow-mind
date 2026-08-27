@@ -99,6 +99,7 @@ describe('Shadow conflict synthesis helpers', () => {
     expect(prompt).toContain('prefer the higher-severity report')
     expect(prompt).toContain('challenge finding')
     expect(() => buildSynthesisPrompt(synthesizer(), conflict, 10)).toThrow('maxPromptChars')
+    expect(buildSynthesisPrompt(synthesizer(), conflict, 0)).toContain('challenge finding')
     const unspecified = selectShadowConflict([
       report('challenge-default', 'challenge', []),
       report('confirm-default', 'confirm', []),
