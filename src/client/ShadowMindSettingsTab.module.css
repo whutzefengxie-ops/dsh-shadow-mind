@@ -158,6 +158,12 @@
   padding: 14px;
 }
 
+.inlineEditor {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--dsw-color-border, #ddd);
+}
+
 .definitionTitle > div {
   display: grid;
   gap: 3px;

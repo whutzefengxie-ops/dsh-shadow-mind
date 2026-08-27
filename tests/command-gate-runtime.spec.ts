@@ -161,17 +161,12 @@ describe('command gate inside the runtime', () => {
   it('blocks a root pwsh call through a real judge child and audits the verdict', async () => {
     const harness = await setup()
     const { ctx, agent, provider, runtime } = harness
-    harness.ctx.provide('agentPresets', {
-      read: async (id: string) => `- name: persona\n  config:\n    text: Persona of ${id}\n`,
-      list: async () => [{ id: 'standard', name: 'Standard' }],
-    })
     await gateSettings(ctx, {
       commandGateEnabled: true,
       commandGateContext: 'production box; never kill prod-api',
       commandGateProtectedProcesses: ['prod-api'],
       commandGateModel: 'gate-route/gate-model',
       commandGateReasoningEffort: 'low',
-      commandGateAgentPreset: 'standard',
     })
     provider.verdict = { decision: 'deny', reason: 'deploying into the protected production service' }
 
@@ -191,7 +186,6 @@ describe('command gate inside the runtime', () => {
       model: 'gate-model',
       reasoningEffort: 'low',
     })
-    expect(request.persona).toBe('Persona of standard')
     const prompt = request.prompt.map(block => 'text' in block ? block.text : '').join('\n')
     expect(prompt).toContain('production box; never kill prod-api')
     expect(prompt).toContain('Protected processes: prod-api')
@@ -281,27 +275,5 @@ describe('command gate inside the runtime', () => {
     const result = await execute(ctx, agent, 'Invoke-Build -Task EmptyReason')
     expect(result.isError).toBe(true)
     expect(runtime.status(agent).gateJudgeFailures).toBe(1)
-  })
-
-  it('resolves a persona from a nested preset group and falls back when parsing fails', async () => {
-    const harness = await setup()
-    const { ctx, agent } = harness
-    harness.ctx.provide('agentPresets', {
-      read: async (id: string) => id === 'nested'
-        ? `- name: unrelated\n  config: {}\n- group:\n  - name: persona\n    config:\n      text: Nested persona\n`
-        : `not: [valid: yaml?`,
-      list: async () => [],
-    })
-    await gateSettings(ctx, { commandGateEnabled: true, commandGateAgentPreset: 'nested' })
-    harness.provider.verdict = { decision: 'deny', reason: 'nested persona deny' }
-    const nested = await execute(ctx, agent, 'Invoke-Build -Task Nested')
-    expect(nested.isError).toBe(true)
-    expect(harness.provider.requests.at(-1)?.persona).toBe('Nested persona')
-
-    await gateSettings(ctx, { commandGateAgentPreset: 'broken' })
-    harness.provider.verdict = { decision: 'deny', reason: 'fallback deny' }
-    const broken = await execute(ctx, agent, 'Invoke-Build -Task BrokenPreset')
-    expect(broken.isError).toBe(true)
-    expect(harness.provider.requests.at(-1)?.persona).toBeUndefined()
   })
 })

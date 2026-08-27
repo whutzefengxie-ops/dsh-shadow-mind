@@ -77,18 +77,15 @@ async function saveSettings(
   const optionalFields = [
     'defaultShadowModel',
     'defaultReasoningEffort',
-    'defaultAgentPreset',
     'randomSeed',
     'sessionShadowSoftBudgetChars',
     'sessionShadowHardBudgetChars',
     'frugalShadowModel',
     'synthesisModel',
     'synthesisReasoningEffort',
-    'synthesisAgentPreset',
     'commandGateContext',
     'commandGateModel',
     'commandGateReasoningEffort',
-    'commandGateAgentPreset',
   ] as const satisfies readonly (keyof ShadowMindSettings)[]
   const ops: SettingsPathOpView[] = []
   for (const [field, value] of Object.entries(next)) {

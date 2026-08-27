@@ -33,7 +33,6 @@ describe('Shadow Remote descriptors', () => {
         }],
       }],
       failures: [],
-      agentPresets: [{ id: 'standard', name: 'Standard' }],
     }
     expect(descriptor.result.schema.parse(directory)).toEqual(directory)
   })
@@ -152,7 +151,6 @@ describe('Shadow Remote descriptors', () => {
       debug: false,
       activationProbability: 1,
       activeForModels: ['*'],
-      agentPreset: 'standard',
       tools: ['read'],
       capture: 'since-compaction',
       context: 'minimal',
@@ -167,7 +165,6 @@ describe('Shadow Remote descriptors', () => {
       ...shared,
       runWithModel: null,
       reasoningEffort: null,
-      agentPreset: null,
       timeoutSeconds: null,
     }
     const definition = { ...shared, sourcePath: '/definitions/reviewer.md' }
@@ -189,7 +186,6 @@ describe('Shadow Remote descriptors', () => {
           }],
         }],
         failures: [],
-        agentPresets: [{ id: 'standard', name: 'Standard' }],
       },
     }
 

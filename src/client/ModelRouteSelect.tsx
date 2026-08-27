@@ -1,9 +1,9 @@
 /**
- * Three linked provider/model/effort dropdowns plus an agent-preset dropdown,
- * all bound to the live DSH directory served by the `catalog` remote. The
- * wire format stays the legacy `provider/model` route string: this component
- * composes and decomposes it, so stored definitions and the model-facing
- * management tools keep their unchanged contract.
+ * Three linked provider/model/effort dropdowns bound to the live DSH
+ * directory served by the `catalog` remote. The wire format stays the
+ * legacy `provider/model` route string: this component composes and
+ * decomposes it, so stored definitions and the model-facing management
+ * tools keep their unchanged contract.
  *
  * The dropdowns own local selection state so a user can pick a provider
  * before picking a model; the half-selection travels as a trailing-slash
@@ -23,10 +23,8 @@ export interface ModelRouteValue {
    * pending. Persistence normalizes it back to the empty route.
    */
   route: string
-  /** Adapter-owned reasoning effort id; empty inherits. */
+  /** Adapter-owned reasoning effort id; empty inherits the model default. */
   effort: string
-  /** DSH agent-preset id; empty binds none. */
-  preset: string
 }
 
 /** Display copy the host tab supplies from its locale dictionary. */
@@ -34,7 +32,6 @@ export interface ModelRouteSelectLabels {
   provider: string
   model: string
   effort: string
-  preset: string
 }
 
 export interface ModelRouteSelectProps {
@@ -48,8 +45,6 @@ export interface ModelRouteSelectProps {
   effortFallback?: readonly string[]
   /** Hide the effort dropdown (fields that have no effort of their own). */
   hideEffort?: boolean
-  /** Hide the preset dropdown (fields that have no preset of their own). */
-  hidePreset?: boolean
   onChange: (next: ModelRouteValue) => void
 }
 
@@ -62,20 +57,18 @@ export function splitRoute(route: string): { provider: string; model: string } {
 
 /** Shallow equality for the externally visible selection state. */
 function sameValue(left: ModelRouteValue, right: ModelRouteValue): boolean {
-  return left.route === right.route && left.effort === right.effort && left.preset === right.preset
+  return left.route === right.route && left.effort === right.effort
 }
 
-/** Render the four linked dropdowns. */
+/** Render the linked dropdowns. */
 export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
   const { catalog, labels, effortFallback = [] } = props
   const groups = catalog?.groups ?? []
   const failures = catalog?.failures ?? []
-  const presets = catalog?.agentPresets ?? []
   const initial = splitRoute(props.value.route)
   const [provider, setProvider] = useState(initial.provider)
   const [model, setModel] = useState(initial.model)
   const [effort, setEffort] = useState(props.value.effort)
-  const [preset, setPreset] = useState(props.value.preset)
   const lastEmitted = useRef(props.value)
 
   // Adopt an external change (load, discard, another field edit) that this
@@ -87,7 +80,6 @@ export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
     setProvider(split.provider)
     setModel(split.model)
     setEffort(props.value.effort)
-    setPreset(props.value.preset)
   }, [props.value])
 
   const group = groups.find(candidate => candidate.id === provider)
@@ -113,7 +105,7 @@ export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
       ?.reasoning?.efforts.map(entry => entry.id) ?? effortFallback
     const nextEffort = effort !== '' && !efforts.includes(effort) ? '' : effort
     setEffort(nextEffort)
-    emit({ route, effort: nextEffort, preset })
+    emit({ route, effort: nextEffort })
   }
 
   return (
@@ -176,33 +168,13 @@ export function ModelRouteSelect(props: ModelRouteSelectProps): ReactNode {
             onChange={(event) => {
               const next = event.currentTarget.value
               setEffort(next)
-              emit({ route: currentRoute, effort: next, preset })
+              emit({ route: currentRoute, effort: next })
             }}
           >
             <option value="">—</option>
             {advertisedEfforts.map(entry => <option key={entry} value={entry}>{entry}</option>)}
             {effort !== '' && !effortKnown
               ? <option value={effort} disabled>{effort}</option>
-              : null}
-          </select>
-        </label>
-      )}
-      {props.hidePreset === true ? null : (
-        <label className={css.field}>
-          <span>{labels.preset}</span>
-          <select
-            disabled={controlsDisabled}
-            value={preset}
-            onChange={(event) => {
-              const next = event.currentTarget.value
-              setPreset(next)
-              emit({ route: currentRoute, effort, preset: next })
-            }}
-          >
-            <option value="">—</option>
-            {presets.map(candidate => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}
-            {preset !== '' && !presets.some(candidate => candidate.id === preset)
-              ? <option value={preset} disabled>{preset}</option>
               : null}
           </select>
         </label>

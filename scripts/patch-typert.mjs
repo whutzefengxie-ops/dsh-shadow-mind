@@ -53,10 +53,6 @@ const MODEL_CATALOG_CONST = `const _deepseek_ai_dsh_shadow_mind_runtime_shadowMi
     'name': z.string().readonly(),
     'message': z.string().readonly(),
   })).readonly(),
-  'agentPresets': z.array(z.object({
-    'id': z.string().readonly(),
-    'name': z.string().readonly(),
-  })).readonly(),
 }).readonly()`
 
 const MODEL_CATALOG_REF = `  'modelCatalog': _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema,`
@@ -96,12 +92,9 @@ function patchJs(text) {
   text = text.replace(/^(\s*)'modelCatalog': .*,$/mu, MODEL_CATALOG_REF)
   if (!text.includes(MODEL_CATALOG_REF)) throw new Error('catalog_result modelCatalog field anchor not found')
 
-  // 3. agentPreset fields after every reasoningEffort field (lookahead keeps
-  // re-runs idempotent: only insert when the following line is not already it).
-  const nullablePatch = `  'reasoningEffort': z.union([z.literal(null), z.string()]).readonly(),\n  'agentPreset': z.union([z.literal(null), z.string()]).readonly(),\n`
-  const optionalPatch = `  'reasoningEffort': z.string().readonly().optional(),\n  'agentPreset': z.string().readonly().optional(),\n`
-  text = text.replace(/  'reasoningEffort': z\.union\(\[z\.literal\(null\), z\.string\(\)\]\)\.readonly\(\),\n(?!  'agentPreset':)/gu, nullablePatch)
-  text = text.replace(/  'reasoningEffort': z\.string\(\)\.readonly\(\)\.optional\(\),\n(?!  'agentPreset':)/gu, optionalPatch)
+  // 3. Strip any legacy agentPreset fields (the preset binding was removed).
+  text = text.replace(/^  'agentPreset': z\.union\(\[z\.literal\(null\), z\.string\(\)\]\)\.readonly\(\),\n/gmu, '')
+  text = text.replace(/^  'agentPreset': z\.string\(\)\.readonly\(\)\.optional\(\),\n/gmu, '')
 
   // 4. Gate counters in the status V2 codec: strip any drifted copies first,
   // then insert the canonical four right after synthesisFailures.

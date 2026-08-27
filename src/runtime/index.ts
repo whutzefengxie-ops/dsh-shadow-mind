@@ -6,7 +6,6 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto'
-import { parse as parseYaml } from 'yaml'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -116,7 +115,6 @@ export { CommandGate, GATE_OUTPUT_SCHEMA } from './command-gate.ts'
 export type { CommandGateStats, GateCommand, GateJudgeOutcome, GateTier, GateVerdict } from './command-gate.ts'
 export { buildShadowModelCatalog } from './model-catalog.ts'
 export type {
-  ShadowAgentPresetOption,
   ShadowCatalogModel,
   ShadowModelCatalog,
   ShadowModelEffort,
@@ -297,24 +295,6 @@ function parseGateOutput(value: unknown): { allow: boolean; reason: string } | u
   return { allow: decision === 'allow', reason: reason.trim() }
 }
 
-/** Find the `persona` row of a parsed preset composition, including nested groups. */
-function personaFromComposition(composition: unknown): string | undefined {
-  if (!Array.isArray(composition)) return undefined
-  for (const entry of composition) {
-    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) continue
-    const row = entry as { name?: unknown; config?: unknown; group?: unknown }
-    if (row.name === 'persona' && row.config !== null && typeof row.config === 'object') {
-      const text = (row.config as { text?: unknown }).text
-      if (typeof text === 'string' && text.trim() !== '') return text
-    }
-    if (Array.isArray(row.group)) {
-      const nested = personaFromComposition(row.group)
-      if (nested !== undefined) return nested
-    }
-  }
-  return undefined
-}
-
 /** Keep the newest `limit` characters of a projected trajectory. */
 function tailChars(text: string, limit: number): string {
   if (text.length <= limit) return text
@@ -428,7 +408,6 @@ function authoringDefinition(input: ShadowDefinitionInput): CreateShadowDefiniti
     activeForModels: input.activeForModels,
     ...input.runWithModel === null ? {} : { runWithModel: input.runWithModel },
     ...input.reasoningEffort === null ? {} : { reasoningEffort: input.reasoningEffort },
-    ...input.agentPreset === null ? {} : { agentPreset: input.agentPreset },
     ...input.timeoutSeconds === null ? {} : { timeoutSeconds: input.timeoutSeconds },
     tools: input.tools,
     capture: input.capture,
@@ -452,7 +431,6 @@ function editableDefinition(input: ShadowDefinitionInput): UpdateShadowDefinitio
     activeForModels: input.activeForModels,
     runWithModel: input.runWithModel ?? undefined,
     reasoningEffort: input.reasoningEffort ?? undefined,
-    agentPreset: input.agentPreset ?? undefined,
     timeoutSeconds: input.timeoutSeconds ?? undefined,
     tools: input.tools,
     capture: input.capture,
@@ -1135,8 +1113,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
       stage = 'start'
       nextFailureCode = 'SUBAGENT_START_FAILED'
       entry.view = { ...entry.view, stage }
-      const presetId = definition.agentPreset ?? settings.defaultAgentPreset
-      const persona = presetId === undefined ? undefined : await this.resolveAgentPresetPersona(presetId)
       run = await this.ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
         label: `shadow:${definition.id}`,
         parent: agent,
@@ -1147,7 +1123,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
         outputSchema: OUTPUT_SCHEMA,
         ...definition.context === 'minimal' ? { contextInheritance: 'none' as const } : {},
         ...definition.thinkFirst ? { thinkFirst: true } : {},
-        ...persona === undefined ? {} : { persona },
         ...selection === undefined ? {} : { modelSelection: selection },
       })
       entry.childSessionId = run.id
@@ -1661,10 +1636,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
         minimalContext: definition.context === 'minimal',
         thinkFirst: definition.thinkFirst,
       })
-      const presetId = this.settingsValue.synthesisAgentPreset
-        ?? definition.agentPreset
-        ?? this.settingsValue.defaultAgentPreset
-      const persona = presetId === undefined ? undefined : await this.resolveAgentPresetPersona(presetId)
       run = await this.ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
         label: 'shadow:synthesizer',
         parent: agent,
@@ -1675,7 +1646,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
         outputSchema: OUTPUT_SCHEMA,
         ...definition.context === 'minimal' ? { contextInheritance: 'none' as const } : {},
         ...definition.thinkFirst ? { thinkFirst: true } : {},
-        ...persona === undefined ? {} : { persona },
         ...selection === undefined ? {} : { modelSelection: selection },
       })
       result = await run.result
@@ -2064,7 +2034,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
   ): Promise<GateJudgeOutcome> {
     const settings = this.settingsValue
     const selection = this.gateModelSelection(settings, agent)
-    const presetId = settings.commandGateAgentPreset ?? settings.defaultAgentPreset
     const controller = new AbortController()
     const onAbort = (): void => { controller.abort(signal.reason) }
     if (signal.aborted) onAbort()
@@ -2075,7 +2044,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
     )
     let run: SubagentRun | undefined
     try {
-      const persona = presetId === undefined ? undefined : await this.resolveAgentPresetPersona(presetId)
       // The judge never delegates (its tool filter is empty), so its own
       // depth is the exact cap: a subagent-scoped gate judges at depth+1.
       const judgeMaxDepth = (agent.session.header.delegationDepth ?? 0) + 1
@@ -2088,7 +2056,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
         toolFilter: { allow: [] },
         outputSchema: GATE_OUTPUT_SCHEMA,
         contextInheritance: 'none' as const,
-        ...persona === undefined ? {} : { persona },
         ...selection === undefined ? {} : { modelSelection: selection },
       })
       const result = await run.result
@@ -2181,26 +2148,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
       .catch((error: unknown) => {
         this.ctx.logger.warn('dsh-shadow-mind: failed to write command-gate debug log: %o', error)
       })
-  }
-
-  /**
-   * Resolve one DSH agent preset's persona text for a child request. Presets
-   * are plugin compositions; the `persona` row carries the prose the child
-   * installs as its shadowing `deployment:persona` section. Resolution
-   * failures fall back to inheriting the root persona and only warn.
-   * @param presetId Configured preset id.
-   * @returns The preset's persona prose, or undefined without one.
-   */
-  private async resolveAgentPresetPersona(presetId: string): Promise<string | undefined> {
-    const presets = this.ctx.get('agentPresets') as { read(id: string): Promise<string> } | undefined
-    if (presets === undefined) return undefined
-    try {
-      const composition = await presets.read(presetId)
-      return personaFromComposition(parseYaml(composition) as unknown)
-    } catch (error: unknown) {
-      this.ctx.logger.warn('dsh-shadow-mind: agent preset %s persona resolution failed: %o', presetId, error)
-      return undefined
-    }
   }
 
   /** Whether an agent is a top-level root rather than a subagent child. */

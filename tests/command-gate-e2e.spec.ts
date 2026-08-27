@@ -276,7 +276,7 @@ describe.skipIf(!pwshAvailable())('command gate end-to-end in an isolated enviro
     )
   })
 
-  it('serves the DSH model directory and preset roster through the catalog remotes', async () => {
+  it('serves the DSH model directory through the catalog remotes', async () => {
     const harness = await mount({
       gateEnabled: false,
       script: [],
@@ -295,7 +295,6 @@ describe.skipIf(!pwshAvailable())('command gate end-to-end in an isolated enviro
       }],
     }])
     expect(catalog.failures).toEqual([])
-    expect(catalog.agentPresets).toEqual([])
     const snapshot = await harness.runtime.remoteExportCatalog()
     expect(snapshot.modelCatalog).toEqual(catalog)
   })
