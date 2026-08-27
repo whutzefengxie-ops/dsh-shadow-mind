@@ -32,3 +32,4 @@ Thumbs.db
 .vscode/
 
 # lib/ is intentionally committed for build-script-free GitHub installation.
+.pnpm-store/

@@ -1,6 +1,17 @@
 /** Public Shadow Mind definition, settings, catalog, and status types. @module @whutzefengxie-ops/dsh-shadow-mind/types */
 
 import type { SessionId } from '@deepseek-ai/dsh-session'
+import type { ShadowModelCatalog } from './model-catalog.ts'
+
+export type {
+  ShadowAgentPresetOption,
+  ShadowCatalogModel,
+  ShadowModelCatalog,
+  ShadowModelEffort,
+  ShadowModelFailure,
+  ShadowModelGroup,
+  ShadowModelReasoning,
+} from './model-catalog.ts'
 
 /** Epistemic classification carried by an accepted Shadow finding. */
 export type ShadowVerdict = 'challenge' | 'gap' | 'confirm' | 'uncertain'
@@ -26,6 +37,8 @@ export interface ShadowDefinition {
   readonly runWithModel?: string
   /** Optional adapter-owned reasoning effort for this Shadow run. */
   readonly reasoningEffort?: string
+  /** Optional DSH agent preset whose persona this Shadow child adopts. */
+  readonly agentPreset?: string
   /** Optional run deadline in seconds. */
   readonly timeoutSeconds?: number
   /** Explicit tools added to the default read-only set. */
@@ -70,6 +83,8 @@ export interface ShadowCatalog {
 export interface ShadowAdministrationSnapshot extends ShadowCatalog {
   /** Directory containing the Markdown definition files. */
   readonly definitionRoot: string
+  /** Live DSH provider/model/effort directory plus the agent-preset roster. */
+  readonly modelCatalog: ShadowModelCatalog
 }
 
 /** Complete editable definition submitted by the Web administration page. */
@@ -90,6 +105,8 @@ export interface ShadowDefinitionInput {
   readonly runWithModel: string | null
   /** Adapter-owned reasoning effort, or null to inherit the runtime default. */
   readonly reasoningEffort: string | null
+  /** DSH agent preset whose persona this Shadow child adopts, or null for none. */
+  readonly agentPreset: string | null
   /** Per-run deadline, or null to inherit the runtime default. */
   readonly timeoutSeconds: number | null
   /** Tools added to the default Shadow allowlist. */
@@ -128,6 +145,14 @@ export interface ShadowMindSettings {
   readonly defaultShadowModel?: string
   /** Optional fallback adapter-owned reasoning effort. */
   readonly defaultReasoningEffort?: string
+  /** Optional DSH agent preset adopted by Shadows that bind no preset. */
+  readonly defaultAgentPreset?: string
+  /** Optional provider/model route for conflict-synthesis runs. */
+  readonly synthesisModel?: string
+  /** Optional adapter-owned reasoning effort for conflict-synthesis runs. */
+  readonly synthesisReasoningEffort?: string
+  /** Optional DSH agent preset for conflict-synthesis runs. */
+  readonly synthesisAgentPreset?: string
   /** Whether tool-call arguments are omitted or copied into Shadow prompts. */
   readonly argumentDisclosure: 'redacted' | 'full'
   /** Optional deterministic random seed. */
@@ -178,6 +203,36 @@ export interface ShadowMindSettings {
   readonly conflictSynthesisEnabled: boolean
   /** Deadline for the additional conflict-synthesis run. */
   readonly conflictSynthesisTimeoutSeconds: number
+  /** Whether pwsh-style commands from the root agent pass through the gate. */
+  readonly commandGateEnabled: boolean
+  /** Tool names the gate intercepts. */
+  readonly commandGateTools: readonly string[]
+  /** Which agents the gate inspects; children never re-gate their own judges. */
+  readonly commandGateScope: 'root-only' | 'root-and-subagents'
+  /** Regular expressions that deny a command deterministically, before any judge. */
+  readonly commandGateDenyPatterns: readonly string[]
+  /** Regular expressions that allow a command deterministically when no deny pattern matches. */
+  readonly commandGateAllowPatterns: readonly string[]
+  /** Process names the user declares protected; a destructive command naming one is denied. */
+  readonly commandGateProtectedProcesses: readonly string[]
+  /** Service names the user declares protected; a destructive command naming one is denied. */
+  readonly commandGateProtectedServices: readonly string[]
+  /** Free-text environment declaration injected into every gate judge prompt. */
+  readonly commandGateContext?: string
+  /** Optional provider/model route for the gate judge. */
+  readonly commandGateModel?: string
+  /** Optional adapter-owned reasoning effort for the gate judge. */
+  readonly commandGateReasoningEffort?: string
+  /** Optional DSH agent preset for the gate judge. */
+  readonly commandGateAgentPreset?: string
+  /** Deadline for one gate judge verdict in seconds. */
+  readonly commandGateJudgeTimeoutSeconds: number
+  /** Outcome when the judge times out or fails: fail closed or fail open. */
+  readonly commandGateOnJudgeFailure: 'deny' | 'allow'
+  /** Maximum concurrent gate judges; surplus commands queue behind the first. */
+  readonly commandGateMaxParallel: number
+  /** Seconds an identical (agent, command) reuses the previous judge verdict. */
+  readonly commandGateVerdictTtlSeconds: number
 }
 
 /** Partial live-settings write; null removes one optional user override. */
@@ -185,17 +240,33 @@ export type UpdateShadowMindSettings = Partial<Omit<
   ShadowMindSettings,
   | 'defaultShadowModel'
   | 'defaultReasoningEffort'
+  | 'defaultAgentPreset'
   | 'randomSeed'
   | 'sessionShadowSoftBudgetChars'
   | 'sessionShadowHardBudgetChars'
   | 'frugalShadowModel'
+  | 'synthesisModel'
+  | 'synthesisReasoningEffort'
+  | 'synthesisAgentPreset'
+  | 'commandGateContext'
+  | 'commandGateModel'
+  | 'commandGateReasoningEffort'
+  | 'commandGateAgentPreset'
 >> & {
   readonly defaultShadowModel?: string | null
   readonly defaultReasoningEffort?: string | null
+  readonly defaultAgentPreset?: string | null
   readonly randomSeed?: number | null
   readonly sessionShadowSoftBudgetChars?: number | null
   readonly sessionShadowHardBudgetChars?: number | null
   readonly frugalShadowModel?: string | null
+  readonly synthesisModel?: string | null
+  readonly synthesisReasoningEffort?: string | null
+  readonly synthesisAgentPreset?: string | null
+  readonly commandGateContext?: string | null
+  readonly commandGateModel?: string | null
+  readonly commandGateReasoningEffort?: string | null
+  readonly commandGateAgentPreset?: string | null
 }
 
 /** Runtime plugin configuration. */
@@ -217,10 +288,11 @@ export type CreateShadowDefinition = Omit<
 /** Mutable definition fields accepted by an update; explicit undefined clears optional execution overrides. */
 export type UpdateShadowDefinition = Partial<Omit<
   CreateShadowDefinition,
-  'id' | 'runWithModel' | 'reasoningEffort' | 'timeoutSeconds'
+  'id' | 'runWithModel' | 'reasoningEffort' | 'agentPreset' | 'timeoutSeconds'
 >> & {
   readonly runWithModel?: string | undefined
   readonly reasoningEffort?: string | undefined
+  readonly agentPreset?: string | undefined
   readonly timeoutSeconds?: number | undefined
 }
 
@@ -482,4 +554,12 @@ export interface ShadowMindStatus {
   readonly synthesisFailures: number
   /** Latest fail-open reason. */
   readonly lastSynthesisFailure?: string
+  /** Commands the gate denied during this process lifetime. */
+  readonly gateDenies: number
+  /** Commands the gate allowed during this process lifetime. */
+  readonly gateAllows: number
+  /** Gate judge runs admitted during this process lifetime. */
+  readonly gateJudgeRuns: number
+  /** Gate judge runs that failed or timed out during this process lifetime. */
+  readonly gateJudgeFailures: number
 }

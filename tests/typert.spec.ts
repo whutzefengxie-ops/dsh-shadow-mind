@@ -9,6 +9,35 @@ const descriptorSets = [
 ]
 
 describe('Shadow Remote descriptors', () => {
+  it('publishes the modelCatalog remote with a strict directory codec', () => {
+    const descriptor = TYPERT_REMOTE.descriptors.find(candidate => candidate.method === 'modelCatalog')
+
+    expect(descriptor).toMatchObject({
+      service: 'shadowMind',
+      namespace: 'shadowMind',
+      implementation: 'modelCatalog',
+      invocation: { kind: 'direct' },
+    })
+    if (descriptor?.result.mode !== 'strict') throw new Error('modelCatalog must use a strict result codec')
+    const directory = {
+      groups: [{
+        id: 'deepseek-official',
+        name: 'DeepSeek',
+        models: [{
+          id: 'deepseek-v4',
+          name: 'DeepSeek V4',
+          reasoning: {
+            efforts: [{ id: 'high', name: 'High' }],
+            defaultEffort: 'high',
+          },
+        }],
+      }],
+      failures: [],
+      agentPresets: [{ id: 'standard', name: 'Standard' }],
+    }
+    expect(descriptor.result.schema.parse(directory)).toEqual(directory)
+  })
+
   it('publishes the scoped lifecycle snapshot method', () => {
     const descriptor = TYPERT_REMOTE.descriptors.find(candidate => candidate.method === 'cycles')
 
@@ -87,6 +116,10 @@ describe('Shadow Remote descriptors', () => {
       synthesisRuns: 1,
       synthesisFailures: 1,
       lastSynthesisFailure: 'timeout',
+      gateDenies: 2,
+      gateAllows: 5,
+      gateJudgeRuns: 3,
+      gateJudgeFailures: 1,
       lastRun: {
         runId: 'run-1',
         shadowId: 'reviewer',
@@ -119,6 +152,7 @@ describe('Shadow Remote descriptors', () => {
       debug: false,
       activationProbability: 1,
       activeForModels: ['*'],
+      agentPreset: 'standard',
       tools: ['read'],
       capture: 'since-compaction',
       context: 'minimal',
@@ -133,10 +167,31 @@ describe('Shadow Remote descriptors', () => {
       ...shared,
       runWithModel: null,
       reasoningEffort: null,
+      agentPreset: null,
       timeoutSeconds: null,
     }
     const definition = { ...shared, sourcePath: '/definitions/reviewer.md' }
-    const catalog = { definitionRoot: '/definitions', definitions: [definition], diagnostics: [] }
+    const catalog = {
+      definitionRoot: '/definitions',
+      definitions: [definition],
+      diagnostics: [],
+      modelCatalog: {
+        groups: [{
+          id: 'deepseek-official',
+          name: 'DeepSeek',
+          models: [{
+            id: 'deepseek-v4-flash',
+            name: 'DeepSeek V4 Flash',
+            reasoning: {
+              efforts: [{ id: 'high', name: 'High' }],
+              defaultEffort: 'high',
+            },
+          }],
+        }],
+        failures: [],
+        agentPresets: [{ id: 'standard', name: 'Standard' }],
+      },
+    }
 
     for (const descriptors of descriptorSets) {
       const catalogDescriptor = descriptors.find(candidate => candidate.method === 'catalog')

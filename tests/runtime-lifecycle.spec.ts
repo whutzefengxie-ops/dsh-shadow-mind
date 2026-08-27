@@ -512,6 +512,48 @@ Review the completed turn.
     expect(harness.deliveries).toHaveLength(0)
   })
 
+  it('injects the bound agent preset persona into the review child request', async () => {
+    let captured: ResolvedSubagentStartRequest | undefined
+    const harness = await setup((request) => {
+      captured = request
+      return {
+        id: SessionId('child-persona'),
+        localAgent: undefined,
+        result: Promise.resolve({
+          output: [],
+          stopReason: 'completed',
+          structured: { status: 'silent', content: '', refs: [] },
+        }),
+        dispose: () => Promise.resolve(),
+      }
+    }, {
+      definitions: {
+        'reviewer.md': `---
+id: reviewer
+name: Reviewer
+enabled: true
+activation_probability: 1
+active_for_models: ['*']
+tools: []
+agent_preset: standard
+---
+Review the completed turn.
+`,
+      },
+    })
+    harness.ctx.provide('agentPresets', {
+      read: async (id: string) => `- name: persona\n  config:\n    text: Guarded persona of ${id}\n`,
+      list: async () => [{ id: 'standard', name: 'Standard' }],
+    })
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.status(harness.agent).totalRuns).toBe(1)
+      expect(harness.runtime.status(harness.agent).active).toHaveLength(0)
+    })
+    expect(captured?.persona).toBe('Guarded persona of standard')
+  })
+
   it('admits the same Shadow again on a later tool-using turn', async () => {
     let run = 0
     const harness = await setup(() => ({
