@@ -112,16 +112,14 @@ function patchJs(text) {
   // 5. Drop the unreferenced legacy V1 status codecs.
   text = text.replace(/const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_(?:pause|resume|status|toggle)_result\$schema = z\.object\(\{[\s\S]*?\n\}\)\n/gu, '')
 
-  // 6. Align every descriptor's sourceLocation with the live runtime source.
-  const methods = ['catalog', 'modelCatalog', 'create', 'update', 'setEnabled', 'delete', 'status', 'cycles', 'pause', 'resume', 'toggle']
-  for (const method of methods) {
-    const line = sourceLine(`@Remote('${method}')`)
-    const pattern = new RegExp(`(      method: '${method}',[\\s\\S]*?      sourceLocation: )\\{"file":"src/runtime/index\\.ts","line":\\d+,"column":\\d+\\},`, 'u')
-    if (!pattern.test(text)) throw new Error(`descriptor sourceLocation anchor not found: ${method}`)
-    text = text.replace(pattern, `$1{"file":"src/runtime/index.ts","line":${line},"column":3},`)
-  }
+  // 5b. Normalize the reflected UpdateShadowDefinition declaration (the
+  // agent-preset binding was removed; keep the type registry in sync).
+  text = text.replace(
+    /"declaration": "export type UpdateShadowDefinition = Partial<Omit<CreateShadowDefinition, 'id' \| 'runWithModel' \| 'reasoningEffort' \| 'agentPreset' \| 'timeoutSeconds'>> & \{ readonly runWithModel\?: string \| undefined; readonly reasoningEffort\?: string \| undefined; readonly agentPreset\?: string \| undefined; readonly timeoutSeconds\?: number \| undefined; \};"/u,
+    '"declaration": "export type UpdateShadowDefinition = Partial<Omit<CreateShadowDefinition, \'id\' | \'runWithModel\' | \'reasoningEffort\' | \'timeoutSeconds\'>> & { readonly runWithModel?: string | undefined; readonly reasoningEffort?: string | undefined; readonly timeoutSeconds?: number | undefined; };"',
+  )
 
-  // 7. Ensure the modelCatalog descriptor exists, canonically.
+  // 6. Ensure the modelCatalog descriptor exists, canonically.
   const existing = /    \{\n      id: '@whutzefengxie-ops\/dsh-shadow-mind#shadowMind\/modelCatalog',[\s\S]*?\n    \},\n/u
   if (existing.test(text)) {
     text = text.replace(existing, () => modelCatalogDescriptor(sourceLine(`@Remote('modelCatalog')`)))
@@ -132,6 +130,76 @@ function patchJs(text) {
   }
   if (!text.includes("id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/modelCatalog'")) {
     throw new Error('modelCatalog descriptor missing after patch')
+  }
+
+  // 7. Ensure the retry descriptor exists, canonically, after modelCatalog.
+  const retryExisting = /    \{\n      id: '@whutzefengxie-ops\/dsh-shadow-mind#shadowMind\/retry',[\s\S]*?\n    \},\n/u
+  const retryDescriptor = `    {
+      id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/retry',
+      service: 'shadowMind',
+      namespace: 'shadowMind',
+      method: 'retry',
+      implementation: 'retry',
+      invocation: { kind: 'direct' },
+      scope: {
+        context: 'agent',
+        wire: 'agentId',
+      },
+      parameters: [
+        {
+          name: 'agent',
+          wire: 'agentId',
+          source: 'lookup',
+          lookup: 'agent',
+          codec: {
+            mode: 'strict',
+            typeSymbol: '@deepseek-ai/dsh-session/types#SessionId',
+            schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_0$schema,
+          },
+        },
+        {
+          name: 'runId',
+          wire: 'runId',
+          source: 'json',
+          codec: {
+            mode: 'strict',
+            typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/retry:runId',
+            schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_1$schema,
+          },
+        },
+      ],
+      result: {
+        mode: 'strict',
+        typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
+        schema: _shadowMindStatusV2$schema,
+      },
+      sourceLocation: {"file":"src/runtime/index.ts","line":${sourceLine(`@Remote('retry')`)},"column":3},
+    },
+`
+  const retrySchemas = `const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_0$schema = z.intersection(z.string(), z.unknown())
+const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_1$schema = z.string()
+`
+  if (!text.includes('_deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_0$schema')) {
+    text = text.replace('const _shadowMindStage$schema', `${retrySchemas}const _shadowMindStage$schema`)
+  }
+  if (retryExisting.test(text)) {
+    text = text.replace(retryExisting, () => retryDescriptor)
+  } else {
+    const modelCatalogEnd = /    \{\n      id: '@whutzefengxie-ops\/dsh-shadow-mind#shadowMind\/modelCatalog',[\s\S]*?\n    \},\n/u
+    if (!modelCatalogEnd.test(text)) throw new Error('modelCatalog descriptor anchor not found for retry insertion')
+    text = text.replace(modelCatalogEnd, match => `${match}${retryDescriptor}`)
+  }
+  if (!text.includes("id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/retry'")) {
+    throw new Error('retry descriptor missing after patch')
+  }
+
+  // 8. Align every descriptor's sourceLocation with the live runtime source.
+  const methods = ['catalog', 'modelCatalog', 'create', 'update', 'setEnabled', 'delete', 'status', 'cycles', 'pause', 'resume', 'toggle', 'retry']
+  for (const method of methods) {
+    const line = sourceLine(`@Remote('${method}')`)
+    const pattern = new RegExp(`(      method: '${method}',[\\s\\S]*?      sourceLocation: )\\{"file":"src/runtime/index\\.ts","line":\\d+,"column":\\d+\\},`, 'u')
+    if (!pattern.test(text)) throw new Error(`descriptor sourceLocation anchor not found: ${method}`)
+    text = text.replace(pattern, `$1{"file":"src/runtime/index.ts","line":${line},"column":3},`)
   }
   return text
 }
@@ -146,6 +214,23 @@ function patchDts(text) {
     text = text.replace(
       "    'shadowMind/catalog': () => Promise<RemoteResult<ShadowAdministrationSnapshot>>\n",
       "    'shadowMind/catalog': () => Promise<RemoteResult<ShadowAdministrationSnapshot>>\n    'shadowMind/modelCatalog': () => Promise<RemoteResult<ShadowModelCatalog>>\n",
+    )
+  }
+  const retryNamespace = '    retry: (agentId: SessionId, runId: string) => Promise<RemoteResult<ShadowMindStatus>>\n'
+  const retryMap = "    'shadowMind/retry': (agentId: SessionId, runId: string) => Promise<RemoteResult<ShadowMindStatus>>\n"
+  const retryScope = "    'agent:shadowMind/retry': (runId: string) => Promise<RemoteResult<ShadowMindStatus>>\n"
+  if (!text.includes(retryNamespace.trim())) {
+    text = text.replace(
+      '    status: (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>\n',
+      `    status: (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>\n${retryNamespace}`,
+    )
+    text = text.replace(
+      "    'shadowMind/status': (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>\n",
+      `    'shadowMind/status': (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>\n${retryMap}`,
+    )
+    text = text.replace(
+      "    'agent:shadowMind/status': () => Promise<RemoteResult<ShadowMindStatus>>\n",
+      `    'agent:shadowMind/status': () => Promise<RemoteResult<ShadowMindStatus>>\n${retryScope}`,
     )
   }
   return text

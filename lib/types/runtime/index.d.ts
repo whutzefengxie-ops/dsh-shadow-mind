@@ -159,6 +159,16 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
      * @returns Status after the transition.
      */
     toggle(agent: Agent): ShadowMindStatus;
+    /**
+     * Manually re-run one failed or aborted Shadow against its original
+     * captured trajectory window. The retried run joins the same review cycle,
+     * bypasses pause and the exhausted budget tier, and is admission-gated by
+     * the same liveness rules as scheduled runs.
+     * @param agent Root agent whose run is retried.
+     * @param runId Terminal run to rerun.
+     * @returns Status after the retry was admitted.
+     */
+    retry(agent: Agent, runId: string): Promise<ShadowMindStatus>;
     /** Handle turn closure and user-cancellation boundaries from the durable log. */
     private onSessionEvent;
     /** Admit challenge envelopes to the diagnostic value-loop window. */

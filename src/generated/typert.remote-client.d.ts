@@ -21,6 +21,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     resume: (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
     setEnabled: (id: string, enabled: boolean) => Promise<RemoteResult<ShadowDefinition>>
     status: (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
+    retry: (agentId: SessionId, runId: string) => Promise<RemoteResult<ShadowMindStatus>>
     toggle: (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
     update: (input: ShadowDefinitionInput) => Promise<RemoteResult<ShadowDefinition>>
   }
@@ -35,6 +36,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'shadowMind/resume': (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
     'shadowMind/setEnabled': (id: string, enabled: boolean) => Promise<RemoteResult<ShadowDefinition>>
     'shadowMind/status': (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
+    'shadowMind/retry': (agentId: SessionId, runId: string) => Promise<RemoteResult<ShadowMindStatus>>
     'shadowMind/toggle': (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
     'shadowMind/update': (input: ShadowDefinitionInput) => Promise<RemoteResult<ShadowDefinition>>
   }
@@ -48,6 +50,7 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     'agent:shadowMind/pause': () => Promise<RemoteResult<ShadowMindStatus>>
     'agent:shadowMind/resume': () => Promise<RemoteResult<ShadowMindStatus>>
     'agent:shadowMind/status': () => Promise<RemoteResult<ShadowMindStatus>>
+    'agent:shadowMind/retry': (runId: string) => Promise<RemoteResult<ShadowMindStatus>>
     'agent:shadowMind/toggle': () => Promise<RemoteResult<ShadowMindStatus>>
   }
 }

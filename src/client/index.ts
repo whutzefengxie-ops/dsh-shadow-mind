@@ -153,6 +153,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
           sessionId,
           capturedThroughSeq,
         ),
+        retry: (sessionId, runId) => remoteValue<ShadowMindStatus>(
+          'shadowMind.retry',
+          remote.retry(sessionId, runId),
+        ),
+        poke: sessionId => { reviewStore.poke(sessionId) },
       }),
     }, ShadowReportCard))
     scope.slots.inject('conversation.chat.node', () => scope.slots.register({

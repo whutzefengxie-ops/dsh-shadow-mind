@@ -298,6 +298,7 @@ function parseGateOutput(value: unknown): { allow: boolean; reason: string } | u
 /** Keep the newest `limit` characters of a projected trajectory. */
 function tailChars(text: string, limit: number): string {
   if (text.length <= limit) return text
+  if (limit <= 0) return '…(trajectory truncated)'
   return `…(trajectory truncated)\n${text.slice(-limit)}`
 }
 
@@ -791,6 +792,43 @@ export class ShadowMindRuntime extends TypertRemoteService {
     return this.status(agent).paused ? this.resume(agent) : this.pause(agent)
   }
 
+  /**
+   * Manually re-run one failed or aborted Shadow against its original
+   * captured trajectory window. The retried run joins the same review cycle,
+   * bypasses pause and the exhausted budget tier, and is admission-gated by
+   * the same liveness rules as scheduled runs.
+   * @param agent Root agent whose run is retried.
+   * @param runId Terminal run to rerun.
+   * @returns Status after the retry was admitted.
+   */
+  @Remote('retry')
+  async retry(agent: Agent, runId: string): Promise<ShadowMindStatus> {
+    this.assertRoot(agent)
+    const state = this.owner(agent)
+    for (const cycle of state.cycles.values()) {
+      const entry = cycle.runs.find(candidate => candidate.runId === runId)
+      if (entry === undefined) continue
+      const phase = entry.view.phase
+      if (phase !== 'failed' && phase !== 'aborted') {
+        throw new Error(`Shadow run ${runId} is ${phase}; only failed or aborted runs can be retried`)
+      }
+      if (state.active.has(entry.shadowId)) {
+        throw new Error(`Shadow ${entry.shadowId} is already running`)
+      }
+      const definition = (await this.registry.list())
+        .definitions.find(candidate => candidate.id === entry.shadowId)
+      if (definition === undefined) {
+        throw new Error(`the Shadow definition ${entry.shadowId} no longer exists`)
+      }
+      if (!definition.enabled) {
+        throw new Error(`the Shadow definition ${entry.shadowId} is disabled; enable it before retrying`)
+      }
+      this.launch(agent, state, cycle, state.epoch, entry.capturedThroughSeq, definition, true)
+      return this.status(agent)
+    }
+    throw new Error(`Shadow run ${runId} was not found for this session`)
+  }
+
   /** Handle turn closure and user-cancellation boundaries from the durable log. */
   private onSessionEvent(session: Session, event: SessionEvent): void {
     if (this.stopped) return
@@ -997,12 +1035,15 @@ export class ShadowMindRuntime extends TypertRemoteService {
     epoch: number,
     capturedThroughSeq: number,
     definition: ShadowDefinition,
+    manual = false,
   ): void {
     /* v8 ignore if -- scheduleTurn rechecks acceptance immediately before this synchronous call,
      * and selection excludes active unique ids. */
-    if (!this.accepts(agent, state, epoch)
-      || this.budgetTier(state) === 'exhausted'
-      || state.active.has(definition.id)) return
+    if (this.stopped || state.epoch !== epoch || this.ctx.agents.get(agent.id) !== agent) return
+    if (state.active.has(definition.id)) return
+    // A manual retry is explicit user intent: it bypasses pause and the
+    // exhausted budget tier, but never the root liveness checks above.
+    if (!manual && (state.paused || this.budgetTier(state) === 'exhausted')) return
     const frugalRoute = this.budgetTier(state) === 'frugal'
       ? this.settingsValue.frugalShadowModel
       : undefined
@@ -2120,7 +2161,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
       protectedLines.push(`Protected services: ${settings.commandGateProtectedServices.join(', ')}`)
     }
     const environment = protectedLines.length === 0 ? 'None declared.' : protectedLines.join('\n')
-    const bound = settings.maxPromptChars
     const facts = [
       `## Pending ${command.toolName} command`,
       `command: ${command.command}`,
@@ -2129,26 +2169,32 @@ export class ShadowMindRuntime extends TypertRemoteService {
       '',
       '## Environment',
       `workspace: ${agent.session.header.cwd ?? 'unknown'}`,
-      // The environment declaration is user prose and may be long; bound it
-      // before the complete-prompt bound is applied, so the rules and the
-      // exact command never lose their place to a verbose declaration.
-      bound > 0 ? tailChars(environment, Math.max(0, bound - 2_000)) : environment,
+      environment,
     ].join('\n')
-    const prefix = `${header}\n\n${facts}\n\n## Recent root trajectory`
+    // The rules, the exact command, and the protected-environment declaration
+    // are the protection basis and are NEVER truncated; only the trajectory
+    // yields to the bound. When even the critical part exceeds a positive
+    // bound, fail the prompt build — judgeVerdict turns that into the
+    // configured failure policy instead of silently weakening the prompt.
+    const critical = `${header}\n\n${facts}`
+    const bound = settings.maxPromptChars
     const lastSeq = agent.session.events.at(-1)?.seq ?? 0
     const trajectory = projectTrajectory(agent.session.events, lastSeq, settings.argumentDisclosure, 'full')
     if (bound <= 0) {
       // A non-positive bound disables the limit: the judge sees the complete
       // trajectory, matching the default unlimited prompt budget.
-      return `${prefix}\n${trajectory}`
+      return `${critical}\n\n## Recent root trajectory\n${trajectory}`
     }
-    const available = bound - prefix.length - 2
-    if (available <= 0) {
-      // Even the header and facts alone exceed the bound: keep the newest
-      // portion and let the judge settle or fail against its own budget.
-      return tailChars(prefix, bound - 2)
+    if (critical.length > bound) {
+      throw new Error(
+        `command gate judge prompt needs ${String(critical.length)} characters for its rules and command, above maxPromptChars ${String(bound)}`,
+      )
     }
-    return `${prefix}\n${tailChars(trajectory, available)}`
+    const available = bound - critical.length - '## Recent root trajectory\n'.length
+    // When the bound cannot even hold the trajectory header, the judge still
+    // sees the complete critical part; the prompt never exceeds the bound.
+    if (available <= 0) return critical
+    return `${critical}\n\n## Recent root trajectory\n${tailChars(trajectory, available)}`
   }
 
   /** Append one gate diagnostic record without letting storage failures escape. */

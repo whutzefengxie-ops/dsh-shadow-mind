@@ -1006,6 +1006,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
               <small>{t('routeInheritHint')}</small>
             </fieldset>
             <div className={css.formActions}>
+              <small className={css.disclosureHint}>{t('gateSaveNote')}</small>
               <button type="button" disabled={!settingsDirty || busy}
                 onClick={resolvedSettings === undefined
                   ? undefined

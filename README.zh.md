@@ -77,7 +77,7 @@ Review the completed task. If there is a concrete defect or missing requirement,
 
 1. **拒绝模式**——正则命中即 0 延迟拒绝（默认覆盖 `Stop-Process`、`Stop-Service`、`taskkill`、`shutdown`、递归删除等破坏性命令），不产生任何模型成本；命中受保护进程/服务名的命令会在拒绝原因中点名目标。
 2. **放行模式**——只读命令（默认覆盖 `Get-*`、`pwd`、`git status/diff/log` 等）在未命中拒绝模式时立即执行。
-3. **闸门法官**——其余命令唤起绑定到法官模型（未配置时继承主 agent 模型）的全新 Shadow 子代理，返回结构化 `allow`/`deny` 与理由。法官提示词包含你的环境声明、受保护进程/服务名单、工作区、完整命令与有界的近期轨迹；主 agent 的 turn 会阻塞等待裁决。法官超时或失败时按失败策略处理（`deny` 为 fail-closed 默认值，`allow` 为 fail-open）。相同命令在 TTL 窗口内复用上次裁决，法官并发有上限。
+3. **闸门法官**——其余命令唤起绑定到法官模型（未配置时继承主 agent 模型）的**插件内置独立子代理**（不属于任何 Shadow 定义），返回结构化 `allow`/`deny` 与理由。法官提示词包含你的环境声明、受保护进程/服务名单、工作区、完整命令与有界的近期轨迹；主 agent 的 turn 会阻塞等待裁决。法官超时或失败时按失败策略处理（`deny` 为 fail-closed 默认值，`allow` 为 fail-open）。相同命令在 TTL 窗口内复用上次裁决，法官并发有上限。
 
 首要场景是防止改项目时主 agent 误杀生产环境服务：在 **设置 → 插件 → Shadow Mind → 命令闸门** 中声明保护名单（或环境说明），启用闸门后点击该面板底部的**「保存全局设置」**（闸门面板自带保存按钮）。命令闸门**独立于所有 Shadow 定义**：它只在主 agent（或普通子代理）执行命令前介入，法官是插件内置的独立子代理——不属于任何 Shadow、也不参与评审。裁决会审计到 `$DSH_HOME/shadow-minds/logs/command-gate.jsonl`，`/shadow status` 会报告闸门拒绝/放行/法官计数。闸门**默认关闭**。默认 `root-only` 作用域只审查主 agent（Shadow 子代理不会被重复审查）；`root-and-subagents` 作用域还会审查普通子代理，其法官按正确的深度运行。放行模式不会放行链式/管道命令：`git status; <任意命令>` 会进入法官裁决。
 

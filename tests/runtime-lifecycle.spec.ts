@@ -773,4 +773,87 @@ Review the completed turn.
       providerStopReason: 'aborted',
     })
   })
+
+  it('manually retries a failed run and admits a second launch that can succeed', async () => {
+    let attempt = 0
+    const harness = await setup(() => {
+      attempt += 1
+      const id = SessionId(`child-retry-${String(attempt)}`)
+      if (attempt === 1) {
+        return {
+          id,
+          localAgent: undefined,
+          result: Promise.resolve({ output: [], stopReason: 'error' }),
+          dispose: () => Promise.resolve(),
+        }
+      }
+      return {
+        id,
+        localAgent: undefined,
+        result: Promise.resolve({
+          output: [],
+          stopReason: 'completed',
+          structured: {
+            status: 'report',
+            content: 'Recovered finding after the manual retry.',
+            verdict: 'challenge',
+            refs: [],
+          },
+        }),
+        dispose: () => Promise.resolve(),
+      }
+    })
+    emitToolTurn(harness)
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'failed',
+        stage: 'run',
+        reasonCode: 'PROVIDER_ERROR',
+      })
+    })
+    const failed = harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]
+    if (failed === undefined) throw new Error('failed run was not recorded')
+
+    const status = await harness.runtime.retry(harness.agent, failed.runId)
+    expect(status.totalRuns).toBe(2)
+
+    await vi.waitFor(() => {
+      const cycle = harness.runtime.reviewCycles(harness.agent)[0]
+      expect(cycle?.runs).toHaveLength(2)
+      expect(cycle?.runs[0]).toMatchObject({ runId: failed.runId, phase: 'failed' })
+      expect(cycle?.runs[1]).toMatchObject({ phase: 'report', relayed: true })
+    })
+    expect(harness.deliveries).toHaveLength(1)
+  })
+
+  it('rejects retrying a non-terminal or unknown run', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-report-retry-guard'),
+      localAgent: undefined,
+      result: Promise.resolve({
+        output: [],
+        stopReason: 'completed',
+        structured: { status: 'report', content: 'Stable finding.', verdict: 'confirm', refs: [] },
+      }),
+      dispose: () => Promise.resolve(),
+    }))
+    emitToolTurn(harness)
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'report',
+        relayed: true,
+      })
+    })
+    const reported = harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]
+    if (reported === undefined) throw new Error('report run was not recorded')
+
+    await expect(harness.runtime.retry(harness.agent, reported.runId)).rejects.toThrow(
+      'is report; only failed or aborted runs can be retried',
+    )
+    await expect(harness.runtime.retry(harness.agent, 'run-unknown')).rejects.toThrow(
+      'was not found for this session',
+    )
+    expect(harness.runtime.status(harness.agent).totalRuns).toBe(1)
+    expect(harness.deliveries).toHaveLength(1)
+  })
 })
