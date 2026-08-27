@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
@@ -17,6 +18,10 @@ export type ShadowRelayMarkerProps = PropsRuntime<'conversation.chat.node', 'sha
 export interface ShadowReportCardInjected {
   readonly openSession: (sessionId: SessionId) => void
   readonly useCycle: (sessionId: SessionId, capturedThroughSeq: number) => ShadowReviewCycle | undefined
+  /** Manually re-run one failed or aborted run. */
+  readonly retry: (sessionId: SessionId, runId: string) => Promise<unknown>
+  /** Refresh the review cycle immediately after a retry is admitted. */
+  readonly poke: (sessionId: SessionId) => void
 }
 
 function phaseLabel(phase: ShadowRunPhase, t: ShadowReportCardProps['t']): string {
@@ -44,14 +49,26 @@ function RunBody({ run, t }: { run: ShadowRunView; t: ShadowReportCardProps['t']
 }
 
 /** Display a running placeholder and update the same row to every terminal phase. */
-export function ShadowReportCard({ node, sessionId, openSession, useCycle, t }: ShadowReportCardProps) {
+export function ShadowReportCard({ node, sessionId, openSession, useCycle, retry, poke, t }: ShadowReportCardProps) {
   const capturedThroughSeq = node.data.capturedThroughSeq
   const cycle = useCycle(sessionId, capturedThroughSeq)
   const runs = projectReviewRuns(cycle, node.data.reports)
+  const [retryingRun, setRetryingRun] = useState<string | null>(null)
+  const [retryError, setRetryError] = useState<string | null>(null)
   if (runs.length === 0 && cycle?.failure === undefined && cycle?.scheduling !== true) {
     return <span hidden data-shadow-review-empty />
   }
   const running = cycle?.scheduling === true || runs.some(run => run.phase === 'running')
+  const runRetry = (runId: string): void => {
+    setRetryingRun(runId)
+    setRetryError(null)
+    void retry(sessionId, runId).then(
+      () => { poke(sessionId) },
+      (error: unknown) => {
+        setRetryError(error instanceof Error ? error.message : String(error))
+      },
+    ).finally(() => { setRetryingRun(null) })
+  }
   return (
     <section className={css.card} data-shadow-review-card aria-live={running ? 'polite' : undefined}>
       <header className={css.header}>
@@ -108,6 +125,16 @@ export function ShadowReportCard({ node, sessionId, openSession, useCycle, t }: 
                   {t('childSession')}: <code>{run.childSessionId}</code>
                 </button>
               )}
+              {(run.phase === 'failed' || run.phase === 'aborted') ? (
+                <button
+                  type="button"
+                  disabled={retryingRun !== null || running}
+                  data-shadow-retry
+                  onClick={() => { runRetry(run.runId) }}
+                >
+                  {retryingRun === run.runId ? t('retrying') : t('retryRun')}
+                </button>
+              ) : null}
               <span>{t('reportCapturedSeq', { seq: run.capturedThroughSeq })}</span>
               <span>{t('reviewStage')}: <code>{run.stage}</code></span>
               {run.reasonCode === undefined ? null : <span>{t('reviewReason')}: <code>{run.reasonCode}</code></span>}
@@ -115,6 +142,7 @@ export function ShadowReportCard({ node, sessionId, openSession, useCycle, t }: 
                 <span>{t('reviewProviderStop')}: <code>{run.providerStopReason}</code></span>
               )}
             </div>
+            {retryError === null ? null : <p className={css.error}>{t('retryError')}: {retryError}</p>}
             {run.error === undefined ? null : <p className={css.error}>{run.error.name}: {run.error.message}</p>}
             {run.phase !== 'report' ? null : (
               <footer className={css.relay} data-shadow-relayed={run.relayed === true ? 'true' : 'false'}>

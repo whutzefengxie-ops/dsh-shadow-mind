@@ -6,7 +6,6 @@
  */
 
 import { createHash, randomUUID } from 'node:crypto'
-import { parse as parseYaml } from 'yaml'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -116,7 +115,6 @@ export { CommandGate, GATE_OUTPUT_SCHEMA } from './command-gate.ts'
 export type { CommandGateStats, GateCommand, GateJudgeOutcome, GateTier, GateVerdict } from './command-gate.ts'
 export { buildShadowModelCatalog } from './model-catalog.ts'
 export type {
-  ShadowAgentPresetOption,
   ShadowCatalogModel,
   ShadowModelCatalog,
   ShadowModelEffort,
@@ -297,27 +295,10 @@ function parseGateOutput(value: unknown): { allow: boolean; reason: string } | u
   return { allow: decision === 'allow', reason: reason.trim() }
 }
 
-/** Find the `persona` row of a parsed preset composition, including nested groups. */
-function personaFromComposition(composition: unknown): string | undefined {
-  if (!Array.isArray(composition)) return undefined
-  for (const entry of composition) {
-    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) continue
-    const row = entry as { name?: unknown; config?: unknown; group?: unknown }
-    if (row.name === 'persona' && row.config !== null && typeof row.config === 'object') {
-      const text = (row.config as { text?: unknown }).text
-      if (typeof text === 'string' && text.trim() !== '') return text
-    }
-    if (Array.isArray(row.group)) {
-      const nested = personaFromComposition(row.group)
-      if (nested !== undefined) return nested
-    }
-  }
-  return undefined
-}
-
 /** Keep the newest `limit` characters of a projected trajectory. */
 function tailChars(text: string, limit: number): string {
   if (text.length <= limit) return text
+  if (limit <= 0) return '…(trajectory truncated)'
   return `…(trajectory truncated)\n${text.slice(-limit)}`
 }
 
@@ -428,7 +409,6 @@ function authoringDefinition(input: ShadowDefinitionInput): CreateShadowDefiniti
     activeForModels: input.activeForModels,
     ...input.runWithModel === null ? {} : { runWithModel: input.runWithModel },
     ...input.reasoningEffort === null ? {} : { reasoningEffort: input.reasoningEffort },
-    ...input.agentPreset === null ? {} : { agentPreset: input.agentPreset },
     ...input.timeoutSeconds === null ? {} : { timeoutSeconds: input.timeoutSeconds },
     tools: input.tools,
     capture: input.capture,
@@ -452,7 +432,6 @@ function editableDefinition(input: ShadowDefinitionInput): UpdateShadowDefinitio
     activeForModels: input.activeForModels,
     runWithModel: input.runWithModel ?? undefined,
     reasoningEffort: input.reasoningEffort ?? undefined,
-    agentPreset: input.agentPreset ?? undefined,
     timeoutSeconds: input.timeoutSeconds ?? undefined,
     tools: input.tools,
     capture: input.capture,
@@ -813,6 +792,43 @@ export class ShadowMindRuntime extends TypertRemoteService {
     return this.status(agent).paused ? this.resume(agent) : this.pause(agent)
   }
 
+  /**
+   * Manually re-run one failed or aborted Shadow against its original
+   * captured trajectory window. The retried run joins the same review cycle,
+   * bypasses pause and the exhausted budget tier, and is admission-gated by
+   * the same liveness rules as scheduled runs.
+   * @param agent Root agent whose run is retried.
+   * @param runId Terminal run to rerun.
+   * @returns Status after the retry was admitted.
+   */
+  @Remote('retry')
+  async retry(agent: Agent, runId: string): Promise<ShadowMindStatus> {
+    this.assertRoot(agent)
+    const state = this.owner(agent)
+    for (const cycle of state.cycles.values()) {
+      const entry = cycle.runs.find(candidate => candidate.runId === runId)
+      if (entry === undefined) continue
+      const phase = entry.view.phase
+      if (phase !== 'failed' && phase !== 'aborted') {
+        throw new Error(`Shadow run ${runId} is ${phase}; only failed or aborted runs can be retried`)
+      }
+      if (state.active.has(entry.shadowId)) {
+        throw new Error(`Shadow ${entry.shadowId} is already running`)
+      }
+      const definition = (await this.registry.list())
+        .definitions.find(candidate => candidate.id === entry.shadowId)
+      if (definition === undefined) {
+        throw new Error(`the Shadow definition ${entry.shadowId} no longer exists`)
+      }
+      if (!definition.enabled) {
+        throw new Error(`the Shadow definition ${entry.shadowId} is disabled; enable it before retrying`)
+      }
+      this.launch(agent, state, cycle, state.epoch, entry.capturedThroughSeq, definition, true)
+      return this.status(agent)
+    }
+    throw new Error(`Shadow run ${runId} was not found for this session`)
+  }
+
   /** Handle turn closure and user-cancellation boundaries from the durable log. */
   private onSessionEvent(session: Session, event: SessionEvent): void {
     if (this.stopped) return
@@ -1019,12 +1035,15 @@ export class ShadowMindRuntime extends TypertRemoteService {
     epoch: number,
     capturedThroughSeq: number,
     definition: ShadowDefinition,
+    manual = false,
   ): void {
     /* v8 ignore if -- scheduleTurn rechecks acceptance immediately before this synchronous call,
      * and selection excludes active unique ids. */
-    if (!this.accepts(agent, state, epoch)
-      || this.budgetTier(state) === 'exhausted'
-      || state.active.has(definition.id)) return
+    if (this.stopped || state.epoch !== epoch || this.ctx.agents.get(agent.id) !== agent) return
+    if (state.active.has(definition.id)) return
+    // A manual retry is explicit user intent: it bypasses pause and the
+    // exhausted budget tier, but never the root liveness checks above.
+    if (!manual && (state.paused || this.budgetTier(state) === 'exhausted')) return
     const frugalRoute = this.budgetTier(state) === 'frugal'
       ? this.settingsValue.frugalShadowModel
       : undefined
@@ -1135,8 +1154,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
       stage = 'start'
       nextFailureCode = 'SUBAGENT_START_FAILED'
       entry.view = { ...entry.view, stage }
-      const presetId = definition.agentPreset ?? settings.defaultAgentPreset
-      const persona = presetId === undefined ? undefined : await this.resolveAgentPresetPersona(presetId)
       run = await this.ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
         label: `shadow:${definition.id}`,
         parent: agent,
@@ -1147,7 +1164,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
         outputSchema: OUTPUT_SCHEMA,
         ...definition.context === 'minimal' ? { contextInheritance: 'none' as const } : {},
         ...definition.thinkFirst ? { thinkFirst: true } : {},
-        ...persona === undefined ? {} : { persona },
         ...selection === undefined ? {} : { modelSelection: selection },
       })
       entry.childSessionId = run.id
@@ -1318,7 +1334,9 @@ export class ShadowMindRuntime extends TypertRemoteService {
     }
 
     const reportContent = redactHoldoutLiterals(output.content.trim(), holdoutKeys)
-    if (reportContent === '' || reportContent.length > settings.maxReportChars || entry.childSessionId === undefined) {
+    if (reportContent === ''
+      || (settings.maxReportChars > 0 && reportContent.length > settings.maxReportChars)
+      || entry.childSessionId === undefined) {
       await this.finishRun(state, entry, 'failed', {
         stage: 'validate',
         reasonCode: 'INVALID_REPORT',
@@ -1661,10 +1679,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
         minimalContext: definition.context === 'minimal',
         thinkFirst: definition.thinkFirst,
       })
-      const presetId = this.settingsValue.synthesisAgentPreset
-        ?? definition.agentPreset
-        ?? this.settingsValue.defaultAgentPreset
-      const persona = presetId === undefined ? undefined : await this.resolveAgentPresetPersona(presetId)
       run = await this.ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
         label: 'shadow:synthesizer',
         parent: agent,
@@ -1675,7 +1689,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
         outputSchema: OUTPUT_SCHEMA,
         ...definition.context === 'minimal' ? { contextInheritance: 'none' as const } : {},
         ...definition.thinkFirst ? { thinkFirst: true } : {},
-        ...persona === undefined ? {} : { persona },
         ...selection === undefined ? {} : { modelSelection: selection },
       })
       result = await run.result
@@ -1707,7 +1720,8 @@ export class ShadowMindRuntime extends TypertRemoteService {
       return accepted
     }
     const content = redactHoldoutLiterals(output.content.trim(), reportKeys)
-    if (content === '' || content.length > this.settingsValue.maxReportChars
+    if (content === ''
+      || (this.settingsValue.maxReportChars > 0 && content.length > this.settingsValue.maxReportChars)
       || containsHoldoutLiteral(content, reportKeys)) {
       await this.recordSynthesisFailure(state, conflict, 'invalid_report')
       return accepted
@@ -2064,7 +2078,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
   ): Promise<GateJudgeOutcome> {
     const settings = this.settingsValue
     const selection = this.gateModelSelection(settings, agent)
-    const presetId = settings.commandGateAgentPreset ?? settings.defaultAgentPreset
     const controller = new AbortController()
     const onAbort = (): void => { controller.abort(signal.reason) }
     if (signal.aborted) onAbort()
@@ -2075,7 +2088,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
     )
     let run: SubagentRun | undefined
     try {
-      const persona = presetId === undefined ? undefined : await this.resolveAgentPresetPersona(presetId)
       // The judge never delegates (its tool filter is empty), so its own
       // depth is the exact cap: a subagent-scoped gate judges at depth+1.
       const judgeMaxDepth = (agent.session.header.delegationDepth ?? 0) + 1
@@ -2088,7 +2100,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
         toolFilter: { allow: [] },
         outputSchema: GATE_OUTPUT_SCHEMA,
         contextInheritance: 'none' as const,
-        ...persona === undefined ? {} : { persona },
         ...selection === undefined ? {} : { modelSelection: selection },
       })
       const result = await run.result
@@ -2158,21 +2169,32 @@ export class ShadowMindRuntime extends TypertRemoteService {
       '',
       '## Environment',
       `workspace: ${agent.session.header.cwd ?? 'unknown'}`,
-      // The environment declaration is user prose and may be long; bound it
-      // before the complete-prompt bound is applied, so the rules and the
-      // exact command never lose their place to a verbose declaration.
-      tailChars(environment, Math.max(0, settings.maxPromptChars - 2_000)),
+      environment,
     ].join('\n')
-    const prefix = `${header}\n\n${facts}\n\n## Recent root trajectory`
-    const available = settings.maxPromptChars - prefix.length - 2
-    if (available <= 0) {
-      // Even the header and facts alone exceed the bound: keep the newest
-      // portion and let the judge settle or fail against its own budget.
-      return tailChars(prefix, settings.maxPromptChars - 2)
-    }
+    // The rules, the exact command, and the protected-environment declaration
+    // are the protection basis and are NEVER truncated; only the trajectory
+    // yields to the bound. When even the critical part exceeds a positive
+    // bound, fail the prompt build — judgeVerdict turns that into the
+    // configured failure policy instead of silently weakening the prompt.
+    const critical = `${header}\n\n${facts}`
+    const bound = settings.maxPromptChars
     const lastSeq = agent.session.events.at(-1)?.seq ?? 0
     const trajectory = projectTrajectory(agent.session.events, lastSeq, settings.argumentDisclosure, 'full')
-    return `${prefix}\n${tailChars(trajectory, available)}`
+    if (bound <= 0) {
+      // A non-positive bound disables the limit: the judge sees the complete
+      // trajectory, matching the default unlimited prompt budget.
+      return `${critical}\n\n## Recent root trajectory\n${trajectory}`
+    }
+    if (critical.length > bound) {
+      throw new Error(
+        `command gate judge prompt needs ${String(critical.length)} characters for its rules and command, above maxPromptChars ${String(bound)}`,
+      )
+    }
+    const available = bound - critical.length - '## Recent root trajectory\n'.length
+    // When the bound cannot even hold the trajectory header, the judge still
+    // sees the complete critical part; the prompt never exceeds the bound.
+    if (available <= 0) return critical
+    return `${critical}\n\n## Recent root trajectory\n${tailChars(trajectory, available)}`
   }
 
   /** Append one gate diagnostic record without letting storage failures escape. */
@@ -2181,26 +2203,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
       .catch((error: unknown) => {
         this.ctx.logger.warn('dsh-shadow-mind: failed to write command-gate debug log: %o', error)
       })
-  }
-
-  /**
-   * Resolve one DSH agent preset's persona text for a child request. Presets
-   * are plugin compositions; the `persona` row carries the prose the child
-   * installs as its shadowing `deployment:persona` section. Resolution
-   * failures fall back to inheriting the root persona and only warn.
-   * @param presetId Configured preset id.
-   * @returns The preset's persona prose, or undefined without one.
-   */
-  private async resolveAgentPresetPersona(presetId: string): Promise<string | undefined> {
-    const presets = this.ctx.get('agentPresets') as { read(id: string): Promise<string> } | undefined
-    if (presets === undefined) return undefined
-    try {
-      const composition = await presets.read(presetId)
-      return personaFromComposition(parseYaml(composition) as unknown)
-    } catch (error: unknown) {
-      this.ctx.logger.warn('dsh-shadow-mind: agent preset %s persona resolution failed: %o', presetId, error)
-      return undefined
-    }
   }
 
   /** Whether an agent is a top-level root rather than a subagent child. */

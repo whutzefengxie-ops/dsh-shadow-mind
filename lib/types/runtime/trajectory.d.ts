@@ -37,11 +37,12 @@ export declare function projectTrajectoryWithAnchors(events: readonly SessionEve
  */
 export declare function projectTrajectory(events: readonly SessionEvent[], capturedThroughSeq: number, argumentDisclosure: ShadowMindSettings['argumentDisclosure'], capture?: ShadowDefinition['capture']): string;
 /**
- * Build the complete fresh-child prompt and fail closed above its configured bound.
+ * Build the complete fresh-child prompt and fail closed above its configured
+ * bound; a bound of zero (or less) disables the limit.
  * @param definition Selected Shadow definition.
  * @param trajectory Projected root trajectory.
  * @param capturedThroughSeq Inclusive root sequence watermark.
- * @param maxPromptChars Complete prompt bound.
+ * @param maxPromptChars Complete prompt bound; 0 = unlimited.
  * @returns Framed Shadow task.
  */
 export declare function buildShadowPrompt(definition: ShadowDefinition, trajectory: string, capturedThroughSeq: number, maxPromptChars: number): string;

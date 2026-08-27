@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { CallId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import type {
@@ -161,17 +161,12 @@ describe('command gate inside the runtime', () => {
   it('blocks a root pwsh call through a real judge child and audits the verdict', async () => {
     const harness = await setup()
     const { ctx, agent, provider, runtime } = harness
-    harness.ctx.provide('agentPresets', {
-      read: async (id: string) => `- name: persona\n  config:\n    text: Persona of ${id}\n`,
-      list: async () => [{ id: 'standard', name: 'Standard' }],
-    })
     await gateSettings(ctx, {
       commandGateEnabled: true,
       commandGateContext: 'production box; never kill prod-api',
       commandGateProtectedProcesses: ['prod-api'],
       commandGateModel: 'gate-route/gate-model',
       commandGateReasoningEffort: 'low',
-      commandGateAgentPreset: 'standard',
     })
     provider.verdict = { decision: 'deny', reason: 'deploying into the protected production service' }
 
@@ -191,7 +186,6 @@ describe('command gate inside the runtime', () => {
       model: 'gate-model',
       reasoningEffort: 'low',
     })
-    expect(request.persona).toBe('Persona of standard')
     const prompt = request.prompt.map(block => 'text' in block ? block.text : '').join('\n')
     expect(prompt).toContain('production box; never kill prod-api')
     expect(prompt).toContain('Protected processes: prod-api')
@@ -283,25 +277,49 @@ describe('command gate inside the runtime', () => {
     expect(runtime.status(agent).gateJudgeFailures).toBe(1)
   })
 
-  it('resolves a persona from a nested preset group and falls back when parsing fails', async () => {
-    const harness = await setup()
-    const { ctx, agent } = harness
-    harness.ctx.provide('agentPresets', {
-      read: async (id: string) => id === 'nested'
-        ? `- name: unrelated\n  config: {}\n- group:\n  - name: persona\n    config:\n      text: Nested persona\n`
-        : `not: [valid: yaml?`,
-      list: async () => [],
-    })
-    await gateSettings(ctx, { commandGateEnabled: true, commandGateAgentPreset: 'nested' })
-    harness.provider.verdict = { decision: 'deny', reason: 'nested persona deny' }
-    const nested = await execute(ctx, agent, 'Invoke-Build -Task Nested')
-    expect(nested.isError).toBe(true)
-    expect(harness.provider.requests.at(-1)?.persona).toBe('Nested persona')
+  it.each([1, 2])(
+    'applies the failure policy when a maxPromptChars bound of %s cannot fit the judge rules',
+    async (bound) => {
+      const harness = await setup()
+      const { ctx, agent, provider, runtime } = harness
+      await gateSettings(ctx, {
+        commandGateEnabled: true,
+        commandGateOnJudgeFailure: 'deny',
+        maxPromptChars: bound,
+      })
 
-    await gateSettings(ctx, { commandGateAgentPreset: 'broken' })
-    harness.provider.verdict = { decision: 'deny', reason: 'fallback deny' }
-    const broken = await execute(ctx, agent, 'Invoke-Build -Task BrokenPreset')
-    expect(broken.isError).toBe(true)
-    expect(harness.provider.requests.at(-1)?.persona).toBeUndefined()
+      const result = await execute(ctx, agent, 'Invoke-Build -Task TinyBound')
+      expect(result.isError).toBe(true)
+      expect(text(result)).toContain(`above maxPromptChars ${String(bound)}`)
+      // The prompt build fails before any child is spawned.
+      expect(provider.requests).toHaveLength(0)
+      expect(runtime.status(agent).gateJudgeFailures).toBe(1)
+      expect(runtime.status(agent).gateDenies).toBe(1)
+    },
+  )
+
+  it('truncates only the trajectory when the bound fits the critical judge rules', async () => {
+    const harness = await setup()
+    const { ctx, agent, provider } = harness
+    await gateSettings(ctx, { commandGateEnabled: true, maxPromptChars: 1500 })
+    const headMarker = 'HEAD-MARKER-9f2c'
+    const tailMarker = 'TAIL-MARKER-7a1e'
+    agent.session.append('user/message', createUserMessage({
+      content: [{ type: 'text', text: `${headMarker} ${'x'.repeat(4000)} ${tailMarker}` }],
+      source: { kind: 'user' },
+    }), { surfaceOp: 'append' })
+    provider.verdict = { decision: 'allow', reason: 'safe' }
+
+    const result = await execute(ctx, agent, 'Invoke-Build -Task TruncatedTrajectory')
+    expect(result.isError).toBe(false)
+    expect(provider.requests).toHaveLength(1)
+    const prompt = provider.requests[0]!.prompt.map(block => 'text' in block ? block.text : '').join('\n')
+    // The rules and the exact command are never truncated…
+    expect(prompt).toContain('Call structured_output exactly once')
+    expect(prompt).toContain('Invoke-Build -Task TruncatedTrajectory')
+    // …and only the newest trajectory suffix survives the bound.
+    expect(prompt).toContain('…(trajectory truncated)')
+    expect(prompt).toContain(tailMarker)
+    expect(prompt).not.toContain(headMarker)
   })
 })

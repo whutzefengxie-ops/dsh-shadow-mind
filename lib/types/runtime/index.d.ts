@@ -30,7 +30,7 @@ export { ReportBatcher } from './report-batcher.ts';
 export { CommandGate, GATE_OUTPUT_SCHEMA } from './command-gate.ts';
 export type { CommandGateStats, GateCommand, GateJudgeOutcome, GateTier, GateVerdict } from './command-gate.ts';
 export { buildShadowModelCatalog } from './model-catalog.ts';
-export type { ShadowAgentPresetOption, ShadowCatalogModel, ShadowModelCatalog, ShadowModelEffort, ShadowModelFailure, ShadowModelGroup, ShadowModelReasoning, } from './model-catalog.ts';
+export type { ShadowCatalogModel, ShadowModelCatalog, ShadowModelEffort, ShadowModelFailure, ShadowModelGroup, ShadowModelReasoning, } from './model-catalog.ts';
 declare module '@deepseek-ai/cordis' {
     interface Context {
         shadowMind: ShadowMindRuntime;
@@ -159,6 +159,16 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
      * @returns Status after the transition.
      */
     toggle(agent: Agent): ShadowMindStatus;
+    /**
+     * Manually re-run one failed or aborted Shadow against its original
+     * captured trajectory window. The retried run joins the same review cycle,
+     * bypasses pause and the exhausted budget tier, and is admission-gated by
+     * the same liveness rules as scheduled runs.
+     * @param agent Root agent whose run is retried.
+     * @param runId Terminal run to rerun.
+     * @returns Status after the retry was admitted.
+     */
+    retry(agent: Agent, runId: string): Promise<ShadowMindStatus>;
     /** Handle turn closure and user-cancellation boundaries from the durable log. */
     private onSessionEvent;
     /** Admit challenge envelopes to the diagnostic value-loop window. */
@@ -239,15 +249,6 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     private buildGateJudgePrompt;
     /** Append one gate diagnostic record without letting storage failures escape. */
     private appendGateLog;
-    /**
-     * Resolve one DSH agent preset's persona text for a child request. Presets
-     * are plugin compositions; the `persona` row carries the prose the child
-     * installs as its shadowing `deployment:persona` section. Resolution
-     * failures fall back to inheriting the root persona and only warn.
-     * @param presetId Configured preset id.
-     * @returns The preset's persona prose, or undefined without one.
-     */
-    private resolveAgentPresetPersona;
     /** Whether an agent is a top-level root rather than a subagent child. */
     private isRoot;
     /** Reject commands and APIs that target a child agent. */

@@ -1,9 +1,8 @@
 /**
  * Model-catalog projection for the Shadow Mind administration page: every DSH
- * provider/model route with its adapter-advertised reasoning efforts, plus the
- * DSH agent presets a Shadow child may bind to. Providers resolve lazily
- * through the cordis service registry so the plugin still mounts in
- * compositions without an LLM runtime or agent presets.
+ * provider/model route with its adapter-advertised reasoning efforts.
+ * Providers resolve lazily through the cordis service registry so the plugin
+ * still mounts in compositions without an LLM runtime.
  * @module @whutzefengxie-ops/dsh-shadow-mind/model-catalog
  */
 import type { Context } from '@deepseek-ai/cordis';
@@ -52,29 +51,19 @@ export interface ShadowModelFailure {
     /** Lookup failure diagnostic. */
     readonly message: string;
 }
-/** One DSH agent preset a Shadow child may adopt. */
-export interface ShadowAgentPresetOption {
-    /** Preset id resolved by the agent-presets service. */
-    readonly id: string;
-    /** Display name; falls back to the id when the preset names none. */
-    readonly name: string;
-}
 /** Detached provider/model/reasoning directory served to the Web settings page. */
 export interface ShadowModelCatalog {
     /** Successfully loaded provider groups, each with its advertised models. */
     readonly groups: readonly ShadowModelGroup[];
     /** Provider-local failures; successful groups remain usable. */
     readonly failures: readonly ShadowModelFailure[];
-    /** DSH-configured agent presets, in service discovery order. */
-    readonly agentPresets: readonly ShadowAgentPresetOption[];
 }
 /**
  * Build the provider/model catalog over every registered LLM route, mirroring
  * the harness apiproxy catalog semantics: a provider whose lookup fails rides
  * `failures` without hiding sound groups, and groups advertising no models are
- * dropped. Agent presets ride alongside; their resolution failure hides them
- * instead of failing the whole catalog.
- * @param ctx Cordis context owning the optional services.
+ * dropped.
+ * @param ctx Cordis context owning the optional LLM service.
  * @returns Detached directory suitable for Remote serialization.
  */
 export declare function buildShadowModelCatalog(ctx: Context): Promise<ShadowModelCatalog>;

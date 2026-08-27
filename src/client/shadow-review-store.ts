@@ -28,6 +28,16 @@ export class ShadowReviewStore {
     return this.sessions.get(sessionId)?.snapshot ?? EMPTY_CYCLES
   }
 
+  /** Trigger an immediate refresh for one session (e.g. after a manual retry). */
+  poke(sessionId: SessionId): void {
+    const entry = this.sessions.get(sessionId)
+    if (entry === undefined || this.disposed) return
+    entry.timer = setTimeout(() => {
+      entry.timer = undefined
+      void this.refresh(sessionId, entry)
+    }, 0)
+  }
+
   /** Subscribe one view and refresh immediately; concurrent mounts share one request. */
   subscribe(sessionId: SessionId, listener: () => void): () => void {
     const entry = this.entry(sessionId)

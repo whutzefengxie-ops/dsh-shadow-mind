@@ -56,7 +56,6 @@ function definitionView(definition: ShadowDefinition): Record<string, unknown> {
     active_for_models: definition.activeForModels,
     run_with_model: definition.runWithModel ?? null,
     reasoning_effort: definition.reasoningEffort ?? null,
-    agent_preset: definition.agentPreset ?? null,
     timeout_seconds: definition.timeoutSeconds ?? null,
     tools: definition.tools,
     capture: definition.capture,
@@ -98,10 +97,6 @@ const DEFINITION_PARAMETERS = {
   reasoning_effort: {
     oneOf: [{ type: 'string' as const }, { type: 'null' as const }] as const,
     description: 'Optional adapter-owned reasoning effort; null clears the override.',
-  },
-  agent_preset: {
-    oneOf: [{ type: 'string' as const }, { type: 'null' as const }] as const,
-    description: 'Optional DSH agent preset id whose persona this Shadow adopts; null clears the override.',
   },
   timeout_seconds: {
     oneOf: [{ type: 'number' as const }, { type: 'null' as const }] as const,
@@ -222,7 +217,6 @@ export function apply(ctx: Context): void {
         activeForModels: args.active_for_models ?? [],
         ...args.run_with_model == null ? {} : { runWithModel: args.run_with_model },
         ...args.reasoning_effort == null ? {} : { reasoningEffort: args.reasoning_effort },
-        ...args.agent_preset == null ? {} : { agentPreset: args.agent_preset },
         ...args.timeout_seconds == null ? {} : { timeoutSeconds: args.timeout_seconds },
         tools: args.tools ?? [],
         capture: args.capture ?? 'full',
@@ -260,7 +254,6 @@ export function apply(ctx: Context): void {
         ...args.active_for_models === undefined ? {} : { activeForModels: args.active_for_models },
         ...args.run_with_model === undefined ? {} : { runWithModel: args.run_with_model ?? undefined },
         ...args.reasoning_effort === undefined ? {} : { reasoningEffort: args.reasoning_effort ?? undefined },
-        ...args.agent_preset === undefined ? {} : { agentPreset: args.agent_preset ?? undefined },
         ...args.timeout_seconds === undefined ? {} : { timeoutSeconds: args.timeout_seconds ?? undefined },
         ...args.tools === undefined ? {} : { tools: args.tools },
         ...args.capture === undefined ? {} : { capture: args.capture },
@@ -353,8 +346,8 @@ export function apply(ctx: Context): void {
         oneOf: [{ type: 'number' }, { type: 'null' }],
         description: 'Deterministic scheduler seed; null clears the user override.',
       },
-      maxPromptChars: { type: 'number', description: 'Positive complete prompt bound.' },
-      maxReportChars: { type: 'number', description: 'Positive accepted report bound.' },
+      maxPromptChars: { type: 'number', description: 'Complete prompt bound; 0 disables the limit.' },
+      maxReportChars: { type: 'number', description: 'Accepted report bound; 0 disables the limit.' },
       preferIndependentVendor: { type: 'boolean', description: 'Prefer independently-vendored candidate routes when at least two remain.' },
       longOutputBoostChars: { type: 'number', description: 'Tool-result size that triggers the long-output boost.' },
       lastReportCoversCount: { type: 'number', description: 'Repeated envelope count for last-report suppression.' },
@@ -389,10 +382,6 @@ export function apply(ctx: Context): void {
       staleReportDecay: { type: 'number', description: 'Repeated-envelope probability decay from 0 through 1.' },
       conflictSynthesisEnabled: { type: 'boolean', description: 'Replace one conflicting report pair with one synthesis.' },
       conflictSynthesisTimeoutSeconds: { type: 'number', description: 'Positive synthesis deadline.' },
-      defaultAgentPreset: {
-        oneOf: [{ type: 'string' }, { type: 'null' }],
-        description: 'DSH agent preset adopted by Shadows that bind no preset; null clears the user override.',
-      },
       synthesisModel: {
         oneOf: [{ type: 'string' }, { type: 'null' }],
         description: 'Provider/model route for conflict-synthesis runs; null clears the user override.',
@@ -400,10 +389,6 @@ export function apply(ctx: Context): void {
       synthesisReasoningEffort: {
         oneOf: [{ type: 'string' }, { type: 'null' }],
         description: 'Reasoning effort for conflict-synthesis runs; null clears the user override.',
-      },
-      synthesisAgentPreset: {
-        oneOf: [{ type: 'string' }, { type: 'null' }],
-        description: 'DSH agent preset for conflict-synthesis runs; null clears the user override.',
       },
       commandGateEnabled: { type: 'boolean', description: 'Whether root pwsh-style commands pass through the command gate.' },
       commandGateTools: { type: 'array', description: 'Tool names the gate intercepts.', items: { type: 'string' } },
@@ -423,10 +408,6 @@ export function apply(ctx: Context): void {
       commandGateReasoningEffort: {
         oneOf: [{ type: 'string' }, { type: 'null' }],
         description: 'Reasoning effort for the gate judge; null clears the user override.',
-      },
-      commandGateAgentPreset: {
-        oneOf: [{ type: 'string' }, { type: 'null' }],
-        description: 'DSH agent preset for the gate judge; null clears the user override.',
       },
       commandGateJudgeTimeoutSeconds: { type: 'number', description: 'Deadline for one gate judge verdict in seconds.' },
       commandGateOnJudgeFailure: { type: 'string', enum: ['deny', 'allow'], description: 'Fail closed or fail open when the judge times out or fails.' },

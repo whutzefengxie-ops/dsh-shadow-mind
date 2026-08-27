@@ -18,10 +18,8 @@ const SETTINGS: ShadowMindSettings = {
   resultBatchWindowMs: 100,
   defaultShadowModel: 'deepseek/deepseek-reasoner',
   defaultReasoningEffort: 'high',
-  defaultAgentPreset: 'standard',
   synthesisModel: 'deepseek/deepseek-reasoner',
   synthesisReasoningEffort: 'medium',
-  synthesisAgentPreset: 'standard',
   argumentDisclosure: 'full',
   randomSeed: 42,
   maxPromptChars: 80_000,
@@ -57,7 +55,6 @@ const SETTINGS: ShadowMindSettings = {
   commandGateContext: 'production machine: never kill prod-api',
   commandGateModel: 'deepseek/deepseek-chat',
   commandGateReasoningEffort: 'low',
-  commandGateAgentPreset: 'standard',
   commandGateJudgeTimeoutSeconds: 30,
   commandGateOnJudgeFailure: 'deny',
   commandGateMaxParallel: 1,
@@ -73,7 +70,6 @@ const DEFINITION: ShadowDefinition = {
   activeForModels: ['deepseek/*'],
   runWithModel: 'deepseek/deepseek-reasoner',
   reasoningEffort: 'high',
-  agentPreset: 'standard',
   timeoutSeconds: 90,
   tools: ['read', 'search'],
   capture: 'since-compaction',
@@ -94,6 +90,12 @@ describe('Shadow Mind form conversion', () => {
 
     const definition = definitionInput({ ...definitionDraft(DEFINITION), runWithModel: 'deepseek/' })
     expect(definition?.runWithModel).toBeNull()
+  })
+
+  it('round-trips the unlimited (zero) prompt and report bounds', () => {
+    const unlimited = settingsInput(settingsDraft({ ...SETTINGS, maxPromptChars: 0, maxReportChars: 0 }))
+    expect(unlimited?.maxPromptChars).toBe(0)
+    expect(unlimited?.maxReportChars).toBe(0)
   })
 
   it('round-trips complete and defaulted settings drafts', () => {

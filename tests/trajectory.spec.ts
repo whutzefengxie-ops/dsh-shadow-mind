@@ -220,4 +220,11 @@ describe('trajectory projection', () => {
     expect(buildShadowPrompt(definition(), '', 0, 10_000)).toContain('[no model-visible trajectory content]')
     expect(() => buildShadowPrompt(definition(), 'trajectory', 7, 10)).toThrow('above maxPromptChars')
   })
+
+  it('treats a non-positive bound as unlimited', () => {
+    const huge = 'x'.repeat(200_000)
+    const prompt = buildShadowPrompt(definition(), huge, 7, 0)
+    expect(prompt).toContain(huge)
+    expect(buildShadowPrompt(definition(), huge, 7, -1)).toContain(huge)
+  })
 })

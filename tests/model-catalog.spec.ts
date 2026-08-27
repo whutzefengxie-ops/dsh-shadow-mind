@@ -14,7 +14,6 @@ function modelCatalogContext(overrides: {
       defaultEffort?: ReasoningEffortId
     }
   }>
-  presets?: () => Promise<readonly { id: string; name?: string }[]>
 }) {
   const ctx = new Context()
   ctx.provide('llm', {
@@ -41,11 +40,6 @@ function modelCatalogContext(overrides: {
       }
     },
   })
-  ctx.provide('agentPresets', {
-    list: () => overrides.presets === undefined
-      ? Promise.resolve([{ id: 'standard', name: 'Standard' }, { id: 'bare' }])
-      : overrides.presets(),
-  })
   return ctx
 }
 
@@ -70,10 +64,6 @@ describe('buildShadowModelCatalog', () => {
       name: 'Broken Route',
       message: 'catalog lookup failed',
     }])
-    expect(catalog.agentPresets).toEqual([
-      { id: 'standard', name: 'Standard' },
-      { id: 'bare', name: 'bare' },
-    ])
   })
 
   it('drops providers that advertise no models and isolates exact-route failures', async () => {
@@ -86,26 +76,24 @@ describe('buildShadowModelCatalog', () => {
     expect(catalog.failures.map(failure => failure.id)).toEqual(['broken-route'])
   })
 
-  it('hides the roster when the agent-presets service is absent or broken', async () => {
-    const absent = new Context()
-    absent.provide('llm', {
-      listProviders: () => [],
+  it('contains a throwing provider enumeration as a named failure', async () => {
+    const ctx = new Context()
+    ctx.provide('llm', {
+      listProviders: () => { throw new Error('enumeration exploded') },
       listModels: async () => [],
       resolveModelInfo: async () => { throw new Error('unused') },
     })
-    expect(await buildShadowModelCatalog(absent)).toEqual({ groups: [], failures: [], agentPresets: [] })
-
-    const broken = modelCatalogContext({
-      presets: async () => { throw new Error('preset root unreadable') },
-    })
-    const catalog = await buildShadowModelCatalog(broken)
-    expect(catalog.agentPresets).toEqual([])
-    expect(catalog.failures).toContainEqual(expect.objectContaining({ id: '(agent-presets)' }))
-    expect(catalog.groups.map(group => group.id)).toEqual(['deepseek-official'])
+    const catalog = await buildShadowModelCatalog(ctx)
+    expect(catalog.groups).toEqual([])
+    expect(catalog.failures).toEqual([{
+      id: '(providers)',
+      name: '(providers)',
+      message: 'enumeration exploded',
+    }])
   })
 
   it('returns an empty directory when no LLM runtime is mounted', async () => {
     const ctx = new Context()
-    expect(await buildShadowModelCatalog(ctx)).toEqual({ groups: [], failures: [], agentPresets: [] })
+    expect(await buildShadowModelCatalog(ctx)).toEqual({ groups: [], failures: [] })
   })
 })

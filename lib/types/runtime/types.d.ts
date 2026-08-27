@@ -1,7 +1,7 @@
 /** Public Shadow Mind definition, settings, catalog, and status types. @module @whutzefengxie-ops/dsh-shadow-mind/types */
 import type { SessionId } from '@deepseek-ai/dsh-session';
 import type { ShadowModelCatalog } from './model-catalog.ts';
-export type { ShadowAgentPresetOption, ShadowCatalogModel, ShadowModelCatalog, ShadowModelEffort, ShadowModelFailure, ShadowModelGroup, ShadowModelReasoning, } from './model-catalog.ts';
+export type { ShadowCatalogModel, ShadowModelCatalog, ShadowModelEffort, ShadowModelFailure, ShadowModelGroup, ShadowModelReasoning, } from './model-catalog.ts';
 /** Epistemic classification carried by an accepted Shadow finding. */
 export type ShadowVerdict = 'challenge' | 'gap' | 'confirm' | 'uncertain';
 /** Honest relationship between the root and reviewer model vendors. */
@@ -24,8 +24,6 @@ export interface ShadowDefinition {
     readonly runWithModel?: string;
     /** Optional adapter-owned reasoning effort for this Shadow run. */
     readonly reasoningEffort?: string;
-    /** Optional DSH agent preset whose persona this Shadow child adopts. */
-    readonly agentPreset?: string;
     /** Optional run deadline in seconds. */
     readonly timeoutSeconds?: number;
     /** Explicit tools added to the default read-only set. */
@@ -88,8 +86,6 @@ export interface ShadowDefinitionInput {
     readonly runWithModel: string | null;
     /** Adapter-owned reasoning effort, or null to inherit the runtime default. */
     readonly reasoningEffort: string | null;
-    /** DSH agent preset whose persona this Shadow child adopts, or null for none. */
-    readonly agentPreset: string | null;
     /** Per-run deadline, or null to inherit the runtime default. */
     readonly timeoutSeconds: number | null;
     /** Tools added to the default Shadow allowlist. */
@@ -127,21 +123,17 @@ export interface ShadowMindSettings {
     readonly defaultShadowModel?: string;
     /** Optional fallback adapter-owned reasoning effort. */
     readonly defaultReasoningEffort?: string;
-    /** Optional DSH agent preset adopted by Shadows that bind no preset. */
-    readonly defaultAgentPreset?: string;
     /** Optional provider/model route for conflict-synthesis runs. */
     readonly synthesisModel?: string;
     /** Optional adapter-owned reasoning effort for conflict-synthesis runs. */
     readonly synthesisReasoningEffort?: string;
-    /** Optional DSH agent preset for conflict-synthesis runs. */
-    readonly synthesisAgentPreset?: string;
     /** Whether tool-call arguments are omitted or copied into Shadow prompts. */
     readonly argumentDisclosure: 'redacted' | 'full';
     /** Optional deterministic random seed. */
     readonly randomSeed?: number;
-    /** Maximum complete framed prompt size. */
+    /** Maximum complete framed prompt size; 0 disables the limit. */
     readonly maxPromptChars: number;
-    /** Maximum accepted report size. */
+    /** Maximum accepted report size; 0 disables the limit. */
     readonly maxReportChars: number;
     /** Prefer positively independent reviewer vendors without collapsing the candidate jury. */
     readonly preferIndependentVendor: boolean;
@@ -205,8 +197,6 @@ export interface ShadowMindSettings {
     readonly commandGateModel?: string;
     /** Optional adapter-owned reasoning effort for the gate judge. */
     readonly commandGateReasoningEffort?: string;
-    /** Optional DSH agent preset for the gate judge. */
-    readonly commandGateAgentPreset?: string;
     /** Deadline for one gate judge verdict in seconds. */
     readonly commandGateJudgeTimeoutSeconds: number;
     /** Outcome when the judge times out or fails: fail closed or fail open. */
@@ -217,21 +207,18 @@ export interface ShadowMindSettings {
     readonly commandGateVerdictTtlSeconds: number;
 }
 /** Partial live-settings write; null removes one optional user override. */
-export type UpdateShadowMindSettings = Partial<Omit<ShadowMindSettings, 'defaultShadowModel' | 'defaultReasoningEffort' | 'defaultAgentPreset' | 'randomSeed' | 'sessionShadowSoftBudgetChars' | 'sessionShadowHardBudgetChars' | 'frugalShadowModel' | 'synthesisModel' | 'synthesisReasoningEffort' | 'synthesisAgentPreset' | 'commandGateContext' | 'commandGateModel' | 'commandGateReasoningEffort' | 'commandGateAgentPreset'>> & {
+export type UpdateShadowMindSettings = Partial<Omit<ShadowMindSettings, 'defaultShadowModel' | 'defaultReasoningEffort' | 'randomSeed' | 'sessionShadowSoftBudgetChars' | 'sessionShadowHardBudgetChars' | 'frugalShadowModel' | 'synthesisModel' | 'synthesisReasoningEffort' | 'commandGateContext' | 'commandGateModel' | 'commandGateReasoningEffort'>> & {
     readonly defaultShadowModel?: string | null;
     readonly defaultReasoningEffort?: string | null;
-    readonly defaultAgentPreset?: string | null;
     readonly randomSeed?: number | null;
     readonly sessionShadowSoftBudgetChars?: number | null;
     readonly sessionShadowHardBudgetChars?: number | null;
     readonly frugalShadowModel?: string | null;
     readonly synthesisModel?: string | null;
     readonly synthesisReasoningEffort?: string | null;
-    readonly synthesisAgentPreset?: string | null;
     readonly commandGateContext?: string | null;
     readonly commandGateModel?: string | null;
     readonly commandGateReasoningEffort?: string | null;
-    readonly commandGateAgentPreset?: string | null;
 };
 /** Runtime plugin configuration. */
 export interface ShadowMindConfig extends Partial<ShadowMindSettings> {
@@ -241,10 +228,9 @@ export interface ShadowMindConfig extends Partial<ShadowMindSettings> {
 /** Authoring fields accepted when creating a definition; conditioning defaults preserve legacy files and callers. */
 export type CreateShadowDefinition = Omit<ShadowDefinition, 'sourcePath' | 'capture' | 'context' | 'thinkFirst' | 'preFilters' | 'boostFilters' | 'boostFactor' | 'holdout'> & Partial<Pick<ShadowDefinition, 'capture' | 'context' | 'thinkFirst' | 'preFilters' | 'boostFilters' | 'boostFactor' | 'holdout'>>;
 /** Mutable definition fields accepted by an update; explicit undefined clears optional execution overrides. */
-export type UpdateShadowDefinition = Partial<Omit<CreateShadowDefinition, 'id' | 'runWithModel' | 'reasoningEffort' | 'agentPreset' | 'timeoutSeconds'>> & {
+export type UpdateShadowDefinition = Partial<Omit<CreateShadowDefinition, 'id' | 'runWithModel' | 'reasoningEffort' | 'timeoutSeconds'>> & {
     readonly runWithModel?: string | undefined;
     readonly reasoningEffort?: string | undefined;
-    readonly agentPreset?: string | undefined;
     readonly timeoutSeconds?: number | undefined;
 };
 /** One active Shadow run shown in runtime status. */

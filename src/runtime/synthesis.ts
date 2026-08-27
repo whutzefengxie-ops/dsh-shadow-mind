@@ -92,7 +92,7 @@ export function buildSynthesisPrompt(
     '',
     report('Report B', conflict.right),
   ].join('\n')
-  if (prompt.length > maxChars) {
+  if (maxChars > 0 && prompt.length > maxChars) {
     throw new Error(`Shadow synthesis prompt length ${String(prompt.length)} exceeds maxPromptChars ${String(maxChars)}`)
   }
   return prompt

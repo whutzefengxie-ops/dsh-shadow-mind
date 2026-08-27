@@ -77,18 +77,15 @@ async function saveSettings(
   const optionalFields = [
     'defaultShadowModel',
     'defaultReasoningEffort',
-    'defaultAgentPreset',
     'randomSeed',
     'sessionShadowSoftBudgetChars',
     'sessionShadowHardBudgetChars',
     'frugalShadowModel',
     'synthesisModel',
     'synthesisReasoningEffort',
-    'synthesisAgentPreset',
     'commandGateContext',
     'commandGateModel',
     'commandGateReasoningEffort',
-    'commandGateAgentPreset',
   ] as const satisfies readonly (keyof ShadowMindSettings)[]
   const ops: SettingsPathOpView[] = []
   for (const [field, value] of Object.entries(next)) {
@@ -156,6 +153,11 @@ export async function apply(ctx: ClientContext): Promise<void> {
           sessionId,
           capturedThroughSeq,
         ),
+        retry: (sessionId, runId) => remoteValue<ShadowMindStatus>(
+          'shadowMind.retry',
+          remote.retry(sessionId, runId),
+        ),
+        poke: sessionId => { reviewStore.poke(sessionId) },
       }),
     }, ShadowReportCard))
     scope.slots.inject('conversation.chat.node', () => scope.slots.register({

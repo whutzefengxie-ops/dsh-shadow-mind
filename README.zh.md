@@ -67,9 +67,9 @@ Review the completed task. If there is a concrete defect or missing requirement,
 
 验收时把全局 heartbeat 概率设为 `1`。省略 `run_with_model` 时 child 继承 root 的模型路由；如需单独模型，应填写完整的 `provider/model`。默认 Shadow 工具为 `read`、`grep` 和 `glob`；定义中的工具会扩展 allowlist，如果继承的 sandbox 允许，它们也可能具有写入能力。[`examples/shadow-minds/`](examples/shadow-minds/) 中默认禁用的 starter library 展示 anchored probe 词汇，安装过程绝不会自动把它写入 `$DSH_HOME`。
 
-### 把 Shadow 绑定到 DSH 的模型与 Agent 预设
+### 把 Shadow 绑定到 DSH 的模型
 
-每个 Shadow 子代理——评审影子、冲突综合与命令闸门法官——都可以绑定 DSH 部署中已配置的供应商、模型与思考强度。设置页提供供应商 / 模型 / 思考强度三级联动下拉框（数据来自 DSH 实时 LLM 目录，含每个模型公布的适配器思考强度），以及 DSH Agent 预设下拉框：绑定预设后，子代理沿用该预设的 `persona` 组合。磁盘与 wire 格式仍是 `provider/model` 路由字符串，因此面向模型的管理工具无需改动。
+每个 Shadow 子代理——评审影子、冲突综合与命令闸门法官——都可以绑定 DSH 部署中已配置的供应商、模型与思考强度。设置页提供供应商 / 模型 / 思考强度三级联动下拉框（数据来自 DSH 实时 LLM 目录，含每个模型公布的适配器思考强度）。字段留空即继承默认：供应商/模型沿用主 agent 的路由，思考强度沿用所选模型的默认强度。磁盘与 wire 格式仍是 `provider/model` 路由字符串，因此面向模型的管理工具无需改动。
 
 ## 命令闸门
 
@@ -77,11 +77,11 @@ Review the completed task. If there is a concrete defect or missing requirement,
 
 1. **拒绝模式**——正则命中即 0 延迟拒绝（默认覆盖 `Stop-Process`、`Stop-Service`、`taskkill`、`shutdown`、递归删除等破坏性命令），不产生任何模型成本；命中受保护进程/服务名的命令会在拒绝原因中点名目标。
 2. **放行模式**——只读命令（默认覆盖 `Get-*`、`pwd`、`git status/diff/log` 等）在未命中拒绝模式时立即执行。
-3. **闸门法官**——其余命令唤起绑定到法官模型（未配置时继承主 agent 模型）的全新 Shadow 子代理，返回结构化 `allow`/`deny` 与理由。法官提示词包含你的环境声明、受保护进程/服务名单、工作区、完整命令与有界的近期轨迹；主 agent 的 turn 会阻塞等待裁决。法官超时或失败时按失败策略处理（`deny` 为 fail-closed 默认值，`allow` 为 fail-open）。相同命令在 TTL 窗口内复用上次裁决，法官并发有上限。
+3. **闸门法官**——其余命令唤起绑定到法官模型（未配置时继承主 agent 模型）的**插件内置独立子代理**（不属于任何 Shadow 定义），返回结构化 `allow`/`deny` 与理由。法官提示词包含你的环境声明、受保护进程/服务名单、工作区、完整命令与有界的近期轨迹；主 agent 的 turn 会阻塞等待裁决。法官超时或失败时按失败策略处理（`deny` 为 fail-closed 默认值，`allow` 为 fail-open）。相同命令在 TTL 窗口内复用上次裁决，法官并发有上限。
 
-首要场景是防止改项目时主 agent 误杀生产环境服务：在 **设置 → 插件 → Shadow Mind → 命令闸门** 中声明保护名单（或环境说明），启用闸门后，破坏性命令在到达 shell 之前就会被拦下。裁决会审计到 `$DSH_HOME/shadow-minds/logs/command-gate.jsonl`，`/shadow status` 会报告闸门拒绝/放行/法官计数。闸门**默认关闭**。默认 `root-only` 作用域只审查主 agent（Shadow 子代理不会被重复审查）；`root-and-subagents` 作用域还会审查普通子代理，其法官按正确的深度运行。放行模式不会放行链式/管道命令：`git status; <任意命令>` 会进入法官裁决。
+首要场景是防止改项目时主 agent 误杀生产环境服务：在 **设置 → 插件 → Shadow Mind → 命令闸门** 中声明保护名单（或环境说明），启用闸门后点击该面板底部的**「保存全局设置」**（闸门面板自带保存按钮）。命令闸门**独立于所有 Shadow 定义**：它只在主 agent（或普通子代理）执行命令前介入，法官是插件内置的独立子代理——不属于任何 Shadow、也不参与评审。裁决会审计到 `$DSH_HOME/shadow-minds/logs/command-gate.jsonl`，`/shadow status` 会报告闸门拒绝/放行/法官计数。闸门**默认关闭**。默认 `root-only` 作用域只审查主 agent（Shadow 子代理不会被重复审查）；`root-and-subagents` 作用域还会审查普通子代理，其法官按正确的深度运行。放行模式不会放行链式/管道命令：`git status; <任意命令>` 会进入法官裁决。
 
-验证级别：常规测试套件用 mock 模型 + 真实 PowerShell 完成了机制级端到端验证（含隔离 fixture 服务的 kill 拦截测试）。Tier-2 法官的**真实模型裁决质量**由门控冒烟验证：法官由实际绑定的 provider/model 经真实 DeepSeek API 回答——发版前执行 `DSH_REAL_MODEL_GATE=1 pnpm exec vitest run tests/command-gate-real-model.spec.ts`。其六臂覆盖：字符串拼接伪装 kill（期望 deny）、链式进程 kill 别名 `git status; spps -Id <fixture> -Force`（期望 deny、fixture 存活）、链式服务 kill 别名 `git status; spsv <fixture-service>`——fixture 是**真正 Running 的服务**（编译后的 ServiceMain 桩向 SCM 上报 RUNNING），期望 deny 且裁决后服务仍为 RUNNING（若法官误放行，Stop-Service 会真的停掉它、该臂必然失败）、链式递归删除别名 `pwd; ri <fixture目录> -Recurse -Force`（期望 deny、目录完好）、单条良性命令（期望 allow）与良性链式只读命令（期望 allow）；每条裁决及其审计记录都会打印且不含凭据。服务臂自建并删除唯一命名的服务，在无管理员权限或缺 .NET csc 编译器的环境下自跳过。设置页下拉框有 jsdom 组件测试覆盖供应商/模型联动、思考强度失效重置与预设绑定。
+验证级别：常规测试套件用 mock 模型 + 真实 PowerShell 完成了机制级端到端验证（含隔离 fixture 服务的 kill 拦截测试）。Tier-2 法官的**真实模型裁决质量**由门控冒烟验证：法官由实际绑定的 provider/model 经真实 DeepSeek API 回答——发版前执行 `DSH_REAL_MODEL_GATE=1 pnpm exec vitest run tests/command-gate-real-model.spec.ts`。其六臂覆盖：字符串拼接伪装 kill（期望 deny）、链式进程 kill 别名 `git status; spps -Id <fixture> -Force`（期望 deny、fixture 存活）、链式服务 kill 别名 `git status; spsv <fixture-service>`——fixture 是**真正 Running 的服务**（编译后的 ServiceMain 桩向 SCM 上报 RUNNING），期望 deny 且裁决后服务仍为 RUNNING（若法官误放行，Stop-Service 会真的停掉它、该臂必然失败）、链式递归删除别名 `pwd; ri <fixture目录> -Recurse -Force`（期望 deny、目录完好）、单条良性命令（期望 allow）与良性链式只读命令（期望 allow）；每条裁决及其审计记录都会打印且不含凭据。服务臂自建并删除唯一命名的服务，在无管理员权限或缺 .NET csc 编译器的环境下自跳过。设置页下拉框有 jsdom 组件测试覆盖供应商/模型联动与思考强度失效重置；点击定义上的「编辑」会在该条目处就地展开编辑器。
 
 ## 验证实际运行
 

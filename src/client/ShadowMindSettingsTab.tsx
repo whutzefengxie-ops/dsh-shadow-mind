@@ -1,4 +1,4 @@
-import { Component, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ObservableSnapshot, SessionId, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {
@@ -90,7 +90,6 @@ export interface DefinitionDraft {
   activeForModels: string
   runWithModel: string
   reasoningEffort: string
-  agentPreset: string
   timeoutSeconds: string
   tools: string
   capture: ShadowDefinition['capture']
@@ -208,10 +207,8 @@ export function settingsDraft(value: ShadowMindSettings): SettingsDraft {
     resultBatchWindowMs: String(value.resultBatchWindowMs),
     defaultShadowModel: value.defaultShadowModel ?? '',
     defaultReasoningEffort: value.defaultReasoningEffort ?? '',
-    defaultAgentPreset: value.defaultAgentPreset ?? '',
     synthesisModel: value.synthesisModel ?? '',
     synthesisReasoningEffort: value.synthesisReasoningEffort ?? '',
-    synthesisAgentPreset: value.synthesisAgentPreset ?? '',
     argumentDisclosure: value.argumentDisclosure,
     randomSeed: value.randomSeed === undefined ? '' : String(value.randomSeed),
     maxPromptChars: String(value.maxPromptChars),
@@ -249,7 +246,6 @@ export function settingsDraft(value: ShadowMindSettings): SettingsDraft {
     commandGateContext: value.commandGateContext ?? '',
     commandGateModel: value.commandGateModel ?? '',
     commandGateReasoningEffort: value.commandGateReasoningEffort ?? '',
-    commandGateAgentPreset: value.commandGateAgentPreset ?? '',
     commandGateJudgeTimeoutSeconds: String(value.commandGateJudgeTimeoutSeconds),
     commandGateOnJudgeFailure: value.commandGateOnJudgeFailure,
     commandGateMaxParallel: String(value.commandGateMaxParallel),
@@ -268,7 +264,6 @@ export function emptyDefinition(): DefinitionDraft {
     activeForModels: '',
     runWithModel: '',
     reasoningEffort: '',
-    agentPreset: '',
     timeoutSeconds: '',
     tools: '',
     capture: 'full',
@@ -309,7 +304,6 @@ export function definitionDraft(value: ShadowDefinition): DefinitionDraft {
     activeForModels: value.activeForModels.join('\n'),
     runWithModel: value.runWithModel ?? '',
     reasoningEffort: value.reasoningEffort ?? '',
-    agentPreset: value.agentPreset ?? '',
     timeoutSeconds: value.timeoutSeconds === undefined ? '' : String(value.timeoutSeconds),
     tools: value.tools.join('\n'),
     capture: value.capture,
@@ -369,7 +363,6 @@ export function definitionInput(draft: DefinitionDraft): ShadowDefinitionInput |
     activeForModels: lines(draft.activeForModels),
     runWithModel: normalizeRoute(draft.runWithModel) || null,
     reasoningEffort: draft.reasoningEffort.trim() || null,
-    agentPreset: draft.agentPreset.trim() || null,
     timeoutSeconds: timeout ?? null,
     tools: lines(draft.tools),
     capture: draft.capture,
@@ -389,8 +382,8 @@ export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefi
     Record<(typeof NUMBER_FIELDS)[number], number | undefined>
   const heartbeatProbability = numbers.heartbeatProbability
   const maxParallelShadows = integerAtLeast(numbers.maxParallelShadows, 1)
-  const maxPromptChars = integerAtLeast(numbers.maxPromptChars, 1)
-  const maxReportChars = integerAtLeast(numbers.maxReportChars, 1)
+  const maxPromptChars = integerAtLeast(numbers.maxPromptChars, 0)
+  const maxReportChars = integerAtLeast(numbers.maxReportChars, 0)
   const longOutputBoostChars = integerAtLeast(numbers.longOutputBoostChars, 1)
   const valueLoopWindowTurns = integerAtLeast(numbers.valueLoopWindowTurns, 1)
   const reviewWindowSize = integerAtLeast(numbers.reviewWindowSize, 1)
@@ -463,10 +456,8 @@ export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefi
     resultBatchWindowMs,
     ...(defaultRoute === '' ? {} : { defaultShadowModel: defaultRoute }),
     ...(draft.defaultReasoningEffort.trim() === '' ? {} : { defaultReasoningEffort: draft.defaultReasoningEffort.trim() }),
-    ...(draft.defaultAgentPreset.trim() === '' ? {} : { defaultAgentPreset: draft.defaultAgentPreset.trim() }),
     ...(synthesisRoute === '' ? {} : { synthesisModel: synthesisRoute }),
     ...(draft.synthesisReasoningEffort.trim() === '' ? {} : { synthesisReasoningEffort: draft.synthesisReasoningEffort.trim() }),
-    ...(draft.synthesisAgentPreset.trim() === '' ? {} : { synthesisAgentPreset: draft.synthesisAgentPreset.trim() }),
     argumentDisclosure: draft.argumentDisclosure === 'full' ? 'full' : 'redacted',
     ...(numbers.randomSeed === undefined ? {} : { randomSeed: numbers.randomSeed }),
     maxPromptChars,
@@ -502,7 +493,6 @@ export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefi
     ...(draft.commandGateContext.trim() === '' ? {} : { commandGateContext: draft.commandGateContext.trim() }),
     ...(gateRoute === '' ? {} : { commandGateModel: gateRoute }),
     ...(draft.commandGateReasoningEffort.trim() === '' ? {} : { commandGateReasoningEffort: draft.commandGateReasoningEffort.trim() }),
-    ...(draft.commandGateAgentPreset.trim() === '' ? {} : { commandGateAgentPreset: draft.commandGateAgentPreset.trim() }),
     commandGateJudgeTimeoutSeconds: gateJudgeTimeout,
     commandGateOnJudgeFailure: gateOnFailure,
     commandGateMaxParallel: gateMaxParallel,
@@ -531,6 +521,112 @@ function Field(props: {
       {control}
       {props.hint === undefined ? null : <small>{props.hint}</small>}
     </label>
+  )
+}
+
+/** Shared editor body for one Shadow definition (inline for edits, panel for creation). */
+function DefinitionEditor(props: {
+  readonly t: ShadowMindSettingsTabProps['t']
+  readonly busy: boolean
+  readonly editingId: string | null
+  readonly draft: DefinitionDraft
+  readonly setDraft: (draft: DefinitionDraft) => void
+  readonly catalog: ShadowAdministrationSnapshot | null
+  readonly effortLadderFallback: readonly string[]
+  readonly valid: ShadowDefinitionInput | undefined
+  readonly submit: (input: ShadowDefinitionInput) => void
+  readonly cancel: () => void
+}): ReactNode {
+  const { t, busy, editingId, draft, setDraft, catalog, effortLadderFallback, valid, submit, cancel } = props
+  return (
+    <div className={css.editorStack}>
+      <fieldset className={css.fieldset}>
+        <legend>{t('definitionBasicFields')}</legend>
+        <div className={css.grid}>
+          <Field id="shadow-definition-id" label={t('id')} hint={t('idHint')} value={draft.id} disabled={editingId !== null}
+            onChange={(value) => { setDraft({ ...draft, id: value }) }} />
+          <Field id="shadow-definition-name" label={t('name')} value={draft.name}
+            onChange={(value) => { setDraft({ ...draft, name: value }) }} />
+          <Field id="shadow-definition-probability" label={t('activationProbability')} hint={t('activationProbabilityHint')} value={draft.activationProbability}
+            onChange={(value) => { setDraft({ ...draft, activationProbability: value }) }} />
+        </div>
+        <Field id="shadow-definition-prompt" label={t('prompt')} hint={t('promptHint')} value={draft.prompt} multiline
+          onChange={(value) => { setDraft({ ...draft, prompt: value }) }} />
+        <label className={css.check}><input type="checkbox" checked={draft.enabled}
+          onChange={(event) => { setDraft({ ...draft, enabled: event.currentTarget.checked }) }} />{t('enabled')}</label>
+      </fieldset>
+      <fieldset className={css.fieldset}>
+        <legend>{t('definitionCommonFields')}</legend>
+        <div className={css.grid}>
+          <ModelRouteSelect
+            catalog={catalog?.modelCatalog ?? null}
+            disabled={busy}
+            labels={{
+              provider: t('providerLabel'),
+              model: t('modelLabel'),
+              effort: t('effortLabel'),
+            }}
+            effortFallback={effortLadderFallback}
+            value={{
+              route: draft.runWithModel,
+              effort: draft.reasoningEffort,
+            }}
+            onChange={(next) => {
+              setDraft({
+                ...draft,
+                runWithModel: next.route,
+                reasoningEffort: next.effort,
+              })
+            }}
+          />
+          <Field id="shadow-definition-timeout" label={t('timeoutSeconds')} hint={t('timeoutSecondsHint')} value={draft.timeoutSeconds}
+            onChange={(value) => { setDraft({ ...draft, timeoutSeconds: value }) }} />
+          <Field id="shadow-definition-tools" label={t('tools')} hint={t('toolsHint')} value={draft.tools} multiline
+            onChange={(value) => { setDraft({ ...draft, tools: value }) }} />
+        </div>
+        <label className={css.check}><input type="checkbox" checked={draft.thinkFirst}
+          onChange={(event) => { setDraft({ ...draft, thinkFirst: event.currentTarget.checked }) }} />{t('thinkFirst')}</label>
+      </fieldset>
+      <details className={css.disclosure} data-shadow-definition-advanced>
+        <summary>{t('definitionAdvancedFields')}</summary>
+        <div className={css.grid}>
+          <label className={css.check}><input type="checkbox" checked={draft.debug}
+            onChange={(event) => { setDraft({ ...draft, debug: event.currentTarget.checked }) }} />{t('debug')}</label>
+          <Field id="shadow-definition-models" label={t('activeForModels')} hint={t('activeForModelsHint')} value={draft.activeForModels} multiline
+            onChange={(value) => { setDraft({ ...draft, activeForModels: value }) }} />
+          <label className={css.field} htmlFor="shadow-definition-capture">
+            <span>{t('capture')}</span>
+            <select id="shadow-definition-capture" value={draft.capture}
+              onChange={(event) => { setDraft({ ...draft, capture: event.currentTarget.value as ShadowDefinition['capture'] }) }}>
+              <option value="full">full</option><option value="since-compaction">since-compaction</option>
+            </select>
+            <small>{t('captureHint')}</small>
+          </label>
+          <label className={css.field} htmlFor="shadow-definition-context">
+            <span>{t('context')}</span>
+            <select id="shadow-definition-context" value={draft.context}
+              onChange={(event) => { setDraft({ ...draft, context: event.currentTarget.value as ShadowDefinition['context'] }) }}>
+              <option value="standard">standard</option><option value="minimal">minimal</option>
+            </select>
+            <small>{t('contextHint')}</small>
+          </label>
+          <Field id="shadow-definition-prefilters" label={t('preFilters')} hint={t('preFiltersHint')}
+            value={draft.preFilters} multiline
+            onChange={(value) => { setDraft({ ...draft, preFilters: value }) }} />
+          <Field id="shadow-definition-boostfilters" label={t('boostFilters')} hint={t('boostFiltersHint')}
+            value={draft.boostFilters} multiline
+            onChange={(value) => { setDraft({ ...draft, boostFilters: value }) }} />
+          <Field id="shadow-definition-boostfactor" label={t('boostFactor')} hint={t('boostFactorHint')}
+            value={draft.boostFactor}
+            onChange={(value) => { setDraft({ ...draft, boostFactor: value }) }} />
+        </div>
+      </details>
+      <div className={css.formActions}><button type="button" disabled={busy} onClick={cancel}>{t('cancel')}</button>
+        <button type="button" disabled={busy || valid === undefined}
+          onClick={valid === undefined ? undefined : () => { submit(valid) }}>
+          {t(editingId === null ? 'create' : 'saveDefinition')}
+        </button></div>
+    </div>
   )
 }
 
@@ -729,24 +825,22 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                     provider: t('providerLabel'),
                     model: t('modelLabel'),
                     effort: t('effortLabel'),
-                    preset: t('presetLabel'),
                   }}
                   effortFallback={effortLadderFallback}
                   value={{
                     route: settingsEdit.defaultShadowModel,
                     effort: settingsEdit.defaultReasoningEffort,
-                    preset: settingsEdit.defaultAgentPreset,
                   }}
                   onChange={(next) => {
                     setSettingsEdit({
                       ...settingsEdit,
                       defaultShadowModel: next.route,
                       defaultReasoningEffort: next.effort,
-                      defaultAgentPreset: next.preset,
                     })
                   }}
                 />
               </div>
+              <small>{t('routeInheritHint')}</small>
             </fieldset>
             <details className={css.disclosure} data-shadow-settings-advanced>
               <summary>
@@ -789,11 +883,9 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                       provider: t('providerLabel'),
                       model: t('modelLabel'),
                       effort: t('effortLabel'),
-                      preset: t('presetLabel'),
                     }}
                     hideEffort
-                    hidePreset
-                    value={{ route: settingsEdit.frugalShadowModel, effort: '', preset: '' }}
+                    value={{ route: settingsEdit.frugalShadowModel, effort: '' }}
                     onChange={(next) => { setSettingsEdit({ ...settingsEdit, frugalShadowModel: next.route }) }}
                   />
                 </div>
@@ -809,20 +901,17 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                       provider: t('providerLabel'),
                       model: t('modelLabel'),
                       effort: t('effortLabel'),
-                      preset: t('presetLabel'),
                     }}
                     effortFallback={effortLadderFallback}
                     value={{
                       route: settingsEdit.synthesisModel,
                       effort: settingsEdit.synthesisReasoningEffort,
-                      preset: settingsEdit.synthesisAgentPreset,
                     }}
                     onChange={(next) => {
                       setSettingsEdit({
                         ...settingsEdit,
                         synthesisModel: next.route,
                         synthesisReasoningEffort: next.effort,
-                        synthesisAgentPreset: next.preset,
                       })
                     }}
                   />
@@ -899,25 +988,39 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                     provider: t('providerLabel'),
                     model: t('modelLabel'),
                     effort: t('effortLabel'),
-                    preset: t('presetLabel'),
                   }}
                   effortFallback={effortLadderFallback}
                   value={{
                     route: settingsEdit.commandGateModel,
                     effort: settingsEdit.commandGateReasoningEffort,
-                    preset: settingsEdit.commandGateAgentPreset,
                   }}
                   onChange={(next) => {
                     setSettingsEdit({
                       ...settingsEdit,
                       commandGateModel: next.route,
                       commandGateReasoningEffort: next.effort,
-                      commandGateAgentPreset: next.preset,
                     })
                   }}
                 />
               </div>
+              <small>{t('routeInheritHint')}</small>
             </fieldset>
+            <div className={css.formActions}>
+              <small className={css.disclosureHint}>{t('gateSaveNote')}</small>
+              <button type="button" disabled={!settingsDirty || busy}
+                onClick={resolvedSettings === undefined
+                  ? undefined
+                  : () => { setSettingsEdit(settingsDraft(resolvedSettings)) }
+                }>{t('discard')}</button>
+              <button type="button" disabled={!settingsDirty || validSettings === undefined || busy}
+                onClick={validSettings === undefined ? undefined : () => {
+                  void run(async () => {
+                    await props.saveSettings(validSettings)
+                    setSettingsEdit(settingsDraft(validSettings))
+                    setMessage(t('saved'))
+                  })
+                }}>{t(busy ? 'saving' : 'saveSettings')}</button>
+            </div>
           </>
         )}
       </section>
@@ -934,7 +1037,6 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                 <span data-enabled={definition.enabled}>{t(definition.enabled ? 'enabled' : 'disabled')}</span></div>
               <dl><div><dt>{t('activationProbability')}</dt><dd>{definition.activationProbability}</dd></div>
                 <div><dt>{t('runWithModel')}</dt><dd>{definition.runWithModel ?? 'inherit'}</dd></div>
-                <div><dt>{t('presetLabel')}</dt><dd>{definition.agentPreset ?? '—'}</dd></div>
                 <div><dt>{t('capture')}</dt><dd>{definition.capture}</dd></div>
                 <div><dt>{t('context')}</dt><dd>{definition.context}</dd></div>
                 <div><dt>{t('thinkFirst')}</dt><dd>{String(definition.thinkFirst)}</dd></div>
@@ -950,6 +1052,23 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                   void run(async () => { await props.delete(definition.id); setDeleteId(null); await reload() })
                 }}>{t(deleteId === definition.id ? 'confirmDelete' : 'delete')}</button>
               </div>
+              {editingId === definition.id && definitionEdit !== null ? (
+                <div className={css.inlineEditor} data-shadow-inline-editor>
+                  <h3>{t('editTitle')}</h3>
+                  <DefinitionEditor
+                    t={t}
+                    busy={busy}
+                    editingId={editingId}
+                    draft={definitionEdit}
+                    setDraft={setDefinitionEdit}
+                    catalog={catalog}
+                    effortLadderFallback={effortLadderFallback}
+                    valid={validDefinition}
+                    submit={submitDefinition}
+                    cancel={() => { setDefinitionEdit(null); setEditingId(null) }}
+                  />
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -983,102 +1102,19 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
         </ul>
       </section>
 
-      {definitionEdit === null ? null : (
-        <section className={css.panel} data-shadow-editor>
-          <h3>{t(editingId === null ? 'createTitle' : 'editTitle')}</h3>
-          <div className={css.editorStack}>
-            <fieldset className={css.fieldset}>
-              <legend>{t('definitionBasicFields')}</legend>
-              <div className={css.grid}>
-                <Field id="shadow-definition-id" label={t('id')} hint={t('idHint')} value={definitionEdit.id} disabled={editingId !== null}
-                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, id: value }) }} />
-                <Field id="shadow-definition-name" label={t('name')} value={definitionEdit.name}
-                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, name: value }) }} />
-                <Field id="shadow-definition-probability" label={t('activationProbability')} hint={t('activationProbabilityHint')} value={definitionEdit.activationProbability}
-                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, activationProbability: value }) }} />
-              </div>
-              <Field id="shadow-definition-prompt" label={t('prompt')} hint={t('promptHint')} value={definitionEdit.prompt} multiline
-                onChange={(value) => { setDefinitionEdit({ ...definitionEdit, prompt: value }) }} />
-              <label className={css.check}><input type="checkbox" checked={definitionEdit.enabled}
-                onChange={(event) => { setDefinitionEdit({ ...definitionEdit, enabled: event.currentTarget.checked }) }} />{t('enabled')}</label>
-            </fieldset>
-            <fieldset className={css.fieldset}>
-              <legend>{t('definitionCommonFields')}</legend>
-              <div className={css.grid}>
-                <ModelRouteSelect
-                  catalog={catalog?.modelCatalog ?? null}
-                  disabled={busy}
-                  labels={{
-                    provider: t('providerLabel'),
-                    model: t('modelLabel'),
-                    effort: t('effortLabel'),
-                    preset: t('presetLabel'),
-                  }}
-                  effortFallback={effortLadderFallback}
-                  value={{
-                    route: definitionEdit.runWithModel,
-                    effort: definitionEdit.reasoningEffort,
-                    preset: definitionEdit.agentPreset,
-                  }}
-                  onChange={(next) => {
-                    setDefinitionEdit({
-                      ...definitionEdit,
-                      runWithModel: next.route,
-                      reasoningEffort: next.effort,
-                      agentPreset: next.preset,
-                    })
-                  }}
-                />
-                <Field id="shadow-definition-timeout" label={t('timeoutSeconds')} hint={t('timeoutSecondsHint')} value={definitionEdit.timeoutSeconds}
-                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, timeoutSeconds: value }) }} />
-                <Field id="shadow-definition-tools" label={t('tools')} hint={t('toolsHint')} value={definitionEdit.tools} multiline
-                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, tools: value }) }} />
-              </div>
-              <label className={css.check}><input type="checkbox" checked={definitionEdit.thinkFirst}
-                onChange={(event) => { setDefinitionEdit({ ...definitionEdit, thinkFirst: event.currentTarget.checked }) }} />{t('thinkFirst')}</label>
-            </fieldset>
-            <details className={css.disclosure} data-shadow-definition-advanced>
-              <summary>{t('definitionAdvancedFields')}</summary>
-              <div className={css.grid}>
-                <label className={css.check}><input type="checkbox" checked={definitionEdit.debug}
-                  onChange={(event) => { setDefinitionEdit({ ...definitionEdit, debug: event.currentTarget.checked }) }} />{t('debug')}</label>
-                <Field id="shadow-definition-models" label={t('activeForModels')} hint={t('activeForModelsHint')} value={definitionEdit.activeForModels} multiline
-                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, activeForModels: value }) }} />
-                <label className={css.field} htmlFor="shadow-definition-capture">
-                  <span>{t('capture')}</span>
-                  <select id="shadow-definition-capture" value={definitionEdit.capture}
-                    onChange={(event) => { setDefinitionEdit({ ...definitionEdit, capture: event.currentTarget.value as ShadowDefinition['capture'] }) }}>
-                    <option value="full">full</option><option value="since-compaction">since-compaction</option>
-                  </select>
-                  <small>{t('captureHint')}</small>
-                </label>
-                <label className={css.field} htmlFor="shadow-definition-context">
-                  <span>{t('context')}</span>
-                  <select id="shadow-definition-context" value={definitionEdit.context}
-                    onChange={(event) => { setDefinitionEdit({ ...definitionEdit, context: event.currentTarget.value as ShadowDefinition['context'] }) }}>
-                    <option value="standard">standard</option><option value="minimal">minimal</option>
-                  </select>
-                  <small>{t('contextHint')}</small>
-                </label>
-                <Field id="shadow-definition-prefilters" label={t('preFilters')} hint={t('preFiltersHint')}
-                  value={definitionEdit.preFilters} multiline
-                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, preFilters: value }) }} />
-                <Field id="shadow-definition-boostfilters" label={t('boostFilters')} hint={t('boostFiltersHint')}
-                  value={definitionEdit.boostFilters} multiline
-                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, boostFilters: value }) }} />
-                <Field id="shadow-definition-boostfactor" label={t('boostFactor')} hint={t('boostFactorHint')}
-                  value={definitionEdit.boostFactor}
-                  onChange={(value) => { setDefinitionEdit({ ...definitionEdit, boostFactor: value }) }} />
-              </div>
-            </details>
-            <div className={css.formActions}><button type="button" disabled={busy} onClick={() => { setDefinitionEdit(null); setEditingId(null) }}>{t('cancel')}</button>
-              <button type="button" disabled={busy || validDefinition === undefined}
-                onClick={validDefinition === undefined ? undefined : () => { submitDefinition(validDefinition) }}>
-                {t(editingId === null ? 'create' : 'saveDefinition')}
-              </button></div>
-          </div>
-        </section>
-      )}
+      {editingId === null && definitionEdit !== null ? (
+        <CreateShadowPanel
+          t={t}
+          busy={busy}
+          draft={definitionEdit}
+          setDraft={setDefinitionEdit}
+          catalog={catalog}
+          effortLadderFallback={effortLadderFallback}
+          valid={validDefinition}
+          submit={submitDefinition}
+          cancel={() => { setDefinitionEdit(null); setEditingId(null) }}
+        />
+      ) : null}
 
       <section className={css.panel} data-shadow-diagnostics>
         <h3>{t('diagnosticsTitle')}</h3>
@@ -1086,6 +1122,41 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
         <ul>{catalog?.diagnostics.map(diagnostic => <li key={diagnostic.path}><code>{diagnostic.path}</code>: {diagnostic.error}</li>)}</ul>
       </section>
     </div>
+  )
+}
+
+/** Creation editor panel that scrolls itself into view when it opens. */
+function CreateShadowPanel(props: {
+  readonly t: ShadowMindSettingsTabProps['t']
+  readonly busy: boolean
+  readonly draft: DefinitionDraft
+  readonly setDraft: (draft: DefinitionDraft) => void
+  readonly catalog: ShadowAdministrationSnapshot | null
+  readonly effortLadderFallback: readonly string[]
+  readonly valid: ShadowDefinitionInput | undefined
+  readonly submit: (input: ShadowDefinitionInput) => void
+  readonly cancel: () => void
+}): ReactNode {
+  const panel = useRef<HTMLElement | null>(null)
+  useEffect(() => {
+    panel.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [])
+  return (
+    <section className={css.panel} data-shadow-editor ref={panel}>
+      <h3>{props.t('createTitle')}</h3>
+      <DefinitionEditor
+        t={props.t}
+        busy={props.busy}
+        editingId={null}
+        draft={props.draft}
+        setDraft={props.setDraft}
+        catalog={props.catalog}
+        effortLadderFallback={props.effortLadderFallback}
+        valid={props.valid}
+        submit={props.submit}
+        cancel={props.cancel}
+      />
+    </section>
   )
 }
 

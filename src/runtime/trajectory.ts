@@ -179,11 +179,12 @@ export function projectTrajectory(
 }
 
 /**
- * Build the complete fresh-child prompt and fail closed above its configured bound.
+ * Build the complete fresh-child prompt and fail closed above its configured
+ * bound; a bound of zero (or less) disables the limit.
  * @param definition Selected Shadow definition.
  * @param trajectory Projected root trajectory.
  * @param capturedThroughSeq Inclusive root sequence watermark.
- * @param maxPromptChars Complete prompt bound.
+ * @param maxPromptChars Complete prompt bound; 0 = unlimited.
  * @returns Framed Shadow task.
  */
 export function buildShadowPrompt(
@@ -209,7 +210,7 @@ export function buildShadowPrompt(
     `## Root trajectory (captured through session seq ${String(capturedThroughSeq)})`,
     trajectory === '' ? '[no model-visible trajectory content]' : trajectory,
   ].join('\n')
-  if (prompt.length > maxPromptChars) {
+  if (maxPromptChars > 0 && prompt.length > maxPromptChars) {
     throw new Error(`shadow prompt has ${String(prompt.length)} characters, above maxPromptChars ${String(maxPromptChars)}`)
   }
   return prompt

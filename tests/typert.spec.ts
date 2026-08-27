@@ -33,7 +33,6 @@ describe('Shadow Remote descriptors', () => {
         }],
       }],
       failures: [],
-      agentPresets: [{ id: 'standard', name: 'Standard' }],
     }
     expect(descriptor.result.schema.parse(directory)).toEqual(directory)
   })
@@ -152,7 +151,6 @@ describe('Shadow Remote descriptors', () => {
       debug: false,
       activationProbability: 1,
       activeForModels: ['*'],
-      agentPreset: 'standard',
       tools: ['read'],
       capture: 'since-compaction',
       context: 'minimal',
@@ -167,7 +165,6 @@ describe('Shadow Remote descriptors', () => {
       ...shared,
       runWithModel: null,
       reasoningEffort: null,
-      agentPreset: null,
       timeoutSeconds: null,
     }
     const definition = { ...shared, sourcePath: '/definitions/reviewer.md' }
@@ -189,7 +186,6 @@ describe('Shadow Remote descriptors', () => {
           }],
         }],
         failures: [],
-        agentPresets: [{ id: 'standard', name: 'Standard' }],
       },
     }
 
@@ -211,6 +207,44 @@ describe('Shadow Remote descriptors', () => {
       const setEnabled = descriptors.find(candidate => candidate.method === 'setEnabled')
       if (setEnabled?.result.mode !== 'strict') throw new Error('setEnabled must use a strict result codec')
       expect(setEnabled.result.schema.parse(definition)).toEqual(definition)
+    }
+  })
+
+  it('publishes the manual retry remote with a strict result codec', () => {
+    const status = {
+      paused: false,
+      active: [],
+      pendingSchedules: 0,
+      epoch: 0,
+      totalRuns: 2,
+      prefilterSkips: 0,
+      effectiveProbabilities: [],
+      valueLoop: [],
+      spentChars: 0,
+      budgetTier: 'standard',
+      cooldowns: [],
+      pendingEscalations: [],
+      recentReviews: [],
+      synthesisRuns: 0,
+      synthesisFailures: 0,
+      gateDenies: 0,
+      gateAllows: 0,
+      gateJudgeRuns: 0,
+      gateJudgeFailures: 0,
+    }
+
+    for (const descriptors of descriptorSets) {
+      const descriptor = descriptors.find(candidate => candidate.method === 'retry')
+      expect(descriptor).toMatchObject({
+        service: 'shadowMind',
+        namespace: 'shadowMind',
+        implementation: 'retry',
+        scope: { context: 'agent', wire: 'agentId' },
+      })
+      if (descriptor === undefined) throw new Error('retry descriptor is required')
+      if (descriptor.result.mode !== 'strict') throw new Error('retry must use a strict result codec')
+      expect(descriptor.parameters.map(parameter => parameter.name)).toEqual(['agent', 'runId'])
+      expect(descriptor.result.schema.parse(status)).toEqual(status)
     }
   })
 })
