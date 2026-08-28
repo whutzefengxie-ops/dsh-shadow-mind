@@ -39,7 +39,7 @@ export function ProbabilitySlider(props: {
   readonly onChange: (percent: number) => void
 }): ReactNode {
   return (
-    <label className={css.sliderField} htmlFor={props.id}>
+    <label className={`${css.sliderField} ${css.fullSpan}`} htmlFor={props.id}>
       <span>{props.label}</span>
       <span className={css.sliderRow}>
         <input
