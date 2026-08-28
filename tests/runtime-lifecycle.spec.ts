@@ -379,6 +379,124 @@ Review the completed turn.
     expect(harness.deliveries).toHaveLength(2)
   })
 
+  it('defers a qualifying turn while a review is running and still reviews both (issue #3)', async () => {
+    type RunningResult = {
+      readonly output: never[]
+      readonly stopReason: 'completed'
+      readonly structured: { readonly status: 'report'; readonly content: string; readonly verdict: 'challenge'; readonly refs: number[] }
+    }
+    let resolveFirst!: (value: RunningResult) => void
+    const firstResult = new Promise<RunningResult>(resolve => { resolveFirst = resolve })
+    let run = 0
+    const harness = await setup(() => {
+      run += 1
+      const id = SessionId(`child-overlap-${String(run)}`)
+      if (run === 1) {
+        return {
+          id,
+          localAgent: undefined,
+          result: firstResult,
+          dispose: () => Promise.resolve(),
+        }
+      }
+      return {
+        id,
+        localAgent: undefined,
+        result: Promise.resolve({
+          output: [],
+          stopReason: 'completed',
+          structured: { status: 'report', content: 'Second finding.', verdict: 'challenge', refs: [] },
+        }),
+        dispose: () => Promise.resolve(),
+      }
+    })
+
+    emitToolTurn(harness, 1)
+    await vi.waitFor(() => {
+      expect(harness.runtime.status(harness.agent).active).toHaveLength(1)
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]?.phase).toBe('running')
+    })
+
+    // A second qualifying turn completes while the first review is still running:
+    // it must be DEFERRED (queued), not silently dropped.
+    emitToolTurn(harness, 2)
+    await vi.waitFor(() => { expect(harness.runtime.reviewCycles(harness.agent)).toHaveLength(2) })
+    const during = harness.runtime.reviewCycles(harness.agent)
+    expect(during[1]?.runs).toEqual([])
+    expect(during[1]?.scheduling).toBe(true)
+    expect(harness.runtime.status(harness.agent).active).toHaveLength(1)
+
+    // Finish the first review; the deferred turn must then be scheduled and relayed.
+    resolveFirst({
+      output: [],
+      stopReason: 'completed',
+      structured: { status: 'report', content: 'First finding.', verdict: 'challenge', refs: [] },
+    })
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({ phase: 'report', relayed: true })
+      expect(harness.runtime.reviewCycles(harness.agent)[1]?.runs[0]).toMatchObject({ phase: 'report', relayed: true })
+    })
+    expect(harness.deliveries).toHaveLength(2)
+  })
+
+  it('drops deferred turns that span a new user message, per the stale policy (issue #3)', async () => {
+    type RunningResult = {
+      readonly output: never[]
+      readonly stopReason: 'completed'
+      readonly structured: { readonly status: 'report'; readonly content: string; readonly verdict: 'challenge'; readonly refs: number[] }
+    }
+    let resolveFirst!: (value: RunningResult) => void
+    const firstResult = new Promise<RunningResult>(resolve => { resolveFirst = resolve })
+    let run = 0
+    const harness = await setup(() => {
+      run += 1
+      const id = SessionId(`child-stale-${String(run)}`)
+      if (run === 1) return { id, localAgent: undefined, result: firstResult, dispose: () => Promise.resolve() }
+      return {
+        id,
+        localAgent: undefined,
+        result: Promise.resolve({
+          output: [],
+          stopReason: 'completed',
+          structured: { status: 'report', content: 'Second.', verdict: 'challenge', refs: [] },
+        }),
+        dispose: () => Promise.resolve(),
+      }
+    })
+
+    emitToolTurn(harness, 1)
+    await vi.waitFor(() => { expect(harness.runtime.status(harness.agent).active).toHaveLength(1) })
+    emitToolTurn(harness, 2)
+    await vi.waitFor(() => { expect(harness.runtime.reviewCycles(harness.agent)).toHaveLength(2) })
+    // The second turn was deferred (no run yet, still scheduling).
+    expect(harness.runtime.reviewCycles(harness.agent)[1]?.runs).toEqual([])
+
+    // A new user message invalidates the review epoch: the deferred turn is dropped
+    // as stale and the running review is cancelled.
+    harness.ctx.emit('agent/inbox/inserted', {
+      agent: harness.agent,
+      message: createUserMessage({
+        content: [{ type: 'text', text: 'New task.' }],
+        source: { kind: 'user' },
+      }),
+    })
+    resolveFirst({
+      output: [],
+      stopReason: 'completed',
+      structured: { status: 'report', content: 'First.', verdict: 'challenge', refs: [] },
+    })
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'aborted',
+        reasonCode: 'USER_MESSAGE_RECEIVED',
+      })
+    })
+    expect(harness.runtime.reviewCycles(harness.agent)[1]?.runs).toEqual([])
+    expect(harness.runtime.reviewCycles(harness.agent)[1]?.scheduling).toBe(false)
+    expect(harness.deliveries).toHaveLength(0)
+    expect(harness.runtime.status(harness.agent).active).toHaveLength(0)
+  })
+
   it('keeps silent visible without waking the root agent', async () => {
     const harness = await setup(() => ({
       id: SessionId('child-silent'),

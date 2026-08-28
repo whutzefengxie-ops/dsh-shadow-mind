@@ -174,6 +174,13 @@ type TerminalRunFields = Pick<ShadowRunView, 'stage'> & Partial<Pick<
   | 'route'
 >>
 
+/** One qualifying turn whose review had to wait for a running Shadow to finish. */
+interface PendingTurn {
+  readonly cycle: MutableReviewCycle
+  readonly epoch: number
+  readonly capturedThroughSeq: number
+}
+
 interface OwnerState {
   readonly rootSessionId: Agent['id']
   epoch: number
@@ -183,6 +190,8 @@ interface OwnerState {
   readonly active: Map<string, ActiveShadow>
   readonly batcher: ReportBatcher
   readonly cycles: Map<number, MutableReviewCycle>
+  /** Turns deferred because a review was still running; drained FIFO. */
+  readonly pendingTurns: PendingTurn[]
   totalRuns: number
   readonly pendingChallenges: Map<string, ValueLoopChallenge>
   readonly valueStats: Map<string, MutableValueStats>
@@ -680,7 +689,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
       cycle.failure = { reasonCode: 'SCHEDULING_FAILED', stage: 'prepare', error: safeError(error) }
       this.ctx.logger.warn('dsh-shadow-mind: turn scheduling failed: %o', error)
     }).finally(() => {
-      cycle.scheduling = false
       state.schedules.delete(schedule)
     })
   }
@@ -774,27 +782,80 @@ export class ShadowMindRuntime extends TypertRemoteService {
     epoch: number,
     capturedThroughSeq: number,
   ): Promise<void> {
-    if (this.budgetTier(state) === 'exhausted') return
+    if (this.budgetTier(state) === 'exhausted') {
+      cycle.scheduling = false
+      return
+    }
     const catalog = await this.registry.list()
     for (const diagnostic of catalog.diagnostics) {
       this.ctx.logger.warn('dsh-shadow-mind: ignored definition %s: %s', diagnostic.path, diagnostic.error)
     }
-    if (!this.accepts(agent, state, epoch)) return
+    if (!this.accepts(agent, state, epoch)) {
+      cycle.scheduling = false
+      return
+    }
     const now = Date.now()
     for (const [shadowId, cooldown] of state.cooldowns) {
       if (cooldown.until <= now) state.cooldowns.delete(shadowId)
     }
-    // Single-Shadow model: at most one reviewer runs per root at a time, and
-    // one probability roll decides whether this turn is reviewed at all.
-    if (state.active.size > 0) return
+    // One reviewer runs per root at a time. If a review is already running, defer
+    // this turn instead of silently dropping it, so every qualifying turn is still
+    // reviewed (FIFO). The deferred cycle keeps scheduling=true until it is handled.
+    if (state.active.size > 0 || state.pendingTurns.length > 0) {
+      state.pendingTurns.push({ cycle, epoch, capturedThroughSeq })
+      return
+    }
+    await this.tryScheduleTurn(agent, state, cycle, epoch, capturedThroughSeq)
+  }
+
+  /** Attempt to start the single review for one turn, assuming a free slot. */
+  private async tryScheduleTurn(
+    agent: Agent,
+    state: OwnerState,
+    cycle: MutableReviewCycle,
+    epoch: number,
+    capturedThroughSeq: number,
+  ): Promise<void> {
     const definition = await this.registry.defaultDefinition()
-    if (!definition.enabled || state.cooldowns.has(definition.id)) return
+    if (!definition.enabled || state.cooldowns.has(definition.id)) {
+      cycle.scheduling = false
+      return
+    }
     const probability = Math.min(
       1,
       definition.activationProbability * (state.decayFactors.get(definition.id) ?? 1),
     )
-    if (!shouldRunShadow(probability, this.random)) return
+    if (!shouldRunShadow(probability, this.random)) {
+      cycle.scheduling = false
+      return
+    }
     this.launch(agent, state, cycle, epoch, capturedThroughSeq, definition)
+  }
+
+  /** Drain deferred turns in order, one at a time, after a running review finishes. */
+  private async processPendingTurns(agent: Agent, state: OwnerState): Promise<void> {
+    try {
+      while (state.active.size === 0 && state.pendingTurns.length > 0) {
+        const next = state.pendingTurns[0]
+        if (next === undefined) break
+        if (!this.accepts(agent, state, next.epoch) || this.budgetTier(state) === 'exhausted') {
+          state.pendingTurns.shift()
+          next.cycle.scheduling = false
+          continue
+        }
+        const before = state.active.size
+        await this.tryScheduleTurn(agent, state, next.cycle, next.epoch, next.capturedThroughSeq)
+        const launched = state.active.size > before
+        // Always dequeue the handled turn. When it launched, its finish re-invokes
+        // this drain for the next pending turn; otherwise move on to the following one.
+        state.pendingTurns.shift()
+        if (launched) return
+        next.cycle.scheduling = false
+      }
+    } catch (error: unknown) {
+      // Deferred scheduling must never break the run that just freed the slot.
+      this.ctx.logger.warn('dsh-shadow-mind: pending-turn drain failed: %o', error)
+    }
   }
 
   /** Reserve one active id before provider startup and start its owned lifecycle. */
@@ -850,6 +911,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
     }
     state.active.set(definition.id, entry)
     cycle.runs.push(entry)
+    cycle.scheduling = false
     state.totalRuns++
     entry.done = (async () => {
       await this.debug(state, entry, 'run-admitted')
@@ -869,6 +931,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
     }).finally(() => {
       /* v8 ignore else -- the duplicate guard makes this launch the id's unique owner until its lifecycle settles. */
       if (state.active.get(definition.id) === entry) state.active.delete(definition.id)
+      void this.processPendingTurns(agent, state)
     })
     void entry.done.catch((error: unknown) => {
       this.ctx.logger.warn('dsh-shadow-mind: shadow %s failed: %o', definition.id, error)
@@ -1334,6 +1397,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
       schedules: new Set(),
       active: new Map(),
       cycles: new Map(),
+      pendingTurns: [],
       totalRuns: 0,
       pendingChallenges: new Map(),
       valueStats: new Map(),
@@ -1374,6 +1438,8 @@ export class ShadowMindRuntime extends TypertRemoteService {
     state.decayFactors.clear()
     state.reviewEntries.length = 0
     state.pendingChallenges.clear()
+    for (const turn of state.pendingTurns) turn.cycle.scheduling = false
+    state.pendingTurns.length = 0
   }
 
   /** Deliver only reports still current at the end of the batch window. */
@@ -1576,6 +1642,8 @@ export class ShadowMindRuntime extends TypertRemoteService {
   /** Cancel admitted work and advance the stale-result epoch. */
   private cancelOwner(state: OwnerState, cancellation: ShadowCancellation): void {
     state.epoch += 1
+    for (const turn of state.pendingTurns) turn.cycle.scheduling = false
+    state.pendingTurns.length = 0
     for (const entry of state.active.values()) this.requestCancellation(state, entry, cancellation)
     for (const cycle of state.cycles.values()) {
       for (const entry of cycle.runs) void this.discardPendingEntry(state, entry, cancellation)

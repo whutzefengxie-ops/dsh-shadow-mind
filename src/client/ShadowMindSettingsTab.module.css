@@ -102,6 +102,11 @@
   resize: vertical;
 }
 
+/* The duty prompt is long-form text; span the full card row and give it room. */
+.promptField textarea {
+  min-height: 180px;
+}
+
 .field small {
   color: var(--dsw-color-text-secondary, #57606a);
   font-size: 12px;

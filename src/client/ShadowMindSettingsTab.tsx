@@ -349,7 +349,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                   onChange={(event) => { setDefinitionEdit({ ...definitionEdit, name: event.currentTarget.value }) }} />
                 <small>{t('shadowNameHint')}</small>
               </label>
-              <label className={css.field} htmlFor="shadow-prompt">
+              <label className={`${css.field} ${css.fullSpan} ${css.promptField}`} htmlFor="shadow-prompt">
                 <span>{t('shadowPrompt')}</span>
                 <textarea id="shadow-prompt" value={definitionEdit.prompt} disabled={busy}
                   onChange={(event) => { setDefinitionEdit({ ...definitionEdit, prompt: event.currentTarget.value }) }} />

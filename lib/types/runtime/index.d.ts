@@ -140,6 +140,10 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     private incrementValueClassification;
     /** Refresh definitions, sample gates, and synchronously reserve selected ids. */
     private scheduleTurn;
+    /** Attempt to start the single review for one turn, assuming a free slot. */
+    private tryScheduleTurn;
+    /** Drain deferred turns in order, one at a time, after a running review finishes. */
+    private processPendingTurns;
     /** Reserve one active id before provider startup and start its owned lifecycle. */
     private launch;
     /** Execute, dispose, validate, and optionally accept one Shadow result. */
