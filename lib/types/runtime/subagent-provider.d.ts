@@ -24,10 +24,16 @@ declare module '@deepseek-ai/dsh-subagent' {
         /** Whether this child plans once without tools before investigating. */
         readonly thinkFirst?: boolean;
     }
+    interface SubagentStopReasonMap {
+        /** The child's turn completed normally but never satisfied the structured-output contract. */
+        'no-structured-output': 'no-structured-output';
+    }
 }
 /** Provider name reserved for Shadow Mind's conditioned fresh children. */
 export declare const SHADOW_MIND_SUBAGENT_PROVIDER = "shadow-mind";
 /** Model-visible continuation injected after the tool-free planning request. */
 export declare const THINK_FIRST_CONTINUATION = "Planning is complete. Now investigate with the available tools and submit the required final result.";
+/** Provider-authored reason for a turn that completed without the structured-output contract. */
+export declare const STRUCTURED_OUTPUT_MISSING_DIAGNOSTIC = "Shadow subagent completed its turn without calling the mandatory structured_output tool; no report was captured or relayed.";
 /** Register the provider in the calling plugin scope. */
 export declare function installShadowMindProvider(ctx: Context): void;
