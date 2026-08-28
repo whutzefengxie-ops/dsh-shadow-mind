@@ -1,6 +1,6 @@
 /** Shadow Mind Web administration registered under Settings → Plugins. */
 
-import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { ClientContext, ObservableSnapshot, SessionId, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-commands/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
@@ -11,6 +11,7 @@ import type {
   ShadowAdministrationSnapshot,
   ShadowDefinition,
   ShadowDefinitionInput,
+  ShadowMindSettings,
   ShadowMindStatus,
   ShadowReviewCycle,
 } from '../runtime/types.ts'
@@ -37,6 +38,8 @@ export type { ShadowMindLocaleKey } from './locales.ts'
 
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'settings.shadowMind'
+/** Settings storage namespace owned by this plugin. */
+const SETTINGS_NAMESPACE = 'shadow-mind'
 
 /** Services required by the Settings tab, Remote methods, and slash-command acknowledgment. */
 export const inject = [
@@ -44,6 +47,7 @@ export const inject = [
   'locale',
   'sessions',
   'remote',
+  'settingsScope',
   'conversationEvents',
 ]
 
@@ -72,8 +76,9 @@ export async function apply(ctx: ClientContext): Promise<void> {
     conversation.input.for(sessionContext).notify(result.kind === 'error' ? 'error' : 'info', result.text)
   })
 
-  ctx.inject(['slots', 'remote.shadowMind'], (scope: ClientContext) => {
+  ctx.inject(['slots', 'remote.shadowMind', 'settingsScope'], (scope: ClientContext) => {
     const remote = scope.remote.shadowMind
+    const settings = scope.settingsScope.bind<ShadowMindSettings>({ namespace: SETTINGS_NAMESPACE })
     const reviewStore = new ShadowReviewStore(sessionId => remoteValue<readonly ShadowReviewCycle[]>(
       'shadowMind.cycles',
       remote.cycles(sessionId),
@@ -107,6 +112,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       key: 'shadow-mind-relay-marker',
     }, ShadowRelayMarker))
     const injected = (): ShadowMindSettingsTabInjected => ({
+      hooks: { settings: settings as ObservableSnapshot<SettingsScopeSnapshot<ShadowMindSettings>> },
       saveDefault: input => remoteValue<ShadowDefinition>('shadowMind.saveDefault', remote.saveDefault(input)),
       catalog: () => remoteValue<ShadowAdministrationSnapshot>('shadowMind.catalog', remote.catalog()),
       status: sessionId => remoteValue<ShadowMindStatus>('shadowMind.status', remote.status(sessionId)),
