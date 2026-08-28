@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { MarkdownText } from '@deepseek-ai/dsh-client-ui-primitives'
+import { MarkdownText, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ShadowReviewCycle, ShadowRunPhase, ShadowRunView } from '../runtime/types.ts'
 import type { NS } from './index.ts'
 import { projectReviewRuns } from './shadow-report-projection.ts'
@@ -35,12 +35,19 @@ function phaseLabel(phase: ShadowRunPhase, t: ShadowReportCardProps['t']): strin
   }
 }
 
+function markdownLabels(t: ShadowReportCardProps['t']): MarkdownLabels {
+  return {
+    code: { copyLabel: t('copy'), copiedLabel: t('copied') },
+    footnotes: t('markdown.footnotes'),
+  }
+}
+
 function RunBody({ run, t }: { run: ShadowRunView; t: ShadowReportCardProps['t'] }) {
   if (run.phase === 'running') return <p className={css.message}>{t('reviewRunningDetail')}</p>
   if (run.phase === 'report') {
     return run.content === undefined
       ? <p className={css.message}>{t('reportWaitingRelay')}</p>
-      : <div className={css.content}><MarkdownText text={run.content} /></div>
+      : <div className={css.content}><MarkdownText text={run.content} labels={markdownLabels(t)} /></div>
   }
   if (run.phase === 'silent') return <p className={css.message}>{t('reviewSilentDetail')}</p>
   if (run.phase === 'not_relevant') return <p className={css.message}>{t('reviewNotRelevantDetail')}</p>

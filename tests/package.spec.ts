@@ -26,11 +26,9 @@ describe('installable bundle', () => {
     })
     expect(manifest.dsh).toMatchObject({
       bundle: { patch: './cordis.patch.yml' },
-      client: {
-        platform: 'web',
-        external: expect.arrayContaining(['@deepseek-ai/dsh-client-ui-primitives']),
-      },
+      client: { platform: 'web' },
     })
+    expect(manifest.dsh?.client).not.toHaveProperty('external')
   })
 
   it('mounts exactly the runtime and management plugin from the standalone package', () => {

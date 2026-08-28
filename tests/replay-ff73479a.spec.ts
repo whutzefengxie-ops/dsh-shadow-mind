@@ -13,7 +13,7 @@ import { createHash } from 'node:crypto'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
-import { createUserMessage, createMessage, createToolResultMessage, CallId } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, createMessage, createToolResultMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
 import ShadowMindRuntime from '../src/runtime/index.ts'
@@ -52,7 +52,7 @@ Review the completed tool-using turn.
     await ctx.plugin(SubagentRuntime)
     ctx.subagents.registerProvider({
       name: 'shadow-mind',
-      capabilities: { outputSchema: true, depthLimit: true, toolFilter: true, persona: true },
+      capabilities: { agentOptions: true, outputSchema: true, depthLimit: true, toolFilter: true, persona: true },
       inheritsParentContext: false,
       start: () => Promise.resolve({
         id: SessionId('child-ff73479a'),
@@ -89,7 +89,7 @@ Review the completed tool-using turn.
       source: { kind: 'user' },
     }), { surfaceOp: 'append' })
     session.append('step/start', { turn: 1, step: 1 })
-    const callId = CallId('call-1')
+    const callId = ToolCallId('call-1')
     session.append('assistant/message', {
       turn: 1, step: 1,
       message: createMessage({

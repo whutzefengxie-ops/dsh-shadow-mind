@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type {
   ConversationMatch,
   ConversationNodeContext,
-  SessionId,
-} from '@deepseek-ai/dsh-client-runtime/client'
+  ConversationStartMatch,
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
   buildShadowReviewChatNode,
   projectReviewRuns,
@@ -24,7 +25,7 @@ function context(capturedThroughSeq: number, reportSeq: number, runId: string) {
     view: undefined,
     role: 'start',
     location: { kind: 'unresolved' },
-  } as ConversationMatch
+  } as ConversationStartMatch
   const reportSource: ShadowReportMessageSource = {
     kind: 'shadow-report',
     form: 'relay',

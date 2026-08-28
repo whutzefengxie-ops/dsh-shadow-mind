@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { CallId, createMessage } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, createMessage } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import {
   classifyChallenge,
@@ -43,7 +43,7 @@ describe('Shadow value-loop classifier', () => {
     const referenced = session.append('tool/call', {
       turn: 1,
       step: 1,
-      callId: CallId('original-read'),
+      callId: ToolCallId('original-read'),
       name: 'read',
       arguments: '{"path":"src/runtime.ts"}',
     })
@@ -51,7 +51,7 @@ describe('Shadow value-loop classifier', () => {
     session.append('tool/call', {
       turn: 2,
       step: 1,
-      callId: CallId('follow-up-edit'),
+      callId: ToolCallId('follow-up-edit'),
       name: 'edit',
       arguments: '{"path":"src/runtime.ts"}',
     })

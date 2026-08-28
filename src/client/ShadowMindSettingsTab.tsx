@@ -1,5 +1,5 @@
 import { Component, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {
   ShadowAdministrationSnapshot,

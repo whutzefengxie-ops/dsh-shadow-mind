@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ShadowReviewCycle } from '../src/runtime/types.ts'
 import { ShadowReviewStore } from '../src/client/shadow-review-store.ts'
 

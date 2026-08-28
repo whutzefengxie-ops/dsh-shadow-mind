@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CallId, createMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
+import { ToolCallId, createMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { CompactionId } from '@deepseek-ai/dsh-compaction'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import {
@@ -42,13 +42,13 @@ function trajectorySession(): Session {
     }),
   }, SURFACE)
   const call = session.append('tool/call', {
-    turn: 1, step: 1, callId: CallId('read-1'), name: 'read', arguments: '{"secret":"ARGUMENT"}',
+    turn: 1, step: 1, callId: ToolCallId('read-1'), name: 'read', arguments: '{"secret":"ARGUMENT"}',
   })
   session.append('tool/result', {
     turn: 1,
     step: 1,
     message: createToolResultMessage({
-      callId: CallId('read-1'),
+      callId: ToolCallId('read-1'),
       content: [{ type: 'text', text: 'TOP SECRET\nsecond line' }],
       isError: false,
     }),
@@ -137,7 +137,7 @@ describe('trajectory projection', () => {
     }
     expect(summarizeToolResult('read', [{
       type: 'tool-result',
-      toolCallId: CallId('nested-read'),
+      toolCallId: ToolCallId('nested-read'),
       content: [{ type: 'text', text: 'a\n\nb' }],
     }], false)).toBe('read success: 2 non-empty lines, 4 text characters')
     expect(summarizeToolResult('grep', [{ type: 'text', text: 'a\nb' }], true)).toBe('grep error: 2 result lines, 3 text characters')
@@ -147,7 +147,7 @@ describe('trajectory projection', () => {
     expect(summarizeToolResult('custom', [
       { type: 'text', text: 'private' },
       { type: 'reasoning', text: 'hidden' },
-      { type: 'tool-result', toolCallId: CallId('nested'), content: [{ type: 'text', text: 'nested' }] },
+      { type: 'tool-result', toolCallId: ToolCallId('nested'), content: [{ type: 'text', text: 'nested' }] },
       { type: 'image', attachment: {} as never },
     ], false)).toBe('custom success: 19 text characters; blocks image=1, reasoning=1, text=2, tool-result=1')
     expect(summarizeToolResult('custom', [], false)).toBe('custom success: 0 text characters; blocks none')
@@ -185,19 +185,19 @@ describe('trajectory projection', () => {
       turn: 1,
       step: 1,
       message: createToolResultMessage({
-        callId: CallId('unknown'),
+        callId: ToolCallId('unknown'),
         content: [{ type: 'text', text: 'failure text' }],
         isError: true,
       }),
     }, SURFACE)
     const call = session.append('tool/call', {
-      turn: 1, step: 2, callId: CallId('known'), name: 'glob', arguments: '{}',
+      turn: 1, step: 2, callId: ToolCallId('known'), name: 'glob', arguments: '{}',
     })
     session.append('tool/result', {
       turn: 1,
       step: 2,
       message: createToolResultMessage({
-        callId: CallId('known'),
+        callId: ToolCallId('known'),
         content: [{ type: 'text', text: 'failure path' }],
         isError: false,
       }),

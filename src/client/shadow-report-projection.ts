@@ -1,10 +1,9 @@
 import type {
-  ChatConversationViewNode,
   ContextMessageNode,
   ConversationNodeContext,
-  SessionId,
-} from '@deepseek-ai/dsh-client-runtime/client'
-import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type { ChatConversationViewNode } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ShadowReportMessageSource } from '../runtime/protocol.ts'
 import type { ShadowReviewCycle, ShadowRunView } from '../runtime/types.ts'
 
@@ -30,7 +29,7 @@ export interface ShadowMindReviewChatData {
 /** Empty row used only to hide the generic relay Context projection. */
 export type ShadowMindRelayMarkerData = Record<string, never>
 
-declare module '@deepseek-ai/dsh-client-ui-conversation/client' {
+declare module '@deepseek-ai/dsh-client-ui-chat/client' {
   interface ChatNodeDataMap {
     /** One live or settled Shadow review at its root turn position. */
     'shadow-mind-review': ShadowMindReviewChatData

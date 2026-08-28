@@ -309,6 +309,7 @@ function readResult(
 class ShadowMindInProcessProvider implements SubagentProvider {
   readonly name = SHADOW_MIND_SUBAGENT_PROVIDER
   readonly capabilities: SubagentCapabilities = {
+    agentOptions: true,
     outputSchema: true,
     depthLimit: true,
     toolFilter: true,
