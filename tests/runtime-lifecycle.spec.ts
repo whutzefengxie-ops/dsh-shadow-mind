@@ -19,7 +19,7 @@ import type {
   SubagentProvider,
   SubagentRun,
 } from '@deepseek-ai/dsh-subagent'
-import ShadowMindRuntime from '../src/runtime/index.ts'
+import ShadowMindRuntime, { DEFAULT_SHADOW_ID } from '../src/runtime/index.ts'
 import { MemorySettings } from './memory-settings.ts'
 
 const CAPABILITIES: SubagentCapabilities = {
@@ -200,6 +200,27 @@ describe('Shadow runtime lifecycle', () => {
       kind: 'shadow-report',
       reports: [{ capturedThroughSeq, childSessionId: 'child-report' }],
     })
+  })
+
+  it('ensures the default definition exists when the admin catalog is served', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-unused'),
+      localAgent: undefined,
+      result: Promise.resolve({ output: [], stopReason: 'completed', structured: { status: 'silent', content: '' } }),
+      dispose: () => Promise.resolve(),
+    }), { definitions: {} })
+
+    const first = await harness.runtime.remoteExportCatalog()
+    expect(first.definitions.map(item => item.id)).toContain(DEFAULT_SHADOW_ID)
+    expect(first.definitions.find(item => item.id === DEFAULT_SHADOW_ID)).toMatchObject({
+      activationProbability: 0.7,
+      enabled: true,
+    })
+    expect(await readFile(join(harness.dshHome, 'shadow-minds', `${DEFAULT_SHADOW_ID}.md`), 'utf8'))
+      .toContain('activation_probability: 0.7')
+    // Idempotent: a second load neither duplicates nor overwrites the file.
+    const second = await harness.runtime.remoteExportCatalog()
+    expect(second.definitions.filter(item => item.id === DEFAULT_SHADOW_ID)).toHaveLength(1)
   })
 
   it('aborts a validated report when user input invalidates its pending relay', async () => {

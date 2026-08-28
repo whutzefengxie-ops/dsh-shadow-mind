@@ -56,6 +56,8 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     listDefinitions(): Promise<ShadowCatalog>;
     /**
      * Load definitions and their storage directory for the trusted Web administration page.
+     * The single default definition is ensured to exist, so a fresh installation
+     * always shows an editable Shadow card instead of an empty state.
      * @returns Current catalog, definition directory, and the live DSH model directory.
      */
     remoteExportCatalog(): Promise<ShadowAdministrationSnapshot>;

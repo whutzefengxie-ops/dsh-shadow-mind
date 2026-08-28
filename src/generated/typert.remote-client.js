@@ -235,7 +235,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowAdministrationSnapshot',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_catalog_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":429,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":431,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/modelCatalog',
@@ -250,7 +250,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowModelCatalog',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":439,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":442,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/retry',
@@ -291,7 +291,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":617,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":620,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/cycles',
@@ -322,7 +322,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowReviewCycle[]',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_cycles_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":554,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":557,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/saveDefault',
@@ -348,7 +348,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowDefinition',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_saveDefault_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":450,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":453,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/pause',
@@ -378,7 +378,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":572,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":575,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/resume',
@@ -408,7 +408,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":589,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":592,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/status',
@@ -438,7 +438,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":491,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":494,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/toggle',
@@ -468,7 +468,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":603,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":606,"column":3},
     },
   ],
 }

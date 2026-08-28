@@ -308,7 +308,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
           </p>
         )}
 
-        {definitionEdit === null ? <p>{t('loadError')}</p> : (
+        {definitionEdit === null ? <p>{t('noDefaultDefinition')}</p> : (
           <>
             <div className={css.grid}>
               <ProbabilitySlider
