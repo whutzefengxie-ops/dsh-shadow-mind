@@ -76,7 +76,7 @@ scheduling -> running -> report | silent | not_relevant | aborted | failed
 
 ### 2.5 Web 设置与会话展示
 
-“设置 → 插件 → Shadow Mind”通过 settings namespace 和生成的 Remote 管理全局设置、Markdown 定义和当前 root 状态。每项定义可配置启用、激活概率、模型过滤、child 模型、reasoning effort、超时、截获视窗、context、think-first、skip/boost 谓词、holdout、工具与提示词；全局设置还提供 review window、vendor 偏好、value loop、软硬预算、陈旧衰减与可选冲突综合。
+“设置 → 插件 → Shadow Mind”通过 settings namespace 和生成的 Remote 管理当前 root 状态与单一 `default` 定义。定义可配置启用、激活概率、child 模型（供应商/模型/思考强度）、reasoning effort、超时、截获视窗、context、think-first、holdout、工具与提示词；全局设置保留 review window、value loop、软硬预算与陈旧衰减等内部默认项。多定义 CRUD、skip/boost 谓词、vendor 偏好与冲突综合已随产品收敛移除（见 [`settings-ux-revamp.zh.md`](settings-ux-revamp.zh.md)），命令闸门能力亦已整体删除。
 
 插件通过 `conversation.chat.node` 为每个正常完成的 root `turn/end` 建立候选审查节点，并以该事件序号作为固定显示锚点。没有进入 Shadow 调度的节点不渲染；一旦周期准入，节点立即显示运行占位卡片，并明确提示“此时发送新消息会取消本轮审查”。同一节点随后原位更新为报告、`silent`、`not_relevant`、取消或失败终态，因此多轮审查各自停留在实际发生的位置。
 

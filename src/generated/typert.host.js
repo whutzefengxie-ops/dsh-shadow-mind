@@ -5,9 +5,6 @@ const _shadowDefinitionConditioning$shape = {
   'capture': z.enum(['full', 'since-compaction']).readonly(),
   'context': z.enum(['standard', 'minimal']).readonly(),
   'thinkFirst': z.boolean().readonly(),
-  'preFilters': z.array(z.string()).readonly(),
-  'boostFilters': z.array(z.string()).readonly(),
-  'boostFactor': z.number().readonly(),
   'holdout': z.boolean().readonly(),
 }
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema = z.object({
@@ -52,12 +49,13 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_catalog_result$schema = z.
   'sourcePath': z.string().readonly(),
 })).readonly(),
   'modelCatalog': _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema,
+  'defaultShadowTimeoutSeconds': z.number().readonly().optional(),
   'diagnostics': z.array(z.object({
   'path': z.string().readonly(),
   'error': z.string().readonly(),
 })).readonly(),
 })
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_create_parameter_0$schema = z.object({
+const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_saveDefault_parameter_0$schema = z.object({
   'id': z.string().readonly(),
   'name': z.string().readonly(),
   'enabled': z.boolean().readonly(),
@@ -71,7 +69,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_create_parameter_0$schema 
   ..._shadowDefinitionConditioning$shape,
   'prompt': z.string().readonly(),
 })
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_create_result$schema = z.object({
+const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_saveDefault_result$schema = z.object({
   'id': z.string().readonly(),
   'name': z.string().readonly(),
   'enabled': z.boolean().readonly(),
@@ -86,58 +84,10 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_create_result$schema = z.o
   'prompt': z.string().readonly(),
   'sourcePath': z.string().readonly(),
 })
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_delete_parameter_0$schema = z.string()
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_delete_result$schema = z.void()
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_pause_parameter_0$schema = z.intersection(z.string(), z.unknown())
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_resume_parameter_0$schema = z.intersection(z.string(), z.unknown())
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_parameter_0$schema = z.string()
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_parameter_1$schema = z.boolean()
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_result$schema = z.object({
-  'id': z.string().readonly(),
-  'name': z.string().readonly(),
-  'enabled': z.boolean().readonly(),
-  'debug': z.boolean().readonly(),
-  'activationProbability': z.number().readonly(),
-  'activeForModels': z.array(z.string()).readonly(),
-  'runWithModel': z.string().readonly().optional(),
-  'reasoningEffort': z.string().readonly().optional(),
-  'timeoutSeconds': z.number().readonly().optional(),
-  'tools': z.array(z.string()).readonly(),
-  ..._shadowDefinitionConditioning$shape,
-  'prompt': z.string().readonly(),
-  'sourcePath': z.string().readonly(),
-})
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_status_parameter_0$schema = z.intersection(z.string(), z.unknown())
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_toggle_parameter_0$schema = z.intersection(z.string(), z.unknown())
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_update_parameter_0$schema = z.object({
-  'id': z.string().readonly(),
-  'name': z.string().readonly(),
-  'enabled': z.boolean().readonly(),
-  'debug': z.boolean().readonly(),
-  'activationProbability': z.number().readonly(),
-  'activeForModels': z.array(z.string()).readonly(),
-  'runWithModel': z.union([z.literal(null), z.string()]).readonly(),
-  'reasoningEffort': z.union([z.literal(null), z.string()]).readonly(),
-  'timeoutSeconds': z.union([z.literal(null), z.number()]).readonly(),
-  'tools': z.array(z.string()).readonly(),
-  ..._shadowDefinitionConditioning$shape,
-  'prompt': z.string().readonly(),
-})
-const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_update_result$schema = z.object({
-  'id': z.string().readonly(),
-  'name': z.string().readonly(),
-  'enabled': z.boolean().readonly(),
-  'debug': z.boolean().readonly(),
-  'activationProbability': z.number().readonly(),
-  'activeForModels': z.array(z.string()).readonly(),
-  'runWithModel': z.string().readonly().optional(),
-  'reasoningEffort': z.string().readonly().optional(),
-  'timeoutSeconds': z.number().readonly().optional(),
-  'tools': z.array(z.string()).readonly(),
-  ..._shadowDefinitionConditioning$shape,
-  'prompt': z.string().readonly(),
-  'sourcePath': z.string().readonly(),
-})
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_0$schema = z.intersection(z.string(), z.unknown())
 const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_1$schema = z.string()
 const _shadowMindStage$schema = z.enum(['prepare', 'start', 'run', 'dispose', 'validate', 'relay'])
@@ -224,11 +174,6 @@ const _shadowMindStatusV2$schema = z.object({
   'pendingSchedules': z.number().readonly(),
   'epoch': z.number().readonly(),
   'totalRuns': z.number().readonly(),
-  'prefilterSkips': z.number().readonly(),
-  'effectiveProbabilities': z.array(z.object({
-    'shadowId': z.string().readonly(),
-    'probability': z.number().readonly(),
-  })).readonly(),
   'valueLoop': z.array(z.object({
     'shadowId': z.string().readonly(),
     'challenges': z.number().readonly(),
@@ -253,13 +198,6 @@ const _shadowMindStatusV2$schema = z.object({
     'capturedThroughSeq': z.number().readonly(),
     'finishedAt': z.string().readonly(),
   })).readonly(),
-  'synthesisRuns': z.number().readonly(),
-  'synthesisFailures': z.number().readonly(),
-  'gateDenies': z.number().readonly(),
-  'gateAllows': z.number().readonly(),
-  'gateJudgeRuns': z.number().readonly(),
-  'gateJudgeFailures': z.number().readonly(),
-  'lastSynthesisFailure': z.string().readonly().optional(),
   'lastRun': z.object({
     'runId': z.string().readonly(),
     'shadowId': z.string().readonly(),
@@ -301,7 +239,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowAdministrationSnapshot',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_catalog_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":539,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":431,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/modelCatalog',
@@ -316,7 +254,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowModelCatalog',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":549,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":447,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/retry',
@@ -357,7 +295,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":804,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":625,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/cycles',
@@ -388,14 +326,14 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowReviewCycle[]',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_cycles_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":741,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":562,"column":3},
     },
     {
-      id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/create',
+      id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/saveDefault',
       service: 'shadowMind',
       namespace: 'shadowMind',
-      method: 'create',
-      implementation: 'remoteExportCreate',
+      method: 'saveDefault',
+      implementation: 'remoteExportSaveDefault',
       invocation: { kind: 'direct' },
       parameters: [
         {
@@ -405,42 +343,16 @@ export const TYPERT = {
           codec: {
             mode: 'strict',
             typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowDefinitionInput',
-            schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_create_parameter_0$schema,
+            schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_saveDefault_parameter_0$schema,
           },
         },
       ],
       result: {
         mode: 'strict',
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowDefinition',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_create_result$schema,
+        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_saveDefault_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":559,"column":3},
-    },
-    {
-      id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/delete',
-      service: 'shadowMind',
-      namespace: 'shadowMind',
-      method: 'delete',
-      implementation: 'remoteExportDelete',
-      invocation: { kind: 'direct' },
-      parameters: [
-        {
-          name: 'id',
-          wire: 'id',
-          source: 'json',
-          codec: {
-            mode: 'strict',
-            typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/delete:id',
-            schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_delete_parameter_0$schema,
-          },
-        },
-      ],
-      result: {
-        mode: 'strict',
-        typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/delete:result',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_delete_result$schema,
-      },
-      sourceLocation: {"file":"src/runtime/index.ts","line":589,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":458,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/pause',
@@ -470,7 +382,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":759,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":580,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/resume',
@@ -500,43 +412,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":776,"column":3},
-    },
-    {
-      id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/setEnabled',
-      service: 'shadowMind',
-      namespace: 'shadowMind',
-      method: 'setEnabled',
-      implementation: 'remoteExportSetEnabled',
-      invocation: { kind: 'direct' },
-      parameters: [
-        {
-          name: 'id',
-          wire: 'id',
-          source: 'json',
-          codec: {
-            mode: 'strict',
-            typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/setEnabled:id',
-            schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_parameter_0$schema,
-          },
-        },
-        {
-          name: 'enabled',
-          wire: 'enabled',
-          source: 'json',
-          codec: {
-            mode: 'strict',
-            typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/setEnabled:enabled',
-            schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_parameter_1$schema,
-          },
-        },
-      ],
-      result: {
-        mode: 'strict',
-        typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowDefinition',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_setEnabled_result$schema,
-      },
-      sourceLocation: {"file":"src/runtime/index.ts","line":580,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":597,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/status',
@@ -566,7 +442,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":658,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":499,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/toggle',
@@ -596,33 +472,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":790,"column":3},
-    },
-    {
-      id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/update',
-      service: 'shadowMind',
-      namespace: 'shadowMind',
-      method: 'update',
-      implementation: 'remoteExportUpdate',
-      invocation: { kind: 'direct' },
-      parameters: [
-        {
-          name: 'input',
-          wire: 'input',
-          source: 'json',
-          codec: {
-            mode: 'strict',
-            typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowDefinitionInput',
-            schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_update_parameter_0$schema,
-          },
-        },
-      ],
-      result: {
-        mode: 'strict',
-        typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowDefinition',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_update_result$schema,
-      },
-      sourceLocation: {"file":"src/runtime/index.ts","line":569,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":611,"column":3},
     },
   ],
   model: {
@@ -653,64 +503,22 @@ export const TYPERT = {
             "kind": "method",
             "name": "remoteExportCatalog",
             "signature": "@Remote('catalog') async remoteExportCatalog(): Promise<ShadowAdministrationSnapshot>",
-            "summary": "Load definitions and their storage directory for the trusted Web administration page.",
-            "jsDoc": "/**\n * Load definitions and their storage directory for the trusted Web administration page.\n * @returns Current catalog and definition directory.\n */"
+            "summary": "Load definitions and their storage directory for the trusted Web administration page. The single default definition is ensured to exist, so a fresh installation always shows an editable Shadow card instead of an empty state.",
+            "jsDoc": "/**\n * Load definitions and their storage directory for the trusted Web administration page.\n * The single default definition is ensured to exist, so a fresh installation\n * always shows an editable Shadow card instead of an empty state.\n * @returns Current catalog, definition directory, and the live DSH model directory.\n */"
           },
           {
             "kind": "method",
-            "name": "remoteExportCreate",
-            "signature": "@Remote('create') remoteExportCreate(input: ShadowDefinitionInput): Promise<ShadowDefinition>",
-            "summary": "Create one complete definition submitted by the Web administration page.",
-            "jsDoc": "/**\n * Create one complete definition submitted by the Web administration page.\n * @param input Validated wire fields.\n * @returns Persisted definition.\n */"
+            "name": "remoteExportSaveDefault",
+            "signature": "@Remote('saveDefault') remoteExportSaveDefault(input: ShadowDefinitionInput): Promise<ShadowDefinition>",
+            "summary": "Persist the complete single Shadow definition submitted by the Web administration page as `default.md`.",
+            "jsDoc": "/**\n * Persist the complete single Shadow definition submitted by the Web administration page as `default.md`.\n * @param input Validated wire fields for the default Shadow.\n * @returns Persisted definition.\n */"
           },
           {
             "kind": "method",
-            "name": "remoteExportUpdate",
-            "signature": "@Remote('update') remoteExportUpdate(input: ShadowDefinitionInput): Promise<ShadowDefinition>",
-            "summary": "Replace every editable field of one definition from the Web administration page.",
-            "jsDoc": "/**\n * Replace every editable field of one definition from the Web administration page.\n * @param input Complete wire fields including the existing id.\n * @returns Persisted definition.\n */"
-          },
-          {
-            "kind": "method",
-            "name": "remoteExportSetEnabled",
-            "signature": "@Remote('setEnabled') remoteExportSetEnabled(id: string, enabled: boolean): Promise<ShadowDefinition>",
-            "summary": "Enable or disable one definition from the Web administration page.",
-            "jsDoc": "/**\n * Enable or disable one definition from the Web administration page.\n * @param id Definition id.\n * @param enabled Next scheduling state.\n * @returns Persisted definition.\n */"
-          },
-          {
-            "kind": "method",
-            "name": "remoteExportDelete",
-            "signature": "@Remote('delete') remoteExportDelete(id: string): Promise<void>",
-            "summary": "Delete one definition from the Web administration page while preserving its debug log.",
-            "jsDoc": "/**\n * Delete one definition from the Web administration page while preserving its debug log.\n * @param id Definition id.\n */"
-          },
-          {
-            "kind": "method",
-            "name": "createDefinition",
-            "signature": "createDefinition(input: CreateShadowDefinition): Promise<ShadowDefinition>",
-            "summary": "Create a definition atomically.",
-            "jsDoc": "/**\n * Create a definition atomically.\n * @param input Complete definition fields.\n * @returns Validated persisted definition.\n */"
-          },
-          {
-            "kind": "method",
-            "name": "updateDefinition",
-            "signature": "updateDefinition(id: string, patch: UpdateShadowDefinition): Promise<ShadowDefinition>",
-            "summary": "Update a definition atomically.",
-            "jsDoc": "/**\n * Update a definition atomically.\n * @param id Existing definition id.\n * @param patch Fields to replace.\n * @returns Updated validated definition.\n */"
-          },
-          {
-            "kind": "method",
-            "name": "setEnabled",
-            "signature": "setEnabled(id: string, enabled: boolean): Promise<ShadowDefinition>",
-            "summary": "Enable or disable a definition atomically.",
-            "jsDoc": "/**\n * Enable or disable a definition atomically.\n * @param id Existing definition id.\n * @param enabled Next scheduling state.\n * @returns Updated validated definition.\n */"
-          },
-          {
-            "kind": "method",
-            "name": "deleteDefinition",
-            "signature": "deleteDefinition(id: string): Promise<void>",
-            "summary": "Delete a definition while preserving debug logs.",
-            "jsDoc": "/**\n * Delete a definition while preserving debug logs.\n * @param id Existing definition id.\n */"
+            "name": "saveDefaultDefinition",
+            "signature": "saveDefaultDefinition(input: ShadowDefinitionInput): Promise<ShadowDefinition>",
+            "summary": "Persist the complete single Shadow definition as `default.md`.",
+            "jsDoc": "/**\n * Persist the complete single Shadow definition as `default.md`.\n * @param input Complete definition fields.\n * @returns Validated persisted definition.\n */"
           },
           {
             "kind": "method",
@@ -866,7 +674,7 @@ export const TYPERT = {
           },
           {
             "name": "CreateShadowDefinition",
-            "declaration": "export type CreateShadowDefinition = Omit<ShadowDefinition, 'sourcePath'>;"
+            "declaration": "export type CreateShadowDefinition = Omit<ShadowDefinition, 'sourcePath' | 'capture' | 'context' | 'thinkFirst' | 'holdout'> & Partial<Pick<ShadowDefinition, 'capture' | 'context' | 'thinkFirst' | 'holdout'>>;"
           },
           {
             "name": "EpochHeader",
@@ -1062,7 +870,7 @@ export const TYPERT = {
           },
           {
             "name": "ShadowAdministrationSnapshot",
-            "declaration": "export interface ShadowAdministrationSnapshot extends ShadowCatalog {\n    readonly definitionRoot: string;\n}"
+            "declaration": "export interface ShadowAdministrationSnapshot extends ShadowCatalog {\n    readonly definitionRoot: string;\n    readonly defaultShadowTimeoutSeconds: number;\n}"
           },
           {
             "name": "ShadowCatalog",
@@ -1074,11 +882,11 @@ export const TYPERT = {
           },
           {
             "name": "ShadowDefinition",
-            "declaration": "export interface ShadowDefinition {\n    readonly id: string;\n    readonly name: string;\n    readonly enabled: boolean;\n    readonly debug: boolean;\n    readonly activationProbability: number;\n    readonly activeForModels: readonly string[];\n    readonly runWithModel?: string;\n    readonly reasoningEffort?: string;\n    readonly timeoutSeconds?: number;\n    readonly tools: readonly string[];\n    readonly prompt: string;\n    readonly sourcePath: string;\n}"
+            "declaration": "export interface ShadowDefinition {\n    readonly id: string;\n    readonly name: string;\n    readonly enabled: boolean;\n    readonly debug: boolean;\n    readonly activationProbability: number;\n    readonly activeForModels: readonly string[];\n    readonly runWithModel?: string;\n    readonly reasoningEffort?: string;\n    readonly timeoutSeconds?: number;\n    readonly tools: readonly string[];\n    readonly capture: 'full' | 'since-compaction';\n    readonly context: 'standard' | 'minimal';\n    readonly thinkFirst: boolean;\n    readonly holdout: boolean;\n    readonly prompt: string;\n    readonly sourcePath: string;\n}"
           },
           {
             "name": "ShadowDefinitionInput",
-            "declaration": "export interface ShadowDefinitionInput {\n    readonly id: string;\n    readonly name: string;\n    readonly enabled: boolean;\n    readonly debug: boolean;\n    readonly activationProbability: number;\n    readonly activeForModels: readonly string[];\n    readonly runWithModel: string | null;\n    readonly reasoningEffort: string | null;\n    readonly timeoutSeconds: number | null;\n    readonly tools: readonly string[];\n    readonly prompt: string;\n}"
+            "declaration": "export interface ShadowDefinitionInput {\n    readonly id: string;\n    readonly name: string;\n    readonly enabled: boolean;\n    readonly debug: boolean;\n    readonly activationProbability: number;\n    readonly activeForModels: readonly string[];\n    readonly runWithModel: string | null;\n    readonly reasoningEffort: string | null;\n    readonly timeoutSeconds: number | null;\n    readonly tools: readonly string[];\n    readonly capture: 'full' | 'since-compaction';\n    readonly context: 'standard' | 'minimal';\n    readonly thinkFirst: boolean;\n    readonly holdout: boolean;\n    readonly prompt: string;\n}"
           },
           {
             "name": "ShadowDiagnostic",
@@ -1086,7 +894,7 @@ export const TYPERT = {
           },
           {
             "name": "ShadowMindSettings",
-            "declaration": "export interface ShadowMindSettings {\n    readonly heartbeatProbability: number;\n    readonly maxParallelShadows: number;\n    readonly defaultShadowTimeoutSeconds: number;\n    readonly headlessDrainTimeoutSeconds: number;\n    readonly resultBatchWindowMs: number;\n    readonly defaultShadowModel?: string;\n    readonly defaultReasoningEffort?: string;\n    readonly argumentDisclosure: 'redacted' | 'full';\n    readonly randomSeed?: number;\n    readonly maxPromptChars: number;\n    readonly maxReportChars: number;\n}"
+            "declaration": "export interface ShadowMindSettings {\n    readonly defaultShadowTimeoutSeconds: number;\n    readonly headlessDrainTimeoutSeconds: number;\n    readonly resultBatchWindowMs: number;\n    readonly argumentDisclosure: 'redacted' | 'full';\n    readonly randomSeed?: number;\n    readonly maxPromptChars: number;\n    readonly maxReportChars: number;\n}"
           },
           {
             "name": "ShadowMindStatus",
@@ -1102,7 +910,7 @@ export const TYPERT = {
           },
           {
             "name": "ShadowRegistry",
-            "declaration": "export class ShadowRegistry {\n    readonly root: string;\n    readonly logRoot: string;\n    list(): Promise<ShadowCatalog>;\n    create(input: CreateShadowDefinition): Promise<ShadowDefinition>;\n    update(id: string, patch: UpdateShadowDefinition): Promise<ShadowDefinition>;\n    setEnabled(id: string, enabled: boolean): Promise<ShadowDefinition>;\n    delete(id: string): Promise<void>;\n    appendDebug(id: string, record: Record<string, unknown>): Promise<void>;\n}"
+            "declaration": "export class ShadowRegistry {\n    readonly root: string;\n    readonly logRoot: string;\n    list(): Promise<ShadowCatalog>;\n    defaultDefinition(): Promise<ShadowDefinition>;\n    saveDefault(input: ShadowDefinitionInput): Promise<ShadowDefinition>;\n    appendDebug(id: string, record: Record<string, unknown>): Promise<void>;\n}"
           },
           {
             "name": "ShadowReportMessageSource",

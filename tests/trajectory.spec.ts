@@ -17,7 +17,6 @@ function definition(): ShadowDefinition {
     id: 'audit', name: 'Audit', enabled: true, debug: false,
     activationProbability: 1, activeForModels: [], tools: [],
     capture: 'full', context: 'standard', thinkFirst: false,
-    preFilters: [], boostFilters: [], boostFactor: 1,
     holdout: false,
     prompt: 'Find risks.', sourcePath: '/defs/audit.md',
   }

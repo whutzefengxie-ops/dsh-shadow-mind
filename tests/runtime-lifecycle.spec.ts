@@ -19,7 +19,7 @@ import type {
   SubagentProvider,
   SubagentRun,
 } from '@deepseek-ai/dsh-subagent'
-import ShadowMindRuntime from '../src/runtime/index.ts'
+import ShadowMindRuntime, { DEFAULT_SHADOW_ID } from '../src/runtime/index.ts'
 import { MemorySettings } from './memory-settings.ts'
 
 const CAPABILITIES: SubagentCapabilities = {
@@ -54,8 +54,6 @@ const harnesses: RuntimeHarness[] = []
 
 interface SetupOptions {
   readonly resultBatchWindowMs?: number
-  readonly maxParallelShadows?: number
-  readonly conflictSynthesisEnabled?: boolean
   readonly definitions?: Readonly<Record<string, string>>
   readonly holdoutKeys?: Readonly<Record<string, readonly string[]>>
 }
@@ -67,8 +65,8 @@ async function setup(
   const dshHome = await mkdtemp(join(tmpdir(), 'dsh-shadow-runtime-'))
   const definitionRoot = join(dshHome, 'shadow-minds')
   await mkdir(definitionRoot, { recursive: true })
-  const definitions = options.definitions ?? { 'reviewer.md': `---
-id: reviewer
+  const definitions = options.definitions ?? { 'default.md': `---
+id: default
 name: Reviewer
 enabled: true
 debug: true
@@ -77,7 +75,6 @@ active_for_models:
   - '*'
 tools: []
 ---
-
 Review the completed tool-using turn.
 ` }
   await Promise.all(Object.entries(definitions).map(async ([filename, content]) => {
@@ -97,10 +94,7 @@ Review the completed tool-using turn.
   ctx.subagents.registerProvider(new StubProvider(createRun))
   const shadowFiber = ctx.plugin(ShadowMindRuntime, {
     dshHome,
-    heartbeatProbability: 1,
-    maxParallelShadows: options.maxParallelShadows ?? 1,
     resultBatchWindowMs: options.resultBatchWindowMs ?? 0,
-    conflictSynthesisEnabled: options.conflictSynthesisEnabled ?? false,
   })
   await shadowFiber
 
@@ -208,6 +202,28 @@ describe('Shadow runtime lifecycle', () => {
     })
   })
 
+  it('ensures the default definition exists when the admin catalog is served', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-unused'),
+      localAgent: undefined,
+      result: Promise.resolve({ output: [], stopReason: 'completed', structured: { status: 'silent', content: '' } }),
+      dispose: () => Promise.resolve(),
+    }), { definitions: {} })
+
+    const first = await harness.runtime.remoteExportCatalog()
+    expect(first.defaultShadowTimeoutSeconds).toBe(600)
+    expect(first.definitions.map(item => item.id)).toContain(DEFAULT_SHADOW_ID)
+    expect(first.definitions.find(item => item.id === DEFAULT_SHADOW_ID)).toMatchObject({
+      activationProbability: 0.7,
+      enabled: true,
+    })
+    expect(await readFile(join(harness.dshHome, 'shadow-minds', `${DEFAULT_SHADOW_ID}.md`), 'utf8'))
+      .toContain('activation_probability: 0.7')
+    // Idempotent: a second load neither duplicates nor overwrites the file.
+    const second = await harness.runtime.remoteExportCatalog()
+    expect(second.definitions.filter(item => item.id === DEFAULT_SHADOW_ID)).toHaveLength(1)
+  })
+
   it('aborts a validated report when user input invalidates its pending relay', async () => {
     const harness = await setup(() => ({
       id: SessionId('child-pending-report'),
@@ -254,190 +270,6 @@ describe('Shadow runtime lifecycle', () => {
     expect(harness.deliveries).toHaveLength(0)
   })
 
-  it('discards both original reports when user input cancels conflict synthesis', async () => {
-    let run = 0
-    let synthesisStarted!: () => void
-    const started = new Promise<void>((resolve) => { synthesisStarted = resolve })
-    const harness = await setup(request => {
-      run += 1
-      if (run < 3) {
-        return {
-          id: SessionId(`child-conflict-${String(run)}`),
-          localAgent: undefined,
-          result: Promise.resolve({
-            output: [],
-            stopReason: 'completed',
-            structured: {
-              status: 'report',
-              content: `Conflicting report ${String(run)}.`,
-              verdict: run === 1 ? 'challenge' : 'confirm',
-              refs: [],
-            },
-          }),
-          dispose: () => Promise.resolve(),
-        }
-      }
-      synthesisStarted()
-      return {
-        id: SessionId('child-synthesis'),
-        localAgent: undefined,
-        result: new Promise((resolve) => {
-          const abort = (): void => { resolve({ output: [], stopReason: 'aborted' }) }
-          if (request.signal.aborted) abort()
-          else request.signal.addEventListener('abort', abort, { once: true })
-        }),
-        dispose: () => Promise.resolve(),
-      }
-    }, {
-      maxParallelShadows: 2,
-      conflictSynthesisEnabled: true,
-      definitions: {
-        'challenge.md': `---
-id: challenge
-name: Challenge
-enabled: true
-activation_probability: 1
-active_for_models: ['*']
-tools: []
----
-Challenge the result.
-`,
-        'confirm.md': `---
-id: confirm
-name: Confirm
-enabled: true
-activation_probability: 1
-active_for_models: ['*']
-tools: []
----
-Confirm the result.
-`,
-        'synthesizer.md': `---
-id: synthesizer
-name: Synthesizer
-enabled: true
-activation_probability: 0
-active_for_models: ['*']
-tools: []
----
-Resolve the conflict from the two report texts.
-`,
-      },
-    })
-    emitToolTurn(harness)
-    await started
-
-    harness.ctx.emit('agent/inbox/inserted', {
-      agent: harness.agent,
-      message: createUserMessage({
-        content: [{ type: 'text', text: 'Replace the task while synthesis is running.' }],
-        source: { kind: 'user' },
-      }),
-    })
-
-    await vi.waitFor(() => {
-      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs).toHaveLength(2)
-      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs).toEqual(expect.arrayContaining([
-        expect.objectContaining({
-          phase: 'aborted',
-          stage: 'relay',
-          reasonCode: 'USER_MESSAGE_RECEIVED',
-          cancellationSource: 'user-input',
-          relayed: false,
-        }),
-        expect.objectContaining({
-          phase: 'aborted',
-          stage: 'relay',
-          reasonCode: 'USER_MESSAGE_RECEIVED',
-          cancellationSource: 'user-input',
-          relayed: false,
-        }),
-      ]))
-    })
-    expect(harness.deliveries).toHaveLength(0)
-  })
-
-  it('fails conflict synthesis open when its definition registry becomes unreadable', async () => {
-    let run = 0
-    const harness = await setup(() => {
-      run += 1
-      return {
-        id: SessionId(`child-fail-open-${String(run)}`),
-        localAgent: undefined,
-        result: Promise.resolve({
-          output: [],
-          stopReason: 'completed',
-          structured: {
-            status: 'report',
-            content: `Original report ${String(run)}.`,
-            verdict: run === 1 ? 'challenge' : 'confirm',
-            refs: [],
-          },
-        }),
-        dispose: () => Promise.resolve(),
-      }
-    }, {
-      resultBatchWindowMs: 1_000,
-      maxParallelShadows: 2,
-      conflictSynthesisEnabled: true,
-      definitions: {
-        'challenge.md': `---
-id: challenge
-name: Challenge
-enabled: true
-activation_probability: 1
-active_for_models: ['*']
-tools: []
----
-Challenge the result.
-`,
-        'confirm.md': `---
-id: confirm
-name: Confirm
-enabled: true
-activation_probability: 1
-active_for_models: ['*']
-tools: []
----
-Confirm the result.
-`,
-        'synthesizer.md': `---
-id: synthesizer
-name: Synthesizer
-enabled: true
-activation_probability: 0
-active_for_models: ['*']
-tools: []
----
-Resolve the conflict.
-`,
-      },
-    })
-    emitToolTurn(harness)
-    await vi.waitFor(() => {
-      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs).toMatchObject([
-        { phase: 'report', relayed: false },
-        { phase: 'report', relayed: false },
-      ])
-    })
-
-    const definitionRoot = join(harness.dshHome, 'shadow-minds')
-    await rm(definitionRoot, { recursive: true, force: true })
-    await writeFile(definitionRoot, 'not a directory', 'utf8')
-    await vi.waitFor(() => { expect(harness.deliveries).toHaveLength(1) }, { timeout: 2_000 })
-
-    expect(JSON.stringify(harness.deliveries[0])).toContain('Original report 1.')
-    expect(JSON.stringify(harness.deliveries[0])).toContain('Original report 2.')
-    expect(harness.runtime.status(harness.agent)).toMatchObject({
-      synthesisFailures: 1,
-      lastSynthesisFailure: 'preparation_failed',
-    })
-    expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs).toMatchObject([
-      { phase: 'report', relayed: true },
-      { phase: 'report', relayed: true },
-    ])
-  })
-
   it('redacts holdout literals from the complete relay framing', async () => {
     const literal = 'PRIVATE_BENCHMARK_NAME'
     const harness = await setup(() => ({
@@ -456,8 +288,8 @@ Resolve the conflict.
       dispose: () => Promise.resolve(),
     }), {
       definitions: {
-        'reviewer.md': `---
-id: reviewer
+        'default.md': `---
+id: default
 name: Reviewer ${literal}
 enabled: true
 activation_probability: 1
@@ -468,7 +300,7 @@ holdout: true
 Review the completed turn.
 `,
       },
-      holdoutKeys: { reviewer: [literal] },
+      holdoutKeys: { default: [literal] },
     })
     emitToolTurn(harness)
 
@@ -485,8 +317,8 @@ Review the completed turn.
       throw new Error('provider start must not be called')
     }, {
       definitions: {
-        'reviewer.md': `---
-id: reviewer
+        'default.md': `---
+id: default
 name: Reviewer
 enabled: true
 activation_probability: 1
@@ -592,13 +424,13 @@ Review the completed turn.
     expect(harness.deliveries).toHaveLength(0)
     expect(warn).toHaveBeenCalledWith(
       'dsh-shadow-mind: shadow %s returned %s with a non-empty content body; the body is not relayed and was discarded (run %s)',
-      'reviewer',
+      'default',
       'silent',
       expect.any(String),
     )
 
     const records = (await readFile(
-      join(harness.dshHome, 'shadow-minds', 'logs', 'reviewer.jsonl'),
+      join(harness.dshHome, 'shadow-minds', 'logs', 'default.jsonl'),
       'utf8',
     )).trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
     const discarded = records.find(record => record['event'] === 'non-report-body-discarded')
@@ -709,7 +541,7 @@ Review the completed turn.
     expect(harness.deliveries).toHaveLength(0)
 
     const debug = await readFile(
-      join(harness.dshHome, 'shadow-minds', 'logs', 'reviewer.jsonl'),
+      join(harness.dshHome, 'shadow-minds', 'logs', 'default.jsonl'),
       'utf8',
     )
     expect(debug).not.toContain('Private Data')
@@ -756,7 +588,7 @@ Review the completed turn.
     expect(harness.deliveries).toHaveLength(0)
 
     const records = (await readFile(
-      join(harness.dshHome, 'shadow-minds', 'logs', 'reviewer.jsonl'),
+      join(harness.dshHome, 'shadow-minds', 'logs', 'default.jsonl'),
       'utf8',
     )).trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
     expect(records.map(record => record['event'])).toEqual([
@@ -855,5 +687,39 @@ Review the completed turn.
     )
     expect(harness.runtime.status(harness.agent).totalRuns).toBe(1)
     expect(harness.deliveries).toHaveLength(1)
+  })
+
+  it('never schedules legacy definitions when the default is disabled', async () => {
+    const harness = await setup(() => {
+      throw new Error('legacy definitions must never launch a Shadow')
+    }, {
+      definitions: {
+        'default.md': `---
+id: default
+name: Default
+enabled: false
+activation_probability: 1
+tools: []
+---
+Review the completed turn.
+`,
+        'legacy.md': `---
+id: legacy
+name: Legacy
+enabled: true
+activation_probability: 1
+active_for_models: ['*']
+tools: []
+---
+Legacy review.
+`,
+      },
+    })
+    emitToolTurn(harness)
+    // Give any (incorrect) schedule a chance to surface before asserting.
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(harness.runtime.status(harness.agent)).toMatchObject({ totalRuns: 0, active: [] })
+    expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs ?? []).toEqual([])
+    expect(harness.deliveries).toHaveLength(0)
   })
 })

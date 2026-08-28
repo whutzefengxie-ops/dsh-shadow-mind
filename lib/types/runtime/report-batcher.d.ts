@@ -23,8 +23,6 @@ export interface AcceptedShadowReport {
     readonly severity?: number;
     /** Ordered durable sequence anchors visible in the run projection. */
     readonly refs: readonly number[];
-    /** Original run ids replaced by a successful synthesis. */
-    readonly replacesRunIds?: readonly string[];
     /** Owner-only literals retained only until the relay assertion. */
     readonly holdoutKeys?: readonly string[];
 }

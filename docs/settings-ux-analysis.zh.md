@@ -2,6 +2,8 @@
 
 [English](settings-ux-analysis.md) | 中文
 
+> **已被取代**：本文按多定义模型描述的第一轮分级方案已被 [`settings-ux-revamp.zh.md`](settings-ux-revamp.zh.md) 取代（单 Shadow 审查者 + 命令审查能力删除 + toast/滑杆/开关交互重构）。本页仅保留作历史记录。
+
 本文分析 Shadow Mind 设置页（设置 → 插件 → Shadow Mind）的字段分级、创建失败根因与修复方式，并说明内置参考模板的设计。它是设置页改造的实现依据。
 
 ## 1. 问题

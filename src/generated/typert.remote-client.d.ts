@@ -15,30 +15,24 @@ declare module '@deepseek-ai/dsh-typert-protocol' {
     catalog: () => Promise<RemoteResult<ShadowAdministrationSnapshot>>
     modelCatalog: () => Promise<RemoteResult<ShadowModelCatalog>>
     cycles: (agentId: SessionId) => Promise<RemoteResult<readonly ShadowReviewCycle[]>>
-    create: (input: ShadowDefinitionInput) => Promise<RemoteResult<ShadowDefinition>>
-    delete: (id: string) => Promise<RemoteResult<void>>
+    saveDefault: (input: ShadowDefinitionInput) => Promise<RemoteResult<ShadowDefinition>>
     pause: (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
     resume: (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
-    setEnabled: (id: string, enabled: boolean) => Promise<RemoteResult<ShadowDefinition>>
     status: (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
     retry: (agentId: SessionId, runId: string) => Promise<RemoteResult<ShadowMindStatus>>
     toggle: (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
-    update: (input: ShadowDefinitionInput) => Promise<RemoteResult<ShadowDefinition>>
   }
 
   interface TypertRemoteMap {
     'shadowMind/catalog': () => Promise<RemoteResult<ShadowAdministrationSnapshot>>
     'shadowMind/modelCatalog': () => Promise<RemoteResult<ShadowModelCatalog>>
     'shadowMind/cycles': (agentId: SessionId) => Promise<RemoteResult<readonly ShadowReviewCycle[]>>
-    'shadowMind/create': (input: ShadowDefinitionInput) => Promise<RemoteResult<ShadowDefinition>>
-    'shadowMind/delete': (id: string) => Promise<RemoteResult<void>>
+    'shadowMind/saveDefault': (input: ShadowDefinitionInput) => Promise<RemoteResult<ShadowDefinition>>
     'shadowMind/pause': (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
     'shadowMind/resume': (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
-    'shadowMind/setEnabled': (id: string, enabled: boolean) => Promise<RemoteResult<ShadowDefinition>>
     'shadowMind/status': (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
     'shadowMind/retry': (agentId: SessionId, runId: string) => Promise<RemoteResult<ShadowMindStatus>>
     'shadowMind/toggle': (agentId: SessionId) => Promise<RemoteResult<ShadowMindStatus>>
-    'shadowMind/update': (input: ShadowDefinitionInput) => Promise<RemoteResult<ShadowDefinition>>
   }
 
   interface TypertRemoteNamespaceMap {

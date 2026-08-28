@@ -1,47 +1,23 @@
 /**
- * Standalone headless replay of the ff73479a failure against the INSTALLED
- * bundle (the artifact the GUI loads after restart): a Shadow child returns
- * status "silent" with a long explanatory body. Pre-fix this settled as
- * INVALID_STRUCTURED_OUTPUT ("Shadow returned invalid structured output");
- * the fix must settle it as silent, emit the discard warning, and write a
- * non-report-body-discarded debug record (presence/length/hash, never the
- * body). Run: pnpm vitest run tests/replay-ff73479a.spec.ts
+ * Headless replay of the ff73479a failure against the current runtime: a
+ * Shadow child returns status "silent" with a long explanatory body. Pre-fix
+ * this settled as INVALID_STRUCTURED_OUTPUT ("Shadow returned invalid
+ * structured output"); the fix must settle it as silent, emit the discard
+ * warning, and write a non-report-body-discarded debug record
+ * (presence/length/hash, never the body).
  */
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import { createUserMessage, createMessage, createToolResultMessage, CallId } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
+import ShadowMindRuntime from '../src/runtime/index.ts'
 import { MemorySettings } from './memory-settings.ts'
-
-/**
- * The INSTALLED bundle in the live web profile: the exact file the running
- * GUI loads after a restart. When that profile is absent (CI, other machines),
- * fall back to this repository's built artifact, which is copied into the
- * profile verbatim (verified byte-identical in the smoke environment).
- */
-const PROFILE_BUNDLE = 'G:/AIwork/dsh-shadow-mind-user-smoke-20260826/dsh-home/profiles/web/node_modules/@whutzefengxie-ops/dsh-shadow-mind/lib/index.js'
-type ShadowMindRuntimeModule = typeof import('../src/runtime/index.ts')
-let ShadowMindRuntime: ShadowMindRuntimeModule['default']
-
-beforeAll(async () => {
-  const { pathToFileURL } = await import('node:url')
-  // The built bundle has no .d.ts beside it; load it as the source module type.
-  let resolved: ShadowMindRuntimeModule
-  try {
-    resolved = (await import(pathToFileURL(PROFILE_BUNDLE).href)) as ShadowMindRuntimeModule
-  } catch {
-    console.warn('replay: web-profile bundle not found, falling back to local lib/')
-    // @ts-expect-error -- the built bundle intentionally has no declaration file.
-    resolved = (await import('../lib/index.js')) as ShadowMindRuntimeModule
-  }
-  ShadowMindRuntime = resolved.default
-})
 
 const dshHome = await mkdtemp(join(tmpdir(), 'dsh-shadow-replay-'))
 
@@ -49,12 +25,12 @@ afterAll(async () => {
   await rm(dshHome, { recursive: true, force: true })
 })
 
-describe('installed bundle replay: ff73479a silent + long body', () => {
+describe('ff73479a replay: silent + long body', () => {
   it('settles as silent with discard warning and hash debug record, never INVALID_STRUCTURED_OUTPUT', async () => {
     const definitionRoot = join(dshHome, 'shadow-minds')
     await mkdir(definitionRoot, { recursive: true })
-    await writeFile(join(definitionRoot, 'reviewer.md'), `---
-id: reviewer
+    await writeFile(join(definitionRoot, 'default.md'), `---
+id: default
 name: Reviewer
 enabled: true
 debug: true
@@ -91,10 +67,7 @@ Review the completed tool-using turn.
     })
     await ctx.plugin(ShadowMindRuntime, {
       dshHome,
-      heartbeatProbability: 1,
-      maxParallelShadows: 1,
       resultBatchWindowMs: 0,
-      conflictSynthesisEnabled: false,
     })
 
     const session = Session.create(SessionId('root-session'))
@@ -149,13 +122,13 @@ Review the completed tool-using turn.
     // Discard warning fires and names the shadow and status.
     expect(warn).toHaveBeenCalledWith(
       'dsh-shadow-mind: shadow %s returned %s with a non-empty content body; the body is not relayed and was discarded (run %s)',
-      'reviewer',
+      'default',
       'silent',
       expect.any(String),
     )
 
     // Debug record captures presence/length/hash, never the body text.
-    const debugText = await readFile(join(dshHome, 'shadow-minds', 'logs', 'reviewer.jsonl'), 'utf8')
+    const debugText = await readFile(join(dshHome, 'shadow-minds', 'logs', 'default.jsonl'), 'utf8')
     const records = debugText.trim().split('\n').map(line => JSON.parse(line) as Record<string, unknown>)
     const discarded = records.find(record => record['event'] === 'non-report-body-discarded')
     expect(discarded).toMatchObject({

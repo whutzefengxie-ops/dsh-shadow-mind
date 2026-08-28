@@ -17,8 +17,6 @@ export interface ShadowReportProvenance {
     readonly severity?: number;
     /** Durable sequence anchors named by the report. */
     readonly refs?: readonly number[];
-    /** Original report run ids replaced by this synthesized conclusion. */
-    readonly replacesRunIds?: readonly string[];
 }
 /** Durable source attached to one batched Shadow relay. */
 export interface ShadowReportMessageSource {

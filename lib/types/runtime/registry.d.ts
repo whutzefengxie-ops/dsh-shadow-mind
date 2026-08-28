@@ -1,10 +1,14 @@
 /**
  * Markdown/YAML Shadow definition registry with isolated diagnostics and atomic writes.
+ * The runtime schedules exactly one Shadow definition (`default`); every other
+ * Markdown file is kept read-only for diagnostics and never participates in scheduling.
  * @module @whutzefengxie-ops/dsh-shadow-mind/registry
  */
-import type { CreateShadowDefinition, ShadowCatalog, ShadowDefinition, UpdateShadowDefinition } from './types.ts';
+import type { ShadowCatalog, ShadowDefinition, ShadowDefinitionInput } from './types.ts';
 /** Valid Shadow identifiers and canonical definition filenames. */
 export declare const SHADOW_ID_PATTERN: RegExp;
+/** Built-in duty prompt used when `default.md` is created from scratch. */
+export declare const DEFAULT_SHADOW_PROMPT: string;
 /**
  * Parse one complete definition document.
  * @param source Markdown source.
@@ -42,38 +46,25 @@ export declare class ShadowRegistry {
      */
     list(): Promise<ShadowCatalog>;
     /**
-     * Create a new canonical `<id>.md` definition.
-     * @param input Complete definition fields.
+     * Load the single scheduled Shadow definition, creating `default.md` on first
+     * access. When legacy definition files exist, the default is seeded from the
+     * first one so an existing user's reviewer persona survives migration; its
+     * activation probability always converges to the 70% product default.
+     * @returns The validated default definition.
+     */
+    defaultDefinition(): Promise<ShadowDefinition>;
+    /**
+     * Persist the complete single Shadow definition as `default.md`.
+     * @param input Complete wire fields for the default Shadow.
      * @returns Validated definition with its source path.
      */
-    create(input: CreateShadowDefinition): Promise<ShadowDefinition>;
-    /**
-     * Update one existing definition and preserve its source path.
-     * @param id Existing definition id.
-     * @param patch Fields to replace.
-     * @returns Updated validated definition.
-     */
-    update(id: string, patch: UpdateShadowDefinition): Promise<ShadowDefinition>;
-    /**
-     * Set one existing definition's enabled flag.
-     * @param id Existing definition id.
-     * @param enabled Next scheduling state.
-     * @returns Updated validated definition.
-     */
-    setEnabled(id: string, enabled: boolean): Promise<ShadowDefinition>;
-    /**
-     * Delete one definition file while preserving its debug log.
-     * @param id Existing definition id.
-     */
-    delete(id: string): Promise<void>;
+    saveDefault(input: ShadowDefinitionInput): Promise<ShadowDefinition>;
     /**
      * Append one JSON Lines debug record for a definition that opted in.
      * @param id Definition id used as the log filename.
      * @param record Diagnostic record to append.
      */
     appendDebug(id: string, record: Record<string, unknown>): Promise<void>;
-    /** Find one current winning definition or fail loud. */
-    private expect;
     /** Serialize same-id mutations while allowing independent ids to overlap. */
     private mutate;
 }

@@ -2,22 +2,27 @@ import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { Config, ShadowRegistry, parseShadowDefinition } from '../src/runtime/index.ts'
-import type { CreateShadowDefinition } from '../src/runtime/index.ts'
+import { Config, DEFAULT_SHADOW_ID, DEFAULT_SHADOW_PROMPT, ShadowRegistry, parseShadowDefinition } from '../src/runtime/index.ts'
+import type { ShadowDefinitionInput } from '../src/runtime/index.ts'
 
-function input(id: string): CreateShadowDefinition {
+function input(overrides: Partial<ShadowDefinitionInput> = {}): ShadowDefinitionInput {
   return {
-    id,
-    name: `Shadow ${id}`,
+    id: DEFAULT_SHADOW_ID,
+    name: 'Shadow',
     enabled: true,
     debug: false,
-    activationProbability: 0.5,
+    activationProbability: 0.7,
     activeForModels: ['mock/*'],
     runWithModel: 'mock/shadow',
     reasoningEffort: 'low',
     timeoutSeconds: 12,
     tools: ['web_search'],
+    capture: 'full',
+    context: 'standard',
+    thinkFirst: false,
+    holdout: false,
     prompt: 'Review architecture risks.',
+    ...overrides,
   }
 }
 
@@ -38,9 +43,6 @@ describe('parseShadowDefinition', () => {
       'capture: since-compaction',
       'context: minimal',
       'think_first: true',
-      'pre_filter: [tool-failure]',
-      'boost_filter: [long-output]',
-      'boost_factor: 2.5',
       'holdout: true',
       '---',
       '',
@@ -51,12 +53,28 @@ describe('parseShadowDefinition', () => {
       activationProbability: 0.75, runWithModel: 'mock/shadow',
       reasoningEffort: 'low', timeoutSeconds: 9,
       capture: 'since-compaction', context: 'minimal', thinkFirst: true,
-      preFilters: ['tool-failure'], boostFilters: ['long-output'], boostFactor: 2.5,
       holdout: true,
       prompt: 'Inspect the design.',
     })
     expect(definition.activeForModels).toEqual(['mock/*'])
     expect(definition.tools).toEqual(['web_search'])
+  })
+
+  it('tolerates legacy predicate frontmatter keys without applying them', () => {
+    const definition = parseShadowDefinition([
+      '---',
+      'id: legacy',
+      'pre_filter: [tool-failure]',
+      'boost_filter: [long-output]',
+      'boost_factor: 2.5',
+      '---',
+      '',
+      'Legacy prompt.',
+    ].join('\n'), 'C:/defs/legacy.md')
+    expect(definition.id).toBe('legacy')
+    expect(definition).not.toHaveProperty('preFilters')
+    expect(definition).not.toHaveProperty('boostFilters')
+    expect(definition).not.toHaveProperty('boostFactor')
   })
 
   it.each([
@@ -80,9 +98,6 @@ describe('parseShadowDefinition', () => {
     ['---\nid: a\ncapture: recent\n---\nbody', 'capture must be one of'],
     ['---\nid: a\ncontext: inherited\n---\nbody', 'context must be one of'],
     ['---\nid: a\nthink_first: yes\n---\nbody', 'think_first must be a boolean'],
-    ['---\nid: a\npre_filter: [unknown]\n---\nbody', 'unknown pre_filter'],
-    ['---\nid: a\nboost_filter: [unknown]\n---\nbody', 'unknown boost_filter'],
-    ['---\nid: a\nboost_factor: 0.5\n---\nbody', 'boost_factor'],
     ['---\nid: a\nholdout: yes\n---\nbody', 'holdout must be a boolean'],
     ['---\nid: [\n---\nbody', 'invalid YAML frontmatter'],
     ['---\nid: a\n---\n   ', 'body must be non-empty'],
@@ -92,11 +107,22 @@ describe('parseShadowDefinition', () => {
 })
 
 describe('Shadow settings', () => {
-  it('validates default model routes before the runtime starts', () => {
-    expect(Config({ defaultShadowModel: 'provider/org/model' }).defaultShadowModel)
-      .toBe('provider/org/model')
-    expect(() => Config({ defaultShadowModel: 'model-only' })).toThrow()
-    expect(() => Config({ defaultShadowModel: 'provider/has whitespace' })).toThrow()
+  it('defaults the Shadow deadline to 10 minutes so deep reviews stop timing out', () => {
+    expect(Config({}).defaultShadowTimeoutSeconds).toBe(600)
+  })
+
+  it('validates frugal model routes before the runtime starts', () => {
+    expect(Config({
+      sessionShadowSoftBudgetChars: 100,
+      sessionShadowHardBudgetChars: 1_000,
+      frugalShadowModel: 'provider/org/model',
+    }).frugalShadowModel).toBe('provider/org/model')
+    expect(() => Config({
+      sessionShadowSoftBudgetChars: 100,
+      sessionShadowHardBudgetChars: 1_000,
+      frugalShadowModel: 'model-only',
+    })).toThrow()
+    expect(() => Config({ frugalShadowModel: 'provider/org/model' })).toThrow('sessionShadowSoftBudgetChars')
   })
 
   it('validates stagnation windows, effort ladders, and the frugal budget tier', () => {
@@ -125,61 +151,125 @@ describe('Shadow settings', () => {
 })
 
 describe('ShadowRegistry', () => {
-  it('creates, updates, enables, deletes, and preserves debug logs', async () => {
+  it('auto-creates the default definition with the 70% product probability', async () => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-shadow-registry-'))
     try {
       const registry = new ShadowRegistry(home)
-      await expect(registry.create(input('Bad'))).rejects.toThrow('shadow id must match')
-      await expect(registry.update('missing', { prompt: 'none' })).rejects.toThrow('does not exist')
-      const minimal = await registry.create({
-        id: 'minimal',
-        name: 'Minimal',
+      const created = await registry.defaultDefinition()
+      expect(created).toMatchObject({
+        id: DEFAULT_SHADOW_ID,
+        name: 'Shadow',
         enabled: true,
-        debug: false,
-        activationProbability: 0.3,
-        activeForModels: [],
-        tools: [],
-        prompt: 'Minimal prompt.',
+        activationProbability: 0.7,
+        capture: 'full',
+        context: 'standard',
+        thinkFirst: false,
+        holdout: false,
+        prompt: DEFAULT_SHADOW_PROMPT,
       })
-      expect(minimal.id).toBe('minimal')
-      expect(minimal).toMatchObject({
-        capture: 'full', context: 'standard', thinkFirst: false,
-        preFilters: [], boostFilters: [], boostFactor: 1, holdout: false,
+      expect(await readFile(join(registry.root, `${DEFAULT_SHADOW_ID}.md`), 'utf8'))
+        .toContain('activation_probability: 0.7')
+      expect((await registry.defaultDefinition()).prompt).toBe(DEFAULT_SHADOW_PROMPT)
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('seeds the default from the first legacy definition while converging probability to 70%', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-shadow-registry-'))
+    try {
+      const registry = new ShadowRegistry(home)
+      await mkdir(registry.root, { recursive: true })
+      await writeFile(join(registry.root, 'a-legacy.md'), [
+        '---',
+        'id: contrarian',
+        'name: Contrarian',
+        'enabled: true',
+        'activation_probability: 0.3',
+        'timeout_seconds: 300',
+        'capture: since-compaction',
+        '---',
+        '',
+        'Challenge the strongest claim.',
+      ].join('\n'))
+      await writeFile(join(registry.root, 'b-legacy.md'), [
+        '---',
+        'id: hacker',
+        'name: Hacker',
+        'activation_probability: 0.2',
+        '---',
+        '',
+        'Inspect failure paths.',
+      ].join('\n'))
+      const created = await registry.defaultDefinition()
+      expect(created).toMatchObject({
+        id: DEFAULT_SHADOW_ID,
+        name: 'Contrarian',
+        activationProbability: 0.7,
+        capture: 'since-compaction',
+        prompt: 'Challenge the strongest claim.',
       })
-      const minimalUpdated = await registry.update('minimal', { name: 'Minimal updated' })
-      expect(minimalUpdated.name).toBe('Minimal updated')
-      expect(minimalUpdated).not.toHaveProperty('runWithModel')
-      expect(minimalUpdated).not.toHaveProperty('reasoningEffort')
-      expect(minimalUpdated).not.toHaveProperty('timeoutSeconds')
-      await registry.delete('minimal')
-      const created = await registry.create(input('audit'))
-      expect(created.id).toBe('audit')
-      await expect(registry.create(input('audit'))).rejects.toThrow('already exists')
-      expect((await registry.list()).definitions).toHaveLength(1)
-      const updated = await registry.update('audit', { prompt: 'Updated.', enabled: false })
-      expect(updated).toMatchObject({ prompt: 'Updated.', enabled: false })
-      const conditioned = await registry.update('audit', {
+      // A stale legacy timeout must not override the new 10-minute default.
+      expect(created).not.toHaveProperty('timeoutSeconds')
+      // Legacy files stay on disk, read-only, and never scheduled.
+      const catalog = await registry.list()
+      expect(catalog.definitions.map(item => item.id).sort()).toEqual(['contrarian', DEFAULT_SHADOW_ID, 'hacker'])
+      expect(await readFile(join(registry.root, 'a-legacy.md'), 'utf8')).toContain('activation_probability: 0.3')
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('round-trips the complete default definition through saveDefault', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-shadow-registry-'))
+    try {
+      const registry = new ShadowRegistry(home)
+      await registry.defaultDefinition()
+      const saved = await registry.saveDefault(input({
+        name: 'Auditor',
+        enabled: false,
+        debug: true,
+        activationProbability: 0.4,
         capture: 'since-compaction',
         context: 'minimal',
         thinkFirst: true,
-        preFilters: ['last-report-covers'],
-        boostFilters: ['repeated-failure'],
-        boostFactor: 3,
-      })
-      expect(conditioned).toMatchObject({
+      }))
+      expect(saved).toMatchObject({
+        id: DEFAULT_SHADOW_ID,
+        name: 'Auditor',
+        enabled: false,
+        debug: true,
+        activationProbability: 0.4,
         capture: 'since-compaction',
         context: 'minimal',
         thinkFirst: true,
-        preFilters: ['last-report-covers'],
-        boostFilters: ['repeated-failure'],
-        boostFactor: 3,
       })
-      await registry.setEnabled('audit', true)
-      await registry.appendDebug('audit', { status: 'report' })
-      await expect(registry.appendDebug('../escape', { status: 'report' })).rejects.toThrow('shadow id must match')
-      await registry.delete('audit')
-      expect((await registry.list()).definitions).toEqual([])
-      expect(await readFile(join(registry.logRoot, 'audit.jsonl'), 'utf8')).toContain('"status":"report"')
+      const reloaded = (await registry.list()).definitions
+        .find(item => item.id === DEFAULT_SHADOW_ID)
+      expect(reloaded).toMatchObject({ name: 'Auditor', enabled: false })
+    } finally {
+      await rm(home, { recursive: true, force: true })
+    }
+  })
+
+  it('rejects non-default ids and preserves file-level holdout on save', async () => {
+    const home = await mkdtemp(join(tmpdir(), 'dsh-shadow-registry-'))
+    try {
+      const registry = new ShadowRegistry(home)
+      await mkdir(registry.root, { recursive: true })
+      await writeFile(registry.holdoutKeysPath, JSON.stringify({ [DEFAULT_SHADOW_ID]: ['SECRET'] }))
+      await writeFile(join(registry.root, `${DEFAULT_SHADOW_ID}.md`), [
+        '---',
+        'id: default',
+        'holdout: true',
+        '---',
+        '',
+        'Held prompt.',
+      ].join('\n'))
+      await expect(registry.saveDefault(input({ id: 'other' }))).rejects.toThrow('only the default Shadow')
+      const saved = await registry.saveDefault(input({ name: 'Kept', prompt: 'New prompt.' }))
+      expect(saved.holdout).toBe(true)
+      expect(await readFile(join(registry.root, `${DEFAULT_SHADOW_ID}.md`), 'utf8')).toContain('holdout: true')
     } finally {
       await rm(home, { recursive: true, force: true })
     }
@@ -194,7 +284,7 @@ describe('ShadowRegistry', () => {
         name: 'default-id',
         enabled: true,
         debug: false,
-        activationProbability: 0.3,
+        activationProbability: 0.7,
         activeForModels: [],
         tools: [],
       })
@@ -218,22 +308,6 @@ describe('ShadowRegistry', () => {
       expect(catalog.definitions.map(item => item.prompt)).toEqual(['first'])
       expect(catalog.diagnostics).toHaveLength(2)
       expect(catalog.diagnostics.map(item => item.error).join('\n')).toMatch(/duplicate id[\s\S]*must start/)
-    } finally {
-      await rm(home, { recursive: true, force: true })
-    }
-  })
-
-  it('serializes same-id mutations and never overwrites an invalid existing path', async () => {
-    const home = await mkdtemp(join(tmpdir(), 'dsh-shadow-registry-'))
-    try {
-      const registry = new ShadowRegistry(home)
-      await registry.create(input('audit'))
-      const first = registry.update('audit', { name: 'First' })
-      const second = registry.update('audit', { prompt: 'Second' })
-      await Promise.all([first, second])
-      expect((await registry.list()).definitions[0]).toMatchObject({ name: 'First', prompt: 'Second' })
-      await writeFile(join(registry.root, 'broken.md'), 'broken')
-      await expect(registry.create(input('broken'))).rejects.toThrow('path already exists')
     } finally {
       await rm(home, { recursive: true, force: true })
     }
@@ -266,9 +340,6 @@ describe('ShadowRegistry', () => {
     const home = await mkdtemp(join(tmpdir(), 'dsh-shadow-registry-'))
     try {
       const registry = new ShadowRegistry(home)
-      const held = { ...input('held'), holdout: true }
-      await expect(registry.create(held)).rejects.toThrow('needs')
-
       await mkdir(registry.root, { recursive: true })
       await writeFile(join(registry.root, 'manual.md'), '---\nid: manual\nholdout: true\n---\nmanual prompt\n')
       expect((await registry.list()).diagnostics[0]?.error).toContain('needs')
@@ -276,38 +347,28 @@ describe('ShadowRegistry', () => {
       for (const invalid of [
         '{',
         '[]',
-        '{"held": []}',
-        '{"held": [""]}',
-        '{"held": ["   "]}',
-        '{"held": ["secret", "secret"]}',
+        `{"${DEFAULT_SHADOW_ID}": []}`,
+        `{"${DEFAULT_SHADOW_ID}": [""]}`,
+        `{"${DEFAULT_SHADOW_ID}": ["   "]}`,
+        `{"${DEFAULT_SHADOW_ID}": ["secret", "secret"]}`,
       ]) {
         await writeFile(registry.holdoutKeysPath, invalid)
-        await expect(registry.create(held)).rejects.toThrow()
+        await expect(registry.saveDefault(input({ holdout: true }))).rejects.toThrow()
       }
 
       await writeFile(registry.holdoutKeysPath, JSON.stringify({
-        held: ['SCORING_COMMAND', 'EXPECTED_OUTPUT'],
+        [DEFAULT_SHADOW_ID]: ['SCORING_COMMAND', 'EXPECTED_OUTPUT'],
         manual: ['MANUAL_SECRET'],
       }))
-      const created = await registry.create(held)
-      expect(created).toMatchObject({ id: 'held', holdout: true })
-      expect(created).not.toHaveProperty('holdoutKeys')
-      expect(await registry.holdoutKeys('held')).toEqual(['SCORING_COMMAND', 'EXPECTED_OUTPUT'])
-      expect(await readFile(created.sourcePath, 'utf8')).toContain('holdout: true')
+      const saved = await registry.saveDefault(input({ holdout: true }))
+      expect(saved).toMatchObject({ id: DEFAULT_SHADOW_ID, holdout: true })
+      expect(saved).not.toHaveProperty('holdoutKeys')
+      expect(await registry.holdoutKeys(DEFAULT_SHADOW_ID)).toEqual(['SCORING_COMMAND', 'EXPECTED_OUTPUT'])
+      expect(await readFile(saved.sourcePath, 'utf8')).toContain('holdout: true')
       expect((await registry.list()).definitions).toEqual(expect.arrayContaining([
-        expect.objectContaining({ id: 'held', holdout: true }),
+        expect.objectContaining({ id: DEFAULT_SHADOW_ID, holdout: true }),
         expect.objectContaining({ id: 'manual', holdout: true }),
       ]))
-
-      const plain = await registry.create(input('plain'))
-      await expect(registry.update('plain', { holdout: true })).rejects.toThrow('needs')
-      await writeFile(registry.holdoutKeysPath, JSON.stringify({
-        held: ['SCORING_COMMAND'],
-        manual: ['MANUAL_SECRET'],
-        plain: ['PLAIN_SECRET'],
-      }))
-      await expect(registry.update(plain.id, { holdout: true }))
-        .resolves.toMatchObject({ holdout: true })
     } finally {
       await rm(home, { recursive: true, force: true })
     }
@@ -318,7 +379,7 @@ describe('ShadowRegistry', () => {
     try {
       const registry = new ShadowRegistry(home)
       await mkdir(registry.holdoutKeysPath, { recursive: true })
-      await expect(registry.holdoutKeys('held')).rejects.toThrow()
+      await expect(registry.holdoutKeys(DEFAULT_SHADOW_ID)).rejects.toThrow()
     } finally {
       await rm(home, { recursive: true, force: true })
     }

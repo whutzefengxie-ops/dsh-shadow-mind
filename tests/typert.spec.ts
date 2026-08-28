@@ -93,8 +93,6 @@ describe('Shadow Remote descriptors', () => {
       pendingSchedules: 0,
       epoch: 0,
       totalRuns: 1,
-      prefilterSkips: 2,
-      effectiveProbabilities: [{ shadowId: 'reviewer', probability: 1 }],
       valueLoop: [{ shadowId: 'reviewer', challenges: 1, adopted: 0, rejected: 0, ignored: 1 }],
       spentChars: 320,
       budgetTier: 'frugal',
@@ -112,13 +110,6 @@ describe('Shadow Remote descriptors', () => {
         capturedThroughSeq: 20,
         finishedAt: '2026-08-25T00:00:01.000Z',
       }],
-      synthesisRuns: 1,
-      synthesisFailures: 1,
-      lastSynthesisFailure: 'timeout',
-      gateDenies: 2,
-      gateAllows: 5,
-      gateJudgeRuns: 3,
-      gateJudgeFailures: 1,
       lastRun: {
         runId: 'run-1',
         shadowId: 'reviewer',
@@ -143,9 +134,9 @@ describe('Shadow Remote descriptors', () => {
     }
   })
 
-  it('preserves review conditioning across catalog and definition mutations', () => {
+  it('preserves review conditioning across catalog and the default-definition save', () => {
     const shared = {
-      id: 'reviewer',
+      id: 'default',
       name: 'Reviewer',
       enabled: true,
       debug: false,
@@ -155,9 +146,6 @@ describe('Shadow Remote descriptors', () => {
       capture: 'since-compaction',
       context: 'minimal',
       thinkFirst: true,
-      preFilters: ['low-signal'],
-      boostFilters: ['long-output'],
-      boostFactor: 1.5,
       holdout: false,
       prompt: 'Review the anchored turn.',
     }
@@ -167,11 +155,12 @@ describe('Shadow Remote descriptors', () => {
       reasoningEffort: null,
       timeoutSeconds: null,
     }
-    const definition = { ...shared, sourcePath: '/definitions/reviewer.md' }
+    const definition = { ...shared, sourcePath: '/definitions/default.md' }
     const catalog = {
       definitionRoot: '/definitions',
       definitions: [definition],
       diagnostics: [],
+      defaultShadowTimeoutSeconds: 600,
       modelCatalog: {
         groups: [{
           id: 'deepseek-official',
@@ -194,19 +183,13 @@ describe('Shadow Remote descriptors', () => {
       if (catalogDescriptor?.result.mode !== 'strict') throw new Error('catalog must use a strict result codec')
       expect(catalogDescriptor.result.schema.parse(catalog)).toEqual(catalog)
 
-      for (const method of ['create', 'update'] as const) {
-        const descriptor = descriptors.find(candidate => candidate.method === method)
-        if (descriptor === undefined) throw new Error(`${method} descriptor is required`)
-        const parameter = descriptor.parameters[0]
-        if (parameter?.codec.mode !== 'strict') throw new Error(`${method} input must use a strict codec`)
-        if (descriptor.result.mode !== 'strict') throw new Error(`${method} result must use a strict codec`)
-        expect(parameter.codec.schema.parse(input)).toEqual(input)
-        expect(descriptor.result.schema.parse(definition)).toEqual(definition)
-      }
-
-      const setEnabled = descriptors.find(candidate => candidate.method === 'setEnabled')
-      if (setEnabled?.result.mode !== 'strict') throw new Error('setEnabled must use a strict result codec')
-      expect(setEnabled.result.schema.parse(definition)).toEqual(definition)
+      const descriptor = descriptors.find(candidate => candidate.method === 'saveDefault')
+      if (descriptor === undefined) throw new Error('saveDefault descriptor is required')
+      const parameter = descriptor.parameters[0]
+      if (parameter?.codec.mode !== 'strict') throw new Error('saveDefault input must use a strict codec')
+      if (descriptor.result.mode !== 'strict') throw new Error('saveDefault result must use a strict codec')
+      expect(parameter.codec.schema.parse(input)).toEqual(input)
+      expect(descriptor.result.schema.parse(definition)).toEqual(definition)
     }
   })
 
@@ -217,20 +200,12 @@ describe('Shadow Remote descriptors', () => {
       pendingSchedules: 0,
       epoch: 0,
       totalRuns: 2,
-      prefilterSkips: 0,
-      effectiveProbabilities: [],
       valueLoop: [],
       spentChars: 0,
       budgetTier: 'standard',
       cooldowns: [],
       pendingEscalations: [],
       recentReviews: [],
-      synthesisRuns: 0,
-      synthesisFailures: 0,
-      gateDenies: 0,
-      gateAllows: 0,
-      gateJudgeRuns: 0,
-      gateJudgeFailures: 0,
     }
 
     for (const descriptors of descriptorSets) {

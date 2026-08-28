@@ -1,37 +1,28 @@
-import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import type { ObservableSnapshot, SessionId, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import { Component, useEffect, useMemo, useState, type ReactNode } from 'react'
+import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {
   ShadowAdministrationSnapshot,
   ShadowDefinition,
   ShadowDefinitionInput,
-  ShadowMindSettings,
   ShadowMindStatus,
   ShadowRunOutcome,
 } from '../runtime/types.ts'
+import { DEFAULT_SHADOW_ID } from '../runtime/types.ts'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ShadowMindLocaleKey } from './locales.ts'
-import { SHADOW_TEMPLATES, type ShadowTemplate } from './templates.ts'
+import { SHADOW_TEMPLATES } from './templates.ts'
 import { ModelRouteSelect } from './ModelRouteSelect.tsx'
+import { ProbabilitySlider, Switch } from './controls.tsx'
+import { ToastStack, useToasts } from './ToastStack.tsx'
 import css from './ShadowMindSettingsTab.module.css'
 
 /** Browser operations injected by the Shadow Mind client plugin. */
 export interface ShadowMindSettingsTabInjected {
-  hooks: {
-    /** Live settings snapshot bound by the renderer as useSettings. */
-    settings: ObservableSnapshot<SettingsScopeSnapshot<ShadowMindSettings>>
-  }
-  /** Persist a complete settings form. */
-  saveSettings: (next: ShadowMindSettings) => Promise<void>
+  /** Persist the complete single default Shadow definition. */
+  saveDefault: (input: ShadowDefinitionInput) => Promise<ShadowDefinition>
   catalog: () => Promise<ShadowAdministrationSnapshot>
-  create: (input: ShadowDefinitionInput) => Promise<ShadowDefinition>
-  update: (input: ShadowDefinitionInput) => Promise<ShadowDefinition>
-  setEnabled: (id: string, enabled: boolean) => Promise<ShadowDefinition>
-  delete: (id: string) => Promise<void>
   status: (sessionId: SessionId) => Promise<ShadowMindStatus>
-  pause: (sessionId: SessionId) => Promise<ShadowMindStatus>
-  resume: (sessionId: SessionId) => Promise<ShadowMindStatus>
-  toggle: (sessionId: SessionId) => Promise<ShadowMindStatus>
 }
 
 /** Full component props assembled by the Settings slot renderer. */
@@ -77,16 +68,13 @@ class ShadowMindSettingsTabBoundary extends Component<
   }
 }
 
-/** String-backed form state for every resolved Shadow Mind setting. */
-export type SettingsDraft = Record<keyof ShadowMindSettings, string>
-
-/** String-backed form state for one editable Shadow definition. */
+/** String-backed form state for the single default Shadow definition. */
 export interface DefinitionDraft {
-  id: string
   name: string
   enabled: boolean
   debug: boolean
-  activationProbability: string
+  /** Slider percent from 10 through 100 in steps of 10. */
+  activationPercent: number
   activeForModels: string
   runWithModel: string
   reasoningEffort: string
@@ -95,212 +83,23 @@ export interface DefinitionDraft {
   capture: ShadowDefinition['capture']
   context: ShadowDefinition['context']
   thinkFirst: boolean
-  preFilters: string
-  boostFilters: string
-  boostFactor: string
   holdout: boolean
   prompt: string
 }
 
-const NUMBER_FIELDS = [
-  'heartbeatProbability',
-  'maxParallelShadows',
-  'defaultShadowTimeoutSeconds',
-  'headlessDrainTimeoutSeconds',
-  'resultBatchWindowMs',
-  'randomSeed',
-  'maxPromptChars',
-  'maxReportChars',
-  'longOutputBoostChars',
-  'lastReportCoversCount',
-  'repeatedFailureBoostThreshold',
-  'valueLoopWindowTurns',
-  'reviewWindowSize',
-  'spinningRepeatCount',
-  'oscillationPeriods',
-  'noDriftRepeatCount',
-  'diminishingWindowSize',
-  'diminishingNoveltyThreshold',
-  'stagnationCooldownSeconds',
-  'sessionShadowSoftBudgetChars',
-  'sessionShadowHardBudgetChars',
-  'staleReportDecay',
-  'conflictSynthesisTimeoutSeconds',
-  'commandGateJudgeTimeoutSeconds',
-  'commandGateMaxParallel',
-  'commandGateVerdictTtlSeconds',
-] as const satisfies readonly (keyof ShadowMindSettings)[]
-
-const BOOLEAN_FIELDS = [
-  'preferIndependentVendor',
-  'valueLoopEnabled',
-  'stagnationEscalationEnabled',
-  'conflictSynthesisEnabled',
-] as const satisfies readonly (keyof ShadowMindSettings)[]
-
-/** Multi-line list settings rendered as one-name-per-line textareas. */
-const LIST_FIELDS = [
-  'commandGateTools',
-  'commandGateDenyPatterns',
-  'commandGateAllowPatterns',
-  'commandGateProtectedProcesses',
-  'commandGateProtectedServices',
-] as const satisfies readonly (keyof ShadowMindSettings)[]
-
-/** Optional free-text environment declaration. */
-const CONTEXT_FIELDS = [
-  'commandGateContext',
-] as const satisfies readonly (keyof ShadowMindSettings)[]
-
-/** Ordered text/numeric global settings rendered as simple fields. */
-const SETTING_TEXT_FIELDS = [
-  ['heartbeatProbability', 'heartbeatProbabilityHint'],
-  ['maxParallelShadows', 'maxParallelShadowsHint'],
-  ['defaultShadowTimeoutSeconds', 'defaultShadowTimeoutSecondsHint'],
-  ['headlessDrainTimeoutSeconds', 'headlessDrainTimeoutSecondsHint'],
-  ['resultBatchWindowMs', 'resultBatchWindowMsHint'],
-  ['randomSeed', 'randomSeedHint'],
-  ['maxPromptChars', 'maxPromptCharsHint'],
-  ['maxReportChars', 'maxReportCharsHint'],
-  ['longOutputBoostChars', 'longOutputBoostCharsHint'],
-  ['lastReportCoversCount', 'lastReportCoversCountHint'],
-  ['repeatedFailureBoostThreshold', 'repeatedFailureBoostThresholdHint'],
-  ['valueLoopWindowTurns', 'valueLoopWindowTurnsHint'],
-  ['reviewWindowSize', 'reviewWindowSizeHint'],
-  ['spinningRepeatCount', 'spinningRepeatCountHint'],
-  ['oscillationPeriods', 'oscillationPeriodsHint'],
-  ['noDriftRepeatCount', 'noDriftRepeatCountHint'],
-  ['diminishingWindowSize', 'diminishingWindowSizeHint'],
-  ['diminishingNoveltyThreshold', 'diminishingNoveltyThresholdHint'],
-  ['stagnationCooldownSeconds', 'stagnationCooldownSecondsHint'],
-  ['sessionShadowSoftBudgetChars', 'sessionShadowSoftBudgetCharsHint'],
-  ['sessionShadowHardBudgetChars', 'sessionShadowHardBudgetCharsHint'],
-  ['staleReportDecay', 'staleReportDecayHint'],
-  ['conflictSynthesisTimeoutSeconds', 'conflictSynthesisTimeoutSecondsHint'],
-  ['commandGateJudgeTimeoutSeconds', 'commandGateJudgeTimeoutSecondsHint'],
-  ['commandGateMaxParallel', 'commandGateMaxParallelHint'],
-  ['commandGateVerdictTtlSeconds', 'commandGateVerdictTtlSecondsHint'],
-] as const satisfies readonly (readonly [keyof ShadowMindSettings, ShadowMindLocaleKey])[]
-
-/** Global settings shown by default; every other field lives in the advanced disclosure. */
-const BASIC_SETTING_FIELDS = new Set<keyof ShadowMindSettings>([
-  'heartbeatProbability',
-  'maxParallelShadows',
-  'defaultShadowTimeoutSeconds',
-])
-
-const OUTCOME_KEYS = {
-  report: 'outcomeReport',
-  silent: 'outcomeSilent',
-  not_relevant: 'outcomeNotRelevant',
-  aborted: 'outcomeAborted',
-  failed: 'outcomeFailed',
-} as const satisfies Record<ShadowRunOutcome, ShadowMindLocaleKey>
-
-/** Render one settings value as editable text. */
-export function settingsDraft(value: ShadowMindSettings): SettingsDraft {
-  return {
-    heartbeatProbability: String(value.heartbeatProbability),
-    maxParallelShadows: String(value.maxParallelShadows),
-    defaultShadowTimeoutSeconds: String(value.defaultShadowTimeoutSeconds),
-    headlessDrainTimeoutSeconds: String(value.headlessDrainTimeoutSeconds),
-    resultBatchWindowMs: String(value.resultBatchWindowMs),
-    defaultShadowModel: value.defaultShadowModel ?? '',
-    defaultReasoningEffort: value.defaultReasoningEffort ?? '',
-    synthesisModel: value.synthesisModel ?? '',
-    synthesisReasoningEffort: value.synthesisReasoningEffort ?? '',
-    argumentDisclosure: value.argumentDisclosure,
-    randomSeed: value.randomSeed === undefined ? '' : String(value.randomSeed),
-    maxPromptChars: String(value.maxPromptChars),
-    maxReportChars: String(value.maxReportChars),
-    preferIndependentVendor: String(value.preferIndependentVendor),
-    longOutputBoostChars: String(value.longOutputBoostChars),
-    lastReportCoversCount: String(value.lastReportCoversCount),
-    repeatedFailureBoostThreshold: String(value.repeatedFailureBoostThreshold),
-    valueLoopEnabled: String(value.valueLoopEnabled),
-    valueLoopWindowTurns: String(value.valueLoopWindowTurns),
-    reviewWindowSize: String(value.reviewWindowSize),
-    spinningRepeatCount: String(value.spinningRepeatCount),
-    oscillationPeriods: String(value.oscillationPeriods),
-    noDriftRepeatCount: String(value.noDriftRepeatCount),
-    diminishingWindowSize: String(value.diminishingWindowSize),
-    diminishingNoveltyThreshold: String(value.diminishingNoveltyThreshold),
-    stagnationCooldownSeconds: String(value.stagnationCooldownSeconds),
-    stagnationEscalationEnabled: String(value.stagnationEscalationEnabled),
-    reasoningEffortLadder: value.reasoningEffortLadder.join('\n'),
-    sessionShadowSoftBudgetChars: value.sessionShadowSoftBudgetChars === undefined
-      ? '' : String(value.sessionShadowSoftBudgetChars),
-    sessionShadowHardBudgetChars: value.sessionShadowHardBudgetChars === undefined
-      ? '' : String(value.sessionShadowHardBudgetChars),
-    frugalShadowModel: value.frugalShadowModel ?? '',
-    staleReportDecay: String(value.staleReportDecay),
-    conflictSynthesisEnabled: String(value.conflictSynthesisEnabled),
-    conflictSynthesisTimeoutSeconds: String(value.conflictSynthesisTimeoutSeconds),
-    commandGateEnabled: String(value.commandGateEnabled),
-    commandGateTools: value.commandGateTools.join('\n'),
-    commandGateScope: value.commandGateScope,
-    commandGateDenyPatterns: value.commandGateDenyPatterns.join('\n'),
-    commandGateAllowPatterns: value.commandGateAllowPatterns.join('\n'),
-    commandGateProtectedProcesses: value.commandGateProtectedProcesses.join('\n'),
-    commandGateProtectedServices: value.commandGateProtectedServices.join('\n'),
-    commandGateContext: value.commandGateContext ?? '',
-    commandGateModel: value.commandGateModel ?? '',
-    commandGateReasoningEffort: value.commandGateReasoningEffort ?? '',
-    commandGateJudgeTimeoutSeconds: String(value.commandGateJudgeTimeoutSeconds),
-    commandGateOnJudgeFailure: value.commandGateOnJudgeFailure,
-    commandGateMaxParallel: String(value.commandGateMaxParallel),
-    commandGateVerdictTtlSeconds: String(value.commandGateVerdictTtlSeconds),
-  }
-}
-
-/** Build an empty create form. */
-export function emptyDefinition(): DefinitionDraft {
-  return {
-    id: '',
-    name: '',
-    enabled: true,
-    debug: false,
-    activationProbability: '0.3',
-    activeForModels: '',
-    runWithModel: '',
-    reasoningEffort: '',
-    timeoutSeconds: '',
-    tools: '',
-    capture: 'full',
-    context: 'standard',
-    thinkFirst: false,
-    preFilters: '',
-    boostFilters: '',
-    boostFactor: '1',
-    // Not surfaced in the editor: enabling holdout requires an operator-managed
-    // holdout-keys.json sidecar that the Web form cannot administer. New
-    // definitions always start with holdout off; the draft field only
-    // round-trips a loaded value so saving never clears it.
-    holdout: false,
-    prompt: '',
-  }
-}
-
-/** Prefill the create form from one reference template. */
-export function templateDraft(template: ShadowTemplate, name: string): DefinitionDraft {
-  return {
-    ...emptyDefinition(),
-    id: template.id,
-    name,
-    activationProbability: String(template.activationProbability),
-    capture: template.capture,
-    prompt: template.prompt,
-  }
+/** Round one stored probability into the closest slider step. */
+export function toActivationPercent(probability: number): number {
+  const percent = Math.round(probability * 100 / 10) * 10
+  return Math.min(100, Math.max(10, percent))
 }
 
 /** Render one persisted definition into the complete edit form. */
 export function definitionDraft(value: ShadowDefinition): DefinitionDraft {
   return {
-    id: value.id,
     name: value.name,
     enabled: value.enabled,
     debug: value.debug,
-    activationProbability: String(value.activationProbability),
+    activationPercent: toActivationPercent(value.activationProbability),
     activeForModels: value.activeForModels.join('\n'),
     runWithModel: value.runWithModel ?? '',
     reasoningEffort: value.reasoningEffort ?? '',
@@ -309,9 +108,6 @@ export function definitionDraft(value: ShadowDefinition): DefinitionDraft {
     capture: value.capture,
     context: value.context,
     thinkFirst: value.thinkFirst,
-    preFilters: value.preFilters.join('\n'),
-    boostFilters: value.boostFilters.join('\n'),
-    boostFactor: String(value.boostFactor),
     holdout: value.holdout,
     prompt: value.prompt,
   }
@@ -338,28 +134,18 @@ function finite(text: string): number | undefined {
   return Number.isFinite(value) ? value : undefined
 }
 
-/** Retain an integer only when it meets the field's lower bound. */
-function integerAtLeast(value: number | undefined, minimum: number): number | undefined {
-  return value !== undefined && Number.isInteger(value) && value >= minimum ? value : undefined
-}
-
-/** Validate and convert a complete Shadow definition form. */
+/** Validate and convert the default Shadow definition form. */
 export function definitionInput(draft: DefinitionDraft): ShadowDefinitionInput | undefined {
-  const probability = finite(draft.activationProbability)
   const timeout = finite(draft.timeoutSeconds)
-  const boostFactor = finite(draft.boostFactor)
-  if (!/^[a-z0-9][a-z0-9_-]*$/u.test(draft.id)
-    || draft.name.trim() === ''
+  if (draft.name.trim() === ''
     || draft.prompt.trim() === ''
-    || probability === undefined || probability < 0 || probability > 1
-    || boostFactor === undefined || boostFactor < 1
     || (draft.timeoutSeconds.trim() !== '' && (timeout === undefined || timeout <= 0))) return undefined
   return {
-    id: draft.id,
+    id: DEFAULT_SHADOW_ID,
     name: draft.name.trim(),
     enabled: draft.enabled,
     debug: draft.debug,
-    activationProbability: probability,
+    activationProbability: draft.activationPercent / 100,
     activeForModels: lines(draft.activeForModels),
     runWithModel: normalizeRoute(draft.runWithModel) || null,
     reasoningEffort: draft.reasoningEffort.trim() || null,
@@ -368,286 +154,45 @@ export function definitionInput(draft: DefinitionDraft): ShadowDefinitionInput |
     capture: draft.capture,
     context: draft.context,
     thinkFirst: draft.thinkFirst,
-    preFilters: lines(draft.preFilters),
-    boostFilters: lines(draft.boostFilters),
-    boostFactor,
     holdout: draft.holdout,
     prompt: draft.prompt.trim(),
   }
 }
 
-/** Validate and convert the complete resolved settings form. */
-export function settingsInput(draft: SettingsDraft): ShadowMindSettings | undefined {
-  const numbers = Object.fromEntries(NUMBER_FIELDS.map(field => [field, finite(draft[field])])) as
-    Record<(typeof NUMBER_FIELDS)[number], number | undefined>
-  const heartbeatProbability = numbers.heartbeatProbability
-  const maxParallelShadows = integerAtLeast(numbers.maxParallelShadows, 1)
-  const maxPromptChars = integerAtLeast(numbers.maxPromptChars, 0)
-  const maxReportChars = integerAtLeast(numbers.maxReportChars, 0)
-  const longOutputBoostChars = integerAtLeast(numbers.longOutputBoostChars, 1)
-  const valueLoopWindowTurns = integerAtLeast(numbers.valueLoopWindowTurns, 1)
-  const reviewWindowSize = integerAtLeast(numbers.reviewWindowSize, 1)
-  const diminishingWindowSize = integerAtLeast(numbers.diminishingWindowSize, 1)
-  const lastReportCoversCount = integerAtLeast(numbers.lastReportCoversCount, 2)
-  const repeatedFailureBoostThreshold = integerAtLeast(numbers.repeatedFailureBoostThreshold, 2)
-  const spinningRepeatCount = integerAtLeast(numbers.spinningRepeatCount, 2)
-  const oscillationPeriods = integerAtLeast(numbers.oscillationPeriods, 2)
-  const noDriftRepeatCount = integerAtLeast(numbers.noDriftRepeatCount, 2)
-  const defaultShadowTimeoutSeconds = numbers.defaultShadowTimeoutSeconds
-  const headlessDrainTimeoutSeconds = numbers.headlessDrainTimeoutSeconds
-  const resultBatchWindowMs = numbers.resultBatchWindowMs
-  const diminishingNoveltyThreshold = numbers.diminishingNoveltyThreshold
-  const stagnationCooldownSeconds = numbers.stagnationCooldownSeconds
-  const staleReportDecay = numbers.staleReportDecay
-  const conflictSynthesisTimeoutSeconds = numbers.conflictSynthesisTimeoutSeconds
-  const effortLadder = lines(draft.reasoningEffortLadder)
-  const soft = numbers.sessionShadowSoftBudgetChars
-  const hard = numbers.sessionShadowHardBudgetChars
-  const defaultRoute = normalizeRoute(draft.defaultShadowModel)
-  const synthesisRoute = normalizeRoute(draft.synthesisModel)
-  const gateRoute = normalizeRoute(draft.commandGateModel)
-  const frugalRoute = normalizeRoute(draft.frugalShadowModel)
-  const gateJudgeTimeout = numbers.commandGateJudgeTimeoutSeconds
-  const gateMaxParallel = integerAtLeast(numbers.commandGateMaxParallel, 1)
-  const gateVerdictTtl = numbers.commandGateVerdictTtlSeconds
-  const gateEnabled = draft.commandGateEnabled === 'true'
-  const gateScope: ShadowMindSettings['commandGateScope'] = draft.commandGateScope === 'root-and-subagents'
-    ? 'root-and-subagents'
-    : 'root-only'
-  const gateOnFailure: ShadowMindSettings['commandGateOnJudgeFailure'] = draft.commandGateOnJudgeFailure === 'allow'
-    ? 'allow'
-    : 'deny'
-  const gateTools = lines(draft.commandGateTools)
-  const largestWindow = Math.max(
-    spinningRepeatCount ?? Number.POSITIVE_INFINITY,
-    (oscillationPeriods ?? Number.POSITIVE_INFINITY) * 2,
-    noDriftRepeatCount ?? Number.POSITIVE_INFINITY,
-    diminishingWindowSize ?? Number.POSITIVE_INFINITY,
-  )
-  if (heartbeatProbability === undefined || heartbeatProbability < 0 || heartbeatProbability > 1
-    || maxParallelShadows === undefined || maxPromptChars === undefined || maxReportChars === undefined
-    || longOutputBoostChars === undefined || valueLoopWindowTurns === undefined || reviewWindowSize === undefined
-    || diminishingWindowSize === undefined || lastReportCoversCount === undefined
-    || repeatedFailureBoostThreshold === undefined || spinningRepeatCount === undefined
-    || oscillationPeriods === undefined || noDriftRepeatCount === undefined
-    || defaultShadowTimeoutSeconds === undefined || defaultShadowTimeoutSeconds <= 0
-    || headlessDrainTimeoutSeconds === undefined || headlessDrainTimeoutSeconds <= 0
-    || resultBatchWindowMs === undefined || resultBatchWindowMs < 0
-    || (draft.randomSeed.trim() !== '' && numbers.randomSeed === undefined)
-    || diminishingNoveltyThreshold === undefined || diminishingNoveltyThreshold < 0
-    || diminishingNoveltyThreshold > 1
-    || stagnationCooldownSeconds === undefined || stagnationCooldownSeconds < 0
-    || staleReportDecay === undefined || staleReportDecay < 0 || staleReportDecay > 1
-    || conflictSynthesisTimeoutSeconds === undefined || conflictSynthesisTimeoutSeconds <= 0
-    || (soft !== undefined && (!Number.isInteger(soft) || soft < 1))
-    || (hard !== undefined && (!Number.isInteger(hard) || hard < 1))
-    || (soft !== undefined && (hard === undefined || frugalRoute === '' || soft >= hard))
-    || (frugalRoute !== '' && soft === undefined)
-    || gateJudgeTimeout === undefined || gateJudgeTimeout <= 0
-    || gateMaxParallel === undefined
-    || gateVerdictTtl === undefined || gateVerdictTtl < 0
-    || effortLadder.length === 0 || new Set(effortLadder).size !== effortLadder.length
-    || reviewWindowSize < largestWindow) return undefined
-  return {
-    heartbeatProbability,
-    maxParallelShadows,
-    defaultShadowTimeoutSeconds,
-    headlessDrainTimeoutSeconds,
-    resultBatchWindowMs,
-    ...(defaultRoute === '' ? {} : { defaultShadowModel: defaultRoute }),
-    ...(draft.defaultReasoningEffort.trim() === '' ? {} : { defaultReasoningEffort: draft.defaultReasoningEffort.trim() }),
-    ...(synthesisRoute === '' ? {} : { synthesisModel: synthesisRoute }),
-    ...(draft.synthesisReasoningEffort.trim() === '' ? {} : { synthesisReasoningEffort: draft.synthesisReasoningEffort.trim() }),
-    argumentDisclosure: draft.argumentDisclosure === 'full' ? 'full' : 'redacted',
-    ...(numbers.randomSeed === undefined ? {} : { randomSeed: numbers.randomSeed }),
-    maxPromptChars,
-    maxReportChars,
-    preferIndependentVendor: draft.preferIndependentVendor === 'true',
-    longOutputBoostChars,
-    lastReportCoversCount,
-    repeatedFailureBoostThreshold,
-    valueLoopEnabled: draft.valueLoopEnabled === 'true',
-    valueLoopWindowTurns,
-    reviewWindowSize,
-    spinningRepeatCount,
-    oscillationPeriods,
-    noDriftRepeatCount,
-    diminishingWindowSize,
-    diminishingNoveltyThreshold,
-    stagnationCooldownSeconds,
-    stagnationEscalationEnabled: draft.stagnationEscalationEnabled === 'true',
-    reasoningEffortLadder: effortLadder,
-    ...(soft === undefined ? {} : { sessionShadowSoftBudgetChars: soft }),
-    ...(hard === undefined ? {} : { sessionShadowHardBudgetChars: hard }),
-    ...(frugalRoute === '' ? {} : { frugalShadowModel: frugalRoute }),
-    staleReportDecay,
-    conflictSynthesisEnabled: draft.conflictSynthesisEnabled === 'true',
-    conflictSynthesisTimeoutSeconds,
-    commandGateEnabled: gateEnabled,
-    commandGateTools: gateTools,
-    commandGateScope: gateScope,
-    commandGateDenyPatterns: lines(draft.commandGateDenyPatterns),
-    commandGateAllowPatterns: lines(draft.commandGateAllowPatterns),
-    commandGateProtectedProcesses: lines(draft.commandGateProtectedProcesses),
-    commandGateProtectedServices: lines(draft.commandGateProtectedServices),
-    ...(draft.commandGateContext.trim() === '' ? {} : { commandGateContext: draft.commandGateContext.trim() }),
-    ...(gateRoute === '' ? {} : { commandGateModel: gateRoute }),
-    ...(draft.commandGateReasoningEffort.trim() === '' ? {} : { commandGateReasoningEffort: draft.commandGateReasoningEffort.trim() }),
-    commandGateJudgeTimeoutSeconds: gateJudgeTimeout,
-    commandGateOnJudgeFailure: gateOnFailure,
-    commandGateMaxParallel: gateMaxParallel,
-    commandGateVerdictTtlSeconds: gateVerdictTtl,
-  }
-}
+const OUTCOME_KEYS = {
+  report: 'outcomeReport',
+  silent: 'outcomeSilent',
+  not_relevant: 'outcomeNotRelevant',
+  aborted: 'outcomeAborted',
+  failed: 'outcomeFailed',
+} as const satisfies Record<ShadowRunOutcome, ShadowMindLocaleKey>
 
-/** Standard labelled text or numeric control. */
-function Field(props: {
-  id: string
-  label: string
-  hint?: string
-  value: string
-  disabled?: boolean
-  multiline?: boolean
-  onChange: (value: string) => void
-}): ReactNode {
-  const control = props.multiline === true
-    ? <textarea id={props.id} value={props.value} disabled={props.disabled}
-      onChange={(event) => { props.onChange(event.currentTarget.value) }} />
-    : <input id={props.id} type="text" value={props.value} disabled={props.disabled}
-      onChange={(event) => { props.onChange(event.currentTarget.value) }} />
-  return (
-    <label className={css.field} htmlFor={props.id}>
-      <span>{props.label}</span>
-      {control}
-      {props.hint === undefined ? null : <small>{props.hint}</small>}
-    </label>
-  )
-}
-
-/** Shared editor body for one Shadow definition (inline for edits, panel for creation). */
-function DefinitionEditor(props: {
-  readonly t: ShadowMindSettingsTabProps['t']
-  readonly busy: boolean
-  readonly editingId: string | null
-  readonly draft: DefinitionDraft
-  readonly setDraft: (draft: DefinitionDraft) => void
-  readonly catalog: ShadowAdministrationSnapshot | null
-  readonly effortLadderFallback: readonly string[]
-  readonly valid: ShadowDefinitionInput | undefined
-  readonly submit: (input: ShadowDefinitionInput) => void
-  readonly cancel: () => void
-}): ReactNode {
-  const { t, busy, editingId, draft, setDraft, catalog, effortLadderFallback, valid, submit, cancel } = props
-  return (
-    <div className={css.editorStack}>
-      <fieldset className={css.fieldset}>
-        <legend>{t('definitionBasicFields')}</legend>
-        <div className={css.grid}>
-          <Field id="shadow-definition-id" label={t('id')} hint={t('idHint')} value={draft.id} disabled={editingId !== null}
-            onChange={(value) => { setDraft({ ...draft, id: value }) }} />
-          <Field id="shadow-definition-name" label={t('name')} value={draft.name}
-            onChange={(value) => { setDraft({ ...draft, name: value }) }} />
-          <Field id="shadow-definition-probability" label={t('activationProbability')} hint={t('activationProbabilityHint')} value={draft.activationProbability}
-            onChange={(value) => { setDraft({ ...draft, activationProbability: value }) }} />
-        </div>
-        <Field id="shadow-definition-prompt" label={t('prompt')} hint={t('promptHint')} value={draft.prompt} multiline
-          onChange={(value) => { setDraft({ ...draft, prompt: value }) }} />
-        <label className={css.check}><input type="checkbox" checked={draft.enabled}
-          onChange={(event) => { setDraft({ ...draft, enabled: event.currentTarget.checked }) }} />{t('enabled')}</label>
-      </fieldset>
-      <fieldset className={css.fieldset}>
-        <legend>{t('definitionCommonFields')}</legend>
-        <div className={css.grid}>
-          <ModelRouteSelect
-            catalog={catalog?.modelCatalog ?? null}
-            disabled={busy}
-            labels={{
-              provider: t('providerLabel'),
-              model: t('modelLabel'),
-              effort: t('effortLabel'),
-            }}
-            effortFallback={effortLadderFallback}
-            value={{
-              route: draft.runWithModel,
-              effort: draft.reasoningEffort,
-            }}
-            onChange={(next) => {
-              setDraft({
-                ...draft,
-                runWithModel: next.route,
-                reasoningEffort: next.effort,
-              })
-            }}
-          />
-          <Field id="shadow-definition-timeout" label={t('timeoutSeconds')} hint={t('timeoutSecondsHint')} value={draft.timeoutSeconds}
-            onChange={(value) => { setDraft({ ...draft, timeoutSeconds: value }) }} />
-          <Field id="shadow-definition-tools" label={t('tools')} hint={t('toolsHint')} value={draft.tools} multiline
-            onChange={(value) => { setDraft({ ...draft, tools: value }) }} />
-        </div>
-        <label className={css.check}><input type="checkbox" checked={draft.thinkFirst}
-          onChange={(event) => { setDraft({ ...draft, thinkFirst: event.currentTarget.checked }) }} />{t('thinkFirst')}</label>
-      </fieldset>
-      <details className={css.disclosure} data-shadow-definition-advanced>
-        <summary>{t('definitionAdvancedFields')}</summary>
-        <div className={css.grid}>
-          <label className={css.check}><input type="checkbox" checked={draft.debug}
-            onChange={(event) => { setDraft({ ...draft, debug: event.currentTarget.checked }) }} />{t('debug')}</label>
-          <Field id="shadow-definition-models" label={t('activeForModels')} hint={t('activeForModelsHint')} value={draft.activeForModels} multiline
-            onChange={(value) => { setDraft({ ...draft, activeForModels: value }) }} />
-          <label className={css.field} htmlFor="shadow-definition-capture">
-            <span>{t('capture')}</span>
-            <select id="shadow-definition-capture" value={draft.capture}
-              onChange={(event) => { setDraft({ ...draft, capture: event.currentTarget.value as ShadowDefinition['capture'] }) }}>
-              <option value="full">full</option><option value="since-compaction">since-compaction</option>
-            </select>
-            <small>{t('captureHint')}</small>
-          </label>
-          <label className={css.field} htmlFor="shadow-definition-context">
-            <span>{t('context')}</span>
-            <select id="shadow-definition-context" value={draft.context}
-              onChange={(event) => { setDraft({ ...draft, context: event.currentTarget.value as ShadowDefinition['context'] }) }}>
-              <option value="standard">standard</option><option value="minimal">minimal</option>
-            </select>
-            <small>{t('contextHint')}</small>
-          </label>
-          <Field id="shadow-definition-prefilters" label={t('preFilters')} hint={t('preFiltersHint')}
-            value={draft.preFilters} multiline
-            onChange={(value) => { setDraft({ ...draft, preFilters: value }) }} />
-          <Field id="shadow-definition-boostfilters" label={t('boostFilters')} hint={t('boostFiltersHint')}
-            value={draft.boostFilters} multiline
-            onChange={(value) => { setDraft({ ...draft, boostFilters: value }) }} />
-          <Field id="shadow-definition-boostfactor" label={t('boostFactor')} hint={t('boostFactorHint')}
-            value={draft.boostFactor}
-            onChange={(value) => { setDraft({ ...draft, boostFactor: value }) }} />
-        </div>
-      </details>
-      <div className={css.formActions}><button type="button" disabled={busy} onClick={cancel}>{t('cancel')}</button>
-        <button type="button" disabled={busy || valid === undefined}
-          onClick={valid === undefined ? undefined : () => { submit(valid) }}>
-          {t(editingId === null ? 'create' : 'saveDefinition')}
-        </button></div>
-    </div>
-  )
+/** Turn one remote failure into actionable copy for a toast. */
+function friendlyError(t: ShadowMindSettingsTabProps['t'], error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (message.includes('not writable')) return t('errorNotWritable')
+  if (message.includes('holdout')) return t('errorHoldout')
+  if (message.includes('already exists')) return t('errorAlreadyExists')
+  return `${t('operationFailed')}: ${message}`
 }
 
 /** Shadow Mind administration tab under Settings → Plugins. */
 function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactNode {
   const { t } = props
-  const settings = props.useSettings(snapshot => snapshot)
   const currentSession = props.useSessions(snapshot => snapshot.current)
-  const currentSessionUpdatedAt = props.useSessions((snapshot) => {
-    const sessionId = snapshot.current
-    return sessionId === undefined ? undefined : snapshot.byId[sessionId]?.updatedAt
-  })
   const [catalog, setCatalog] = useState<ShadowAdministrationSnapshot | null>(null)
   const [status, setStatus] = useState<ShadowMindStatus | null>(null)
   const [loadError, setLoadError] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState('')
-  const [settingsEdit, setSettingsEdit] = useState<SettingsDraft | null>(null)
   const [definitionEdit, setDefinitionEdit] = useState<DefinitionDraft | null>(null)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const { toasts, push, dismiss } = useToasts()
+
+  const defaultTimeoutSeconds = catalog?.defaultShadowTimeoutSeconds
+  const currentDefinition = catalog?.definitions.find(definition => definition.id === DEFAULT_SHADOW_ID)
+  const legacyDefinitions = useMemo(
+    () => catalog?.definitions.filter(definition => definition.id !== DEFAULT_SHADOW_ID) ?? [],
+    [catalog],
+  )
 
   const reload = async (): Promise<void> => {
     setLoadError(false)
@@ -672,64 +217,62 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
     if (currentSession !== undefined) void reloadStatus(currentSession)
   }
 
-  useEffect(() => { void reload() }, [])
   useEffect(() => {
-    if (settings.status === 'ready' && settings.value !== undefined && settingsEdit === null) {
-      setSettingsEdit(settingsDraft(settings.value))
-    }
-  }, [settings, settingsEdit])
+    void reload()
+  }, [])
   useEffect(() => {
-    let current = true
+    // Seed the draft from the freshly loaded default definition, once.
+    if (definitionEdit !== null) return
+    const definition = catalog?.definitions.find(item => item.id === DEFAULT_SHADOW_ID)
+    if (definition !== undefined) setDefinitionEdit(definitionDraft(definition))
+  }, [catalog, definitionEdit])
+  useEffect(() => {
+    let live = true
     if (currentSession === undefined) {
       setStatus(null)
-      return () => { current = false }
+      return () => { live = false }
     }
     void props.status(currentSession).then(
-      (value) => { if (current) setStatus(value) },
+      (value) => { if (live) setStatus(value) },
       () => {
-        if (!current) return
+        if (!live) return
         setStatus(null)
         setLoadError(true)
       },
     )
-    return () => { current = false }
-  }, [currentSession, currentSessionUpdatedAt, props.status])
+    return () => { live = false }
+  }, [currentSession, props.status])
 
-  const validSettings = settingsEdit === null ? undefined : settingsInput(settingsEdit)
-  const effortLadderFallback = settingsEdit === null ? [] : lines(settingsEdit.reasoningEffortLadder)
   const validDefinition = definitionEdit === null ? undefined : definitionInput(definitionEdit)
-  const resolvedSettings = settings.status === 'ready' ? settings.value : undefined
-  const settingsDirty = useMemo(() => settings.status === 'ready' && settings.value !== undefined
-    && settingsEdit !== null && JSON.stringify(validSettings) !== JSON.stringify(settings.value),
-  [settings, settingsEdit, validSettings])
+  const baselineInput = currentDefinition === undefined ? undefined : definitionInput(definitionDraft(currentDefinition))
+  const definitionDirty = useMemo(() => validDefinition !== undefined && baselineInput !== undefined
+    && JSON.stringify(validDefinition) !== JSON.stringify(baselineInput),
+  [validDefinition, baselineInput])
 
   const run = async (operation: () => Promise<void>): Promise<void> => {
     setBusy(true)
-    setMessage('')
     try {
       await operation()
     } catch (error: unknown) {
-      setMessage(`${t('operationFailed')}: ${error instanceof Error ? error.message : String(error)}`)
+      push('error', friendlyError(t, error))
     } finally {
       setBusy(false)
     }
   }
 
-  const changeStatus = (
-    sessionId: SessionId,
-    operation: (sessionId: SessionId) => Promise<ShadowMindStatus>,
-  ): void => {
-    void run(async () => { setStatus(await operation(sessionId)) })
+  const save = (): void => {
+    if (validDefinition === undefined) return
+    void run(async () => {
+      const saved = await props.saveDefault(validDefinition)
+      setDefinitionEdit(definitionDraft(saved))
+      await reload()
+      push('success', t('saved'))
+    })
   }
 
-  const submitDefinition = (input: ShadowDefinitionInput): void => {
-    void run(async () => {
-      if (editingId === null) await props.create(input)
-      else await props.update(input)
-      setDefinitionEdit(null)
-      setEditingId(null)
-      await reload()
-    })
+  const discard = (): void => {
+    if (currentDefinition === undefined) return
+    setDefinitionEdit(definitionDraft(currentDefinition))
   }
 
   return (
@@ -739,424 +282,191 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
         <button type="button" disabled={busy} onClick={refresh}>{t('refresh')}</button>
       </header>
       {loadError ? <p role="alert" className={css.error}>{t('loadError')}</p> : null}
-      {message === '' ? null : <p role="status" className={css.message}>{message}</p>}
 
-      <section className={css.panel} data-shadow-session-status>
-        <h3>{t('sessionTitle')}</h3>
-        {currentSession === undefined || status === null ? <p>{t('noSession')}</p> : (
-          <>
-            <div className={css.statusLine}>
-              <strong>{t(status.paused ? 'sessionPaused' : 'sessionActive')}</strong>
-              <span>{t('running')}: {status.active.length}</span>
-              <span>{t('pending')}: {status.pendingSchedules}</span>
-              <span>{t('totalRuns')}: {status.totalRuns}</span>
-              <span>{t('epoch')}: {status.epoch}</span>
-              <span>{t('prefilterSkips')}: {status.prefilterSkips}</span>
-              <span>{t('budgetTier')}: {status.budgetTier}</span>
-              <span>{t('spentChars')}: {status.spentChars}</span>
-              <span>{t('synthesisRuns')}: {status.synthesisRuns}</span>
-              <span>{t('synthesisFailures')}: {status.synthesisFailures}</span>
-              <span>{t('gateDenies')}: {status.gateDenies}</span>
-              <span>{t('gateAllows')}: {status.gateAllows}</span>
-              <span>{t('gateJudgeRuns')}: {status.gateJudgeRuns}</span>
-              <span>{t('gateJudgeFailures')}: {status.gateJudgeFailures}</span>
-            </div>
-            {status.lastRun === undefined ? <p>{t('noCompletedRuns')}</p> : (
-              <dl className={css.lastRun} data-shadow-last-run>
-                <div><dt>{t('lastRun')}</dt><dd>{status.lastRun.shadowId}</dd></div>
-                <div><dt>{t('outcome')}</dt><dd>{t(OUTCOME_KEYS[status.lastRun.outcome])}</dd></div>
-                <div><dt>{t('finishedAt')}</dt><dd><time dateTime={status.lastRun.finishedAt}>{status.lastRun.finishedAt}</time></dd></div>
-                <div><dt>{t('capturedThroughSeq')}</dt><dd>{status.lastRun.capturedThroughSeq}</dd></div>
-                <div><dt>{t('reviewStage')}</dt><dd><code>{status.lastRun.stage}</code></dd></div>
-                {status.lastRun.reasonCode === undefined ? null : (
-                  <div><dt>{t('reviewReason')}</dt><dd><code>{status.lastRun.reasonCode}</code></dd></div>
-                )}
-                <div><dt>{t('deliberationChars')}</dt><dd>{status.lastRun.deliberationChars}</dd></div>
-                <div><dt>{t('independence')}</dt><dd>{status.lastRun.independence}</dd></div>
-                {status.lastRun.route === undefined ? null : (
-                  <div><dt>{t('route')}</dt><dd><code>{status.lastRun.route}</code></dd></div>
-                )}
-                {status.lastRun.childSessionId === undefined ? null : (
-                  <div><dt>{t('childSession')}</dt><dd><code>{status.lastRun.childSessionId}</code></dd></div>
-                )}
-              </dl>
-            )}
-            <dl className={css.lastRun} data-shadow-diagnostics-status>
-              <div><dt>{t('effectiveProbabilities')}</dt><dd>{status.effectiveProbabilities
-                .map(value => `${value.shadowId}=${value.probability}`).join(', ') || 'none'}</dd></div>
-              <div><dt>{t('valueLoop')}</dt><dd>{status.valueLoop
-                .map(value => `${value.shadowId}:${value.adopted}/${value.rejected}/${value.ignored}`).join(', ') || 'none'}</dd></div>
-              <div><dt>{t('cooldowns')}</dt><dd>{status.cooldowns
-                .map(value => `${value.shadowId}@${value.until}`).join(', ') || 'none'}</dd></div>
-              <div><dt>{t('pendingEscalations')}</dt><dd>{status.pendingEscalations.join(', ') || 'none'}</dd></div>
-              <div><dt>{t('recentReviews')}</dt><dd>{status.recentReviews
-                .map(value => `${value.shadowId}:${value.verdict}`).join(', ') || 'none'}</dd></div>
-              {status.lastSynthesisFailure === undefined ? null : (
-                <div><dt>{t('lastSynthesisFailure')}</dt><dd>{status.lastSynthesisFailure}</dd></div>
-              )}
-            </dl>
-            <div className={css.actions}>
-              <button type="button" disabled={busy || status.paused} onClick={() => { changeStatus(currentSession, props.pause) }}>{t('pause')}</button>
-              <button type="button" disabled={busy || !status.paused} onClick={() => { changeStatus(currentSession, props.resume) }}>{t('resume')}</button>
-              <button type="button" disabled={busy} onClick={() => { changeStatus(currentSession, props.toggle) }}>{t('toggle')}</button>
-            </div>
-          </>
+      <section className={css.panel} data-shadow-card>
+        <div className={css.cardHead}>
+          <div>
+            <h3>{t('shadowCardTitle')}</h3>
+            <p>{t('shadowCardDescription')}</p>
+          </div>
+          {definitionEdit !== null ? (
+            <Switch
+              id="shadow-enabled"
+              label={t(definitionEdit.enabled ? 'shadowOn' : 'shadowOff')}
+              checked={definitionEdit.enabled}
+              disabled={busy}
+              onChange={(enabled) => { setDefinitionEdit({ ...definitionEdit, enabled }) }}
+            />
+          ) : null}
+        </div>
+
+        {status === null || status.lastRun === undefined ? null : (
+          <p className={css.lastRunLine}>
+            {t('lastRunSummary', {
+              outcome: t(OUTCOME_KEYS[status.lastRun.outcome]),
+              time: status.lastRun.finishedAt,
+            })}
+          </p>
         )}
-      </section>
 
-      <section className={css.panel} data-shadow-global-settings>
-        <h3>{t('settingsTitle')}</h3>
-        <p>{t('settingsDescription')}</p>
-        {settingsEdit === null ? <p>{t('loadError')}</p> : (
+        {definitionEdit === null ? <p>{t('noDefaultDefinition')}</p> : (
           <>
             <div className={css.grid}>
-              {SETTING_TEXT_FIELDS.filter(([field]) => BASIC_SETTING_FIELDS.has(field)).map(([field, hint]) => (
-                <Field key={field} id={`shadow-setting-${field}`} label={t(field)} hint={t(hint)} value={settingsEdit[field]}
-                  onChange={(value) => { setSettingsEdit({ ...settingsEdit, [field]: value }) }} />
-              ))}
-            </div>
-            <fieldset className={css.fieldset}>
-              <legend>{t('defaultShadowModel')}</legend>
-              <div className={css.grid}>
-                <ModelRouteSelect
-                  catalog={catalog?.modelCatalog ?? null}
+              <ProbabilitySlider
+                id="shadow-probability"
+                label={t('triggerProbability')}
+                value={definitionEdit.activationPercent}
+                disabled={busy}
+                onChange={(percent) => { setDefinitionEdit({ ...definitionEdit, activationPercent: percent }) }}
+              />
+              <small className={css.probabilityHint}>{t('triggerProbabilityHint')}</small>
+              <label className={css.field} htmlFor="shadow-preset">
+                <span>{t('presetLabel')}</span>
+                <select
+                  id="shadow-preset"
+                  value=""
                   disabled={busy}
-                  labels={{
-                    provider: t('providerLabel'),
-                    model: t('modelLabel'),
-                    effort: t('effortLabel'),
-                  }}
-                  effortFallback={effortLadderFallback}
-                  value={{
-                    route: settingsEdit.defaultShadowModel,
-                    effort: settingsEdit.defaultReasoningEffort,
-                  }}
-                  onChange={(next) => {
-                    setSettingsEdit({
-                      ...settingsEdit,
-                      defaultShadowModel: next.route,
-                      defaultReasoningEffort: next.effort,
+                  onChange={(event) => {
+                    const preset = SHADOW_TEMPLATES.find(template => template.id === event.currentTarget.value)
+                    if (preset === undefined) return
+                    setDefinitionEdit({
+                      ...definitionEdit,
+                      prompt: preset.prompt,
+                      capture: preset.capture,
                     })
                   }}
-                />
-              </div>
-              <small>{t('routeInheritHint')}</small>
-            </fieldset>
-            <details className={css.disclosure} data-shadow-settings-advanced>
-              <summary>
-                {t('advancedSettings')}
-                <small className={css.disclosureHint}>{t('advancedSettingsHint')}</small>
-              </summary>
+                >
+                  <option value="" disabled>{t('presetPlaceholder')}</option>
+                  {SHADOW_TEMPLATES.map(template => (
+                    <option key={template.id} value={template.id}>{t(template.nameKey)}</option>
+                  ))}
+                </select>
+                <small>{t('presetHint')}</small>
+              </label>
+              <label className={css.field} htmlFor="shadow-name">
+                <span>{t('shadowName')}</span>
+                <input id="shadow-name" type="text" value={definitionEdit.name} disabled={busy}
+                  onChange={(event) => { setDefinitionEdit({ ...definitionEdit, name: event.currentTarget.value }) }} />
+                <small>{t('shadowNameHint')}</small>
+              </label>
+              <label className={css.field} htmlFor="shadow-prompt">
+                <span>{t('shadowPrompt')}</span>
+                <textarea id="shadow-prompt" value={definitionEdit.prompt} disabled={busy}
+                  onChange={(event) => { setDefinitionEdit({ ...definitionEdit, prompt: event.currentTarget.value }) }} />
+                <small>{t('shadowPromptHint')}</small>
+              </label>
+            </div>
+
+            <details className={css.disclosure} data-shadow-advanced>
+              <summary>{t('advancedSettings')}</summary>
               <div className={css.grid}>
-                {SETTING_TEXT_FIELDS.filter(([field]) => !BASIC_SETTING_FIELDS.has(field)).map(([field, hint]) => (
-                  <Field key={field} id={`shadow-setting-${field}`} label={t(field)} hint={t(hint)} value={settingsEdit[field]}
-                    onChange={(value) => { setSettingsEdit({ ...settingsEdit, [field]: value }) }} />
-                ))}
-                <label className={css.field} htmlFor="shadow-setting-argumentDisclosure">
-                  <span>{t('argumentDisclosure')}</span>
-                  <select id="shadow-setting-argumentDisclosure" value={settingsEdit.argumentDisclosure}
-                    onChange={(event) => { setSettingsEdit({ ...settingsEdit, argumentDisclosure: event.currentTarget.value }) }}>
-                    <option value="redacted">redacted</option><option value="full">full</option>
-                  </select>
-                  <small>{t('argumentDisclosureHint')}</small>
+                <fieldset className={`${css.fieldset} ${css.fullSpan}`}>
+                  <legend>{t('runModel')}</legend>
+                  <div className={`${css.grid} ${css.stack}`}>
+                    <ModelRouteSelect
+                      catalog={catalog?.modelCatalog ?? null}
+                      disabled={busy}
+                      labels={{
+                        provider: t('providerLabel'),
+                        model: t('modelLabel'),
+                        effort: t('effortLabel'),
+                      }}
+                      value={{
+                        route: definitionEdit.runWithModel,
+                        effort: definitionEdit.reasoningEffort,
+                      }}
+                      onChange={(next) => {
+                        setDefinitionEdit({
+                          ...definitionEdit,
+                          runWithModel: next.route,
+                          reasoningEffort: next.effort,
+                        })
+                      }}
+                    />
+                  </div>
+                  <small>{t('runModelHint')}</small>
+                </fieldset>
+                <label className={css.field} htmlFor="shadow-timeout">
+                  <span>{t('timeoutSeconds')}</span>
+                  <input id="shadow-timeout" type="text" value={definitionEdit.timeoutSeconds} disabled={busy}
+                    placeholder={defaultTimeoutSeconds === undefined ? undefined : String(defaultTimeoutSeconds)}
+                    onChange={(event) => { setDefinitionEdit({ ...definitionEdit, timeoutSeconds: event.currentTarget.value }) }} />
+                  <small>
+                    {defaultTimeoutSeconds === undefined
+                      ? t('timeoutSecondsHint')
+                      : t('timeoutSecondsInherit', {
+                        seconds: defaultTimeoutSeconds,
+                        minutes: Math.round(defaultTimeoutSeconds / 60),
+                      })}
+                  </small>
                 </label>
-                <Field id="shadow-setting-reasoningEffortLadder" label={t('reasoningEffortLadder')}
-                  hint={t('reasoningEffortLadderHint')} value={settingsEdit.reasoningEffortLadder} multiline
-                  onChange={(value) => { setSettingsEdit({ ...settingsEdit, reasoningEffortLadder: value }) }} />
-                {BOOLEAN_FIELDS.map(field => (
-                  <label className={css.field} htmlFor={`shadow-setting-${field}`} key={field}>
-                    <span>{t(field)}</span>
-                    <select id={`shadow-setting-${field}`} value={settingsEdit[field]}
-                      onChange={(event) => { setSettingsEdit({ ...settingsEdit, [field]: event.currentTarget.value }) }}>
-                      <option value="false">false</option><option value="true">true</option>
-                    </select>
-                  </label>
-                ))}
-              </div>
-              <fieldset className={css.fieldset}>
-                <legend>{t('frugalShadowModel')}</legend>
-                <div className={css.grid}>
-                  <ModelRouteSelect
-                    catalog={catalog?.modelCatalog ?? null}
-                    disabled={busy}
-                    labels={{
-                      provider: t('providerLabel'),
-                      model: t('modelLabel'),
-                      effort: t('effortLabel'),
-                    }}
-                    hideEffort
-                    value={{ route: settingsEdit.frugalShadowModel, effort: '' }}
-                    onChange={(next) => { setSettingsEdit({ ...settingsEdit, frugalShadowModel: next.route }) }}
-                  />
-                </div>
-                <small>{t('frugalShadowModelHint')}</small>
-              </fieldset>
-              <fieldset className={css.fieldset}>
-                <legend>{t('synthesisModel')}</legend>
-                <div className={css.grid}>
-                  <ModelRouteSelect
-                    catalog={catalog?.modelCatalog ?? null}
-                    disabled={busy}
-                    labels={{
-                      provider: t('providerLabel'),
-                      model: t('modelLabel'),
-                      effort: t('effortLabel'),
-                    }}
-                    effortFallback={effortLadderFallback}
-                    value={{
-                      route: settingsEdit.synthesisModel,
-                      effort: settingsEdit.synthesisReasoningEffort,
-                    }}
-                    onChange={(next) => {
-                      setSettingsEdit({
-                        ...settingsEdit,
-                        synthesisModel: next.route,
-                        synthesisReasoningEffort: next.effort,
-                      })
-                    }}
-                  />
-                </div>
-              </fieldset>
-            </details>
-            <div className={css.formActions}>
-              <button type="button" disabled={!settingsDirty || busy}
-                onClick={resolvedSettings === undefined
-                  ? undefined
-                  : () => { setSettingsEdit(settingsDraft(resolvedSettings)) }
-                }>{t('discard')}</button>
-              <button type="button" disabled={!settingsDirty || validSettings === undefined || busy}
-                onClick={validSettings === undefined ? undefined : () => {
-                  void run(async () => {
-                    await props.saveSettings(validSettings)
-                    setSettingsEdit(settingsDraft(validSettings))
-                    setMessage(t('saved'))
-                  })
-                }}>{t(busy ? 'saving' : 'saveSettings')}</button>
-            </div>
-          </>
-        )}
-      </section>
-
-      <section className={css.panel} data-shadow-command-gate>
-        <h3>{t('gateTitle')}</h3>
-        <p>{t('gateDescription')}</p>
-        {settingsEdit === null ? <p>{t('loadError')}</p> : (
-          <>
-            <div className={css.grid}>
-              <label className={css.field} htmlFor="shadow-setting-commandGateEnabled">
-                <span>{t('commandGateEnabled')}</span>
-                <select id="shadow-setting-commandGateEnabled" value={settingsEdit.commandGateEnabled}
-                  onChange={(event) => { setSettingsEdit({ ...settingsEdit, commandGateEnabled: event.currentTarget.value }) }}>
-                  <option value="false">false</option><option value="true">true</option>
-                </select>
-                <small>{t('commandGateEnabledHint')}</small>
-              </label>
-              <label className={css.field} htmlFor="shadow-setting-commandGateScope">
-                <span>{t('commandGateScope')}</span>
-                <select id="shadow-setting-commandGateScope" value={settingsEdit.commandGateScope}
-                  onChange={(event) => { setSettingsEdit({ ...settingsEdit, commandGateScope: event.currentTarget.value }) }}>
-                  <option value="root-only">root-only</option><option value="root-and-subagents">root-and-subagents</option>
-                </select>
-                <small>{t('commandGateScopeHint')}</small>
-              </label>
-              <label className={css.field} htmlFor="shadow-setting-commandGateOnJudgeFailure">
-                <span>{t('commandGateOnJudgeFailure')}</span>
-                <select id="shadow-setting-commandGateOnJudgeFailure" value={settingsEdit.commandGateOnJudgeFailure}
-                  onChange={(event) => { setSettingsEdit({ ...settingsEdit, commandGateOnJudgeFailure: event.currentTarget.value }) }}>
-                  <option value="deny">deny</option><option value="allow">allow</option>
-                </select>
-                <small>{t('commandGateOnJudgeFailureHint')}</small>
-              </label>
-              {LIST_FIELDS.map(field => (
-                <Field key={field} id={`shadow-setting-${field}`} label={t(field)} hint={t(`${field}Hint`)}
-                  value={settingsEdit[field]} multiline
-                  onChange={(value) => { setSettingsEdit({ ...settingsEdit, [field]: value }) }} />
-              ))}
-              {CONTEXT_FIELDS.map(field => (
-                <Field key={field} id={`shadow-setting-${field}`} label={t(field)} hint={t(`${field}Hint`)}
-                  value={settingsEdit[field]} multiline
-                  onChange={(value) => { setSettingsEdit({ ...settingsEdit, [field]: value }) }} />
-              ))}
-            </div>
-            <fieldset className={css.fieldset}>
-              <legend>{t('commandGateModel')}</legend>
-              <div className={css.grid}>
-                <ModelRouteSelect
-                  catalog={catalog?.modelCatalog ?? null}
+                <label className={css.field} htmlFor="shadow-tools">
+                  <span>{t('tools')}</span>
+                  <textarea id="shadow-tools" value={definitionEdit.tools} disabled={busy}
+                    onChange={(event) => { setDefinitionEdit({ ...definitionEdit, tools: event.currentTarget.value }) }} />
+                  <small>{t('toolsHint')}</small>
+                </label>
+                <label className={css.field} htmlFor="shadow-capture">
+                  <span>{t('capture')}</span>
+                  <select id="shadow-capture" value={definitionEdit.capture} disabled={busy}
+                    onChange={(event) => { setDefinitionEdit({ ...definitionEdit, capture: event.currentTarget.value as ShadowDefinition['capture'] }) }}>
+                    <option value="full">full</option><option value="since-compaction">since-compaction</option>
+                  </select>
+                  <small>{t('captureHint')}</small>
+                </label>
+                <label className={css.field} htmlFor="shadow-context">
+                  <span>{t('context')}</span>
+                  <select id="shadow-context" value={definitionEdit.context} disabled={busy}
+                    onChange={(event) => { setDefinitionEdit({ ...definitionEdit, context: event.currentTarget.value as ShadowDefinition['context'] }) }}>
+                    <option value="standard">standard</option><option value="minimal">minimal</option>
+                  </select>
+                  <small>{t('contextHint')}</small>
+                </label>
+                <Switch
+                  id="shadow-think-first"
+                  label={t('thinkFirst')}
+                  checked={definitionEdit.thinkFirst}
                   disabled={busy}
-                  labels={{
-                    provider: t('providerLabel'),
-                    model: t('modelLabel'),
-                    effort: t('effortLabel'),
-                  }}
-                  effortFallback={effortLadderFallback}
-                  value={{
-                    route: settingsEdit.commandGateModel,
-                    effort: settingsEdit.commandGateReasoningEffort,
-                  }}
-                  onChange={(next) => {
-                    setSettingsEdit({
-                      ...settingsEdit,
-                      commandGateModel: next.route,
-                      commandGateReasoningEffort: next.effort,
-                    })
-                  }}
+                  onChange={(thinkFirst) => { setDefinitionEdit({ ...definitionEdit, thinkFirst }) }}
+                />
+                <Switch
+                  id="shadow-debug"
+                  label={t('debug')}
+                  checked={definitionEdit.debug}
+                  disabled={busy}
+                  onChange={(debug) => { setDefinitionEdit({ ...definitionEdit, debug }) }}
                 />
               </div>
-              <small>{t('routeInheritHint')}</small>
-            </fieldset>
+            </details>
+
+            {legacyDefinitions.length === 0 ? null : (
+              <p className={css.legacyNote} data-shadow-legacy>
+                {t('legacyDefinitions', {
+                  count: legacyDefinitions.length,
+                  ids: legacyDefinitions.map(definition => definition.id).join(', '),
+                })}
+              </p>
+            )}
+            {catalog === null || catalog.diagnostics.length === 0 ? null : (
+              <p className={css.error} data-shadow-diagnostics>
+                {t('diagnosticsNotice', {
+                  count: catalog.diagnostics.length,
+                  paths: catalog.diagnostics.slice(0, 3).map(item => item.path).join(', '),
+                })}
+              </p>
+            )}
+
             <div className={css.formActions}>
-              <small className={css.disclosureHint}>{t('gateSaveNote')}</small>
-              <button type="button" disabled={!settingsDirty || busy}
-                onClick={resolvedSettings === undefined
-                  ? undefined
-                  : () => { setSettingsEdit(settingsDraft(resolvedSettings)) }
-                }>{t('discard')}</button>
-              <button type="button" disabled={!settingsDirty || validSettings === undefined || busy}
-                onClick={validSettings === undefined ? undefined : () => {
-                  void run(async () => {
-                    await props.saveSettings(validSettings)
-                    setSettingsEdit(settingsDraft(validSettings))
-                    setMessage(t('saved'))
-                  })
-                }}>{t(busy ? 'saving' : 'saveSettings')}</button>
+              <button type="button" disabled={!definitionDirty || busy} onClick={discard}>{t('discard')}</button>
+              <button type="button" disabled={!definitionDirty || validDefinition === undefined || busy}
+                onClick={save}>{t(busy ? 'saving' : 'saveShadow')}</button>
             </div>
           </>
         )}
       </section>
 
-      <section className={css.panel} data-shadow-definitions>
-        <div className={css.sectionHead}><div><h3>{t('definitionsTitle')}</h3><p>{t('definitionsDescription')}</p></div>
-          <button type="button" disabled={busy} onClick={() => { setEditingId(null); setDefinitionEdit(emptyDefinition()) }}>{t('addShadow')}</button></div>
-        {catalog === null ? null : <p className={css.path}><strong>{t('definitionRoot')}:</strong> <code>{catalog.definitionRoot}</code></p>}
-        {catalog?.definitions.length === 0 ? <p>{t('emptyDefinitions')}</p> : null}
-        <ul className={css.definitions}>
-          {catalog?.definitions.map(definition => (
-            <li key={definition.id} data-shadow-id={definition.id}>
-              <div className={css.definitionTitle}><div><strong>{definition.name}</strong><code>{definition.id}</code></div>
-                <span data-enabled={definition.enabled}>{t(definition.enabled ? 'enabled' : 'disabled')}</span></div>
-              <dl><div><dt>{t('activationProbability')}</dt><dd>{definition.activationProbability}</dd></div>
-                <div><dt>{t('runWithModel')}</dt><dd>{definition.runWithModel ?? 'inherit'}</dd></div>
-                <div><dt>{t('capture')}</dt><dd>{definition.capture}</dd></div>
-                <div><dt>{t('context')}</dt><dd>{definition.context}</dd></div>
-                <div><dt>{t('thinkFirst')}</dt><dd>{String(definition.thinkFirst)}</dd></div>
-                <div><dt>{t('holdout')}</dt><dd>{String(definition.holdout)}</dd></div>
-                <div><dt>{t('sourcePath')}</dt><dd><code>{definition.sourcePath}</code></dd></div></dl>
-              <div className={css.actions}>
-                <button type="button" disabled={busy} onClick={() => { void run(async () => { await props.setEnabled(definition.id, !definition.enabled); await reload() }) }}>
-                  {t(definition.enabled ? 'disable' : 'enable')}
-                </button>
-                <button type="button" disabled={busy} onClick={() => { setEditingId(definition.id); setDefinitionEdit(definitionDraft(definition)) }}>{t('edit')}</button>
-                <button type="button" disabled={busy} data-confirm={deleteId === definition.id} onClick={() => {
-                  if (deleteId !== definition.id) { setDeleteId(definition.id); return }
-                  void run(async () => { await props.delete(definition.id); setDeleteId(null); await reload() })
-                }}>{t(deleteId === definition.id ? 'confirmDelete' : 'delete')}</button>
-              </div>
-              {editingId === definition.id && definitionEdit !== null ? (
-                <div className={css.inlineEditor} data-shadow-inline-editor>
-                  <h3>{t('editTitle')}</h3>
-                  <DefinitionEditor
-                    t={t}
-                    busy={busy}
-                    editingId={editingId}
-                    draft={definitionEdit}
-                    setDraft={setDefinitionEdit}
-                    catalog={catalog}
-                    effortLadderFallback={effortLadderFallback}
-                    valid={validDefinition}
-                    submit={submitDefinition}
-                    cancel={() => { setDefinitionEdit(null); setEditingId(null) }}
-                  />
-                </div>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      <section className={css.panel} data-shadow-templates>
-        <div className={css.sectionHead}><div><h3>{t('templatesTitle')}</h3><p>{t('templatesDescription')}</p></div></div>
-        <ul className={css.definitions}>
-          {SHADOW_TEMPLATES.map(template => {
-            const exists = catalog?.definitions.some(definition => definition.id === template.id) === true
-            return (
-              <li key={template.id} data-shadow-template={template.id}>
-                <div className={css.definitionTitle}>
-                  <div><strong>{t(template.nameKey)}</strong><code>{template.id}</code>
-                    <span className={css.templateDescription}>{t(template.descriptionKey)}</span></div>
-                  <span data-enabled="false">{t('templateStatus')}</span>
-                </div>
-                <details className={css.templatePromptDisclosure}>
-                  <summary>{t('templatePromptPreview')}</summary>
-                  <pre className={css.templatePrompt}>{template.prompt}</pre>
-                </details>
-                <div className={css.actions}>
-                  <button type="button" disabled={busy || exists} onClick={() => {
-                    setEditingId(null)
-                    setDefinitionEdit(templateDraft(template, t(template.nameKey)))
-                  }}>{t(exists ? 'templateExists' : 'useTemplate')}</button>
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-      </section>
-
-      {editingId === null && definitionEdit !== null ? (
-        <CreateShadowPanel
-          t={t}
-          busy={busy}
-          draft={definitionEdit}
-          setDraft={setDefinitionEdit}
-          catalog={catalog}
-          effortLadderFallback={effortLadderFallback}
-          valid={validDefinition}
-          submit={submitDefinition}
-          cancel={() => { setDefinitionEdit(null); setEditingId(null) }}
-        />
-      ) : null}
-
-      <section className={css.panel} data-shadow-diagnostics>
-        <h3>{t('diagnosticsTitle')}</h3>
-        {catalog?.diagnostics.length === 0 ? <p>{t('noDiagnostics')}</p> : null}
-        <ul>{catalog?.diagnostics.map(diagnostic => <li key={diagnostic.path}><code>{diagnostic.path}</code>: {diagnostic.error}</li>)}</ul>
-      </section>
+      <ToastStack toasts={toasts} dismissLabel={t('toastDismiss')} onDismiss={dismiss} />
     </div>
-  )
-}
-
-/** Creation editor panel that scrolls itself into view when it opens. */
-function CreateShadowPanel(props: {
-  readonly t: ShadowMindSettingsTabProps['t']
-  readonly busy: boolean
-  readonly draft: DefinitionDraft
-  readonly setDraft: (draft: DefinitionDraft) => void
-  readonly catalog: ShadowAdministrationSnapshot | null
-  readonly effortLadderFallback: readonly string[]
-  readonly valid: ShadowDefinitionInput | undefined
-  readonly submit: (input: ShadowDefinitionInput) => void
-  readonly cancel: () => void
-}): ReactNode {
-  const panel = useRef<HTMLElement | null>(null)
-  useEffect(() => {
-    panel.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
-  }, [])
-  return (
-    <section className={css.panel} data-shadow-editor ref={panel}>
-      <h3>{props.t('createTitle')}</h3>
-      <DefinitionEditor
-        t={props.t}
-        busy={props.busy}
-        editingId={null}
-        draft={props.draft}
-        setDraft={props.setDraft}
-        catalog={props.catalog}
-        effortLadderFallback={props.effortLadderFallback}
-        valid={props.valid}
-        submit={props.submit}
-        cancel={props.cancel}
-      />
-    </section>
   )
 }
 

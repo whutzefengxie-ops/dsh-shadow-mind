@@ -1,8 +1,8 @@
 /**
- * Bundled reference templates for the Shadow Mind settings tab.
- * Templates are client-side only: they are never written to the definition
- * directory and never join scheduling until the user adopts one through the
- * create form.
+ * Bundled review-style presets for the Shadow Mind settings tab.
+ * Presets are client-side only: choosing one pre-fills the responsibility
+ * prompt (and capture window) of the single default Shadow; nothing is
+ * persisted until the user saves.
  * @module @whutzefengxie-ops/dsh-shadow-mind/client/templates
  */
 
@@ -13,19 +13,17 @@ import type { ShadowMindLocaleKey } from './locales.ts'
 /** Mirrors the runtime definition id pattern without importing Node-side registry code. */
 const TEMPLATE_ID_PATTERN = /^[a-z0-9][a-z0-9_-]*$/u
 
-/** One adoptable reference template rendered by the settings tab. */
+/** One selectable review-style preset rendered by the settings tab. */
 export interface ShadowTemplate {
-  /** Stable lowercase definition id proposed by the template. */
+  /** Stable lowercase preset id. */
   readonly id: string
   /** Locale key for the display name. */
   readonly nameKey: ShadowMindLocaleKey
   /** Locale key for the one-line description. */
   readonly descriptionKey: ShadowMindLocaleKey
-  /** Proposed activation probability. */
-  readonly activationProbability: number
   /** Proposed trajectory capture window. */
   readonly capture: ShadowDefinitionInput['capture']
-  /** Responsibility prompt pre-filled into the create form. */
+  /** Responsibility prompt pre-filled into the Shadow card. */
   readonly prompt: string
 }
 
@@ -49,7 +47,6 @@ export const SHADOW_TEMPLATES: readonly ShadowTemplate[] = Object.freeze([
     id: 'contrarian',
     nameKey: 'templateNameContrarian',
     descriptionKey: 'templateDescriptionContrarian',
-    activationProbability: 0.3,
     capture: 'since-compaction',
     prompt: personaPrompt('Challenge the strongest root claim. Prefer a concrete counterexample over broad caution.'),
   },
@@ -57,7 +54,6 @@ export const SHADOW_TEMPLATES: readonly ShadowTemplate[] = Object.freeze([
     id: 'hacker',
     nameKey: 'templateNameHacker',
     descriptionKey: 'templateDescriptionHacker',
-    activationProbability: 0.3,
     capture: 'since-compaction',
     prompt: personaPrompt('Inspect failure handling and repeated operations. Name the probed class in every report.'),
   },
@@ -65,7 +61,6 @@ export const SHADOW_TEMPLATES: readonly ShadowTemplate[] = Object.freeze([
     id: 'researcher',
     nameKey: 'templateNameResearcher',
     descriptionKey: 'templateDescriptionResearcher',
-    activationProbability: 0.3,
     capture: 'since-compaction',
     prompt: personaPrompt('Audit whether each conclusion is supported by the rendered trajectory. Treat omitted data as an evidence gap.'),
   },
@@ -73,7 +68,6 @@ export const SHADOW_TEMPLATES: readonly ShadowTemplate[] = Object.freeze([
     id: 'simplifier',
     nameKey: 'templateNameSimplifier',
     descriptionKey: 'templateDescriptionSimplifier',
-    activationProbability: 0.3,
     capture: 'since-compaction',
     prompt: personaPrompt('Find repeated work or an unnecessary mechanism only when the trajectory demonstrates it.'),
   },
@@ -81,7 +75,6 @@ export const SHADOW_TEMPLATES: readonly ShadowTemplate[] = Object.freeze([
     id: 'architect',
     nameKey: 'templateNameArchitect',
     descriptionKey: 'templateDescriptionArchitect',
-    activationProbability: 0.3,
     capture: 'since-compaction',
     prompt: personaPrompt('Inspect cross-step consistency, stale inputs, and claims that do not follow from recorded results.'),
   },
@@ -89,7 +82,6 @@ export const SHADOW_TEMPLATES: readonly ShadowTemplate[] = Object.freeze([
     id: 'implementation-reviewer',
     nameKey: 'templateNameImplementationReviewer',
     descriptionKey: 'templateDescriptionImplementationReviewer',
-    activationProbability: 0.3,
     capture: 'since-compaction',
     prompt: [
       'Review the completed root implementation work against its task.',
@@ -116,17 +108,13 @@ export const SHADOW_TEMPLATES: readonly ShadowTemplate[] = Object.freeze([
   },
 ])
 
-/* v8 ignore start -- module-level invariant; reject malformed template data before any UI renders it. */
+/* v8 ignore start -- module-level invariant; reject malformed preset data before any UI renders it. */
 for (const template of SHADOW_TEMPLATES) {
   if (!TEMPLATE_ID_PATTERN.test(template.id)) {
     throw new Error(`shadow template id must match ${String(TEMPLATE_ID_PATTERN)}: ${JSON.stringify(template.id)}`)
   }
   if (template.prompt.trim() === '' || template.nameKey.trim() === '' || template.descriptionKey.trim() === '') {
     throw new Error(`shadow template ${JSON.stringify(template.id)} needs a non-empty prompt, nameKey, and descriptionKey`)
-  }
-  if (!Number.isFinite(template.activationProbability)
-    || template.activationProbability < 0 || template.activationProbability > 1) {
-    throw new Error(`shadow template ${JSON.stringify(template.id)} needs an activation probability from 0 through 1`)
   }
 }
 if (new Set(SHADOW_TEMPLATES.map(template => template.id)).size !== SHADOW_TEMPLATES.length) {

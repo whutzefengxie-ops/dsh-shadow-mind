@@ -183,7 +183,7 @@ root 必须实际产生持久 `tool/result`；只在文本中声称读取文件�
 | 全局设置和 Markdown 定义 | 保留 | 持久配置 |
 | 已接受报告、`shadow-report` provenance、锚定 Report 卡片 | 保留 | 持久 Session 事实 |
 | active、pending、非 report 终态周期、pause | 清空 | 当前进程控制状态 |
-| `totalRuns`、`lastRun`、`prefilterSkips`、`recentReviews`、value-loop 与 synthesis 计数 | 清空 | 当前进程诊断；UI 和命令必须明确标注作用域 |
+| `totalRuns`、`lastRun`、`recentReviews` 与 value-loop 计数（prefilter/synthesis 计数已随功能删除） | 清空 | 当前进程诊断；UI 和命令必须明确标注作用域 |
 | `spentChars` 与 budget tier | 清空为 `0`/`standard` | 不符合“自最近一次真实用户消息起”的预算承诺，必须整改 |
 
 已验证 Session 在重启前报告 `1 total runs`、`2363 chars` 和一条最近报告；重启后仍能看到定义、持久报告和 relay 标记，但状态变为 `0 total runs`、`0 chars`、零最近报告且没有 `lastRun`。进程统计归零符合内部类型说明，`spentChars` 归零则允许通过服务重启绕过软硬预算。
@@ -196,7 +196,7 @@ root 必须实际产生持久 `tool/result`；只在文本中声称读取文件�
 
 1. **持久 Session 事实**：已接受 relay 及其 provenance、可由 Session 日志恢复的 anchored Report 卡片。
 2. **持久治理状态**：当前 root 自最近一次真实用户消息以来的 `spentChars` 和 budget tier。服务重启不是新的用户消息，不得重置它们。
-3. **当前进程诊断与控制**：active、pending、pause、运行周期、`totalRuns`、`lastRun`、prefilter、value-loop、recent review 投影、cooldown、escalation 和 synthesis 计数。它们可以重置，但每个展示位置必须写明“当前进程”。
+3. **当前进程诊断与控制**：active、pending、pause、运行周期、`totalRuns`、`lastRun`、value-loop、recent review 投影、cooldown 与 escalation（prefilter/synthesis 计数已随功能删除）。它们可以重置，但每个展示位置必须写明“当前进程”。
 
 本整改不把活动 child 或非 report 卡片恢复为可执行任务。进程停止会终止这些生命周期；重启后只恢复持久事实和预算治理。
 
