@@ -46,6 +46,16 @@ Get-ChildItem (Join-Path $ProfilePath 'lib\chunks') | ForEach-Object {
   }
 }
 
+# 4. Self-consistency: every chunk referenced by an entry bundle must exist on disk.
+# A missing referenced chunk would make the harness fail to load the runtime on the
+# next restart (the same failure class as "Shadow Mind data is unavailable").
+$chunksOnDisk = @(Get-ChildItem (Join-Path $ProfilePath 'lib\chunks') -File | ForEach-Object { $_.Name })
+$missing = @($referenced | Where-Object { $chunksOnDisk -notcontains $_ })
+if ($missing.Count -gt 0) {
+  throw "deployed lib is not self-consistent: referenced chunk(s) missing: $($missing -join ', ')"
+}
+Write-Output "referenced chunks present on disk: $(if ($referenced) { $referenced -join ', ' } else { '(none referenced)' })"
+
 if (-not $SkipInspect) {
   Write-Output '--- deployed bundle hashes (should read OK) ---'
   foreach ($f in @('lib\index.js', 'lib\tool.js', 'lib\typert.js', 'lib\client.js')) {
