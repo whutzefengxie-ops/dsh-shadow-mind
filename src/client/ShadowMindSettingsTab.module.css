@@ -3,6 +3,8 @@
   flex-direction: column;
   gap: 16px;
   position: relative;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .hero {
@@ -27,6 +29,8 @@
   border-radius: 10px;
   padding: 16px;
   background: var(--dsw-color-bg-container, #ffffff);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .panel h3 {
@@ -57,6 +61,17 @@
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
   margin-top: 14px;
+  align-items: start;
+}
+
+/* A composite block (e.g. the model selector) that must span the full row. */
+.fullSpan {
+  grid-column: 1 / -1;
+}
+
+/* Force a single column for the stacked fields inside the model selector. */
+.stack {
+  grid-template-columns: 1fr;
 }
 
 .field {

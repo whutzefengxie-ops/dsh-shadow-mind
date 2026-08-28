@@ -359,9 +359,9 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
             <details className={css.disclosure} data-shadow-advanced>
               <summary>{t('advancedSettings')}</summary>
               <div className={css.grid}>
-                <fieldset className={css.fieldset}>
+                <fieldset className={`${css.fieldset} ${css.fullSpan}`}>
                   <legend>{t('runModel')}</legend>
-                  <div className={css.grid}>
+                  <div className={`${css.grid} ${css.stack}`}>
                     <ModelRouteSelect
                       catalog={catalog?.modelCatalog ?? null}
                       disabled={busy}
