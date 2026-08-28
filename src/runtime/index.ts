@@ -267,6 +267,7 @@ function providerFailureReason(stopReason: string): ShadowRunReasonCode {
     case 'error': return 'PROVIDER_ERROR'
     case 'max-tokens': return 'PROVIDER_MAX_TOKENS'
     case 'refusal': return 'PROVIDER_REFUSAL'
+    case 'no-structured-output': return 'STRUCTURED_OUTPUT_MISSING'
     default: return 'PROVIDER_STOPPED'
   }
 }

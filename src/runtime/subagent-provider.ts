@@ -59,6 +59,11 @@ declare module '@deepseek-ai/dsh-subagent' {
     /** Whether this child plans once without tools before investigating. */
     readonly thinkFirst?: boolean
   }
+
+  interface SubagentStopReasonMap {
+    /** The child's turn completed normally but never satisfied the structured-output contract. */
+    'no-structured-output': 'no-structured-output'
+  }
 }
 
 /** Provider name reserved for Shadow Mind's conditioned fresh children. */
@@ -67,6 +72,10 @@ export const SHADOW_MIND_SUBAGENT_PROVIDER = 'shadow-mind'
 /** Model-visible continuation injected after the tool-free planning request. */
 export const THINK_FIRST_CONTINUATION
   = 'Planning is complete. Now investigate with the available tools and submit the required final result.'
+
+/** Provider-authored reason for a turn that completed without the structured-output contract. */
+export const STRUCTURED_OUTPUT_MISSING_DIAGNOSTIC
+  = 'Shadow subagent completed its turn without calling the mandatory structured_output tool; no report was captured or relayed.'
 
 /** Map a session turn outcome to the subagent seam's terminal vocabulary. */
 function toStopReason(reason: TurnEndReason | undefined): SubagentStopReason {
@@ -282,7 +291,16 @@ function readResult(
     if (structured.captured !== undefined) {
       return { output, structured: structured.captured.value, stopReason }
     }
-    if (stopReason === 'completed') return { output, stopReason: cancelled ? 'aborted' : 'error' }
+    // A completed turn that never satisfied the structured-output contract is NOT
+    // a provider error: the child finished normally and simply ended with a
+    // passthrough answer instead of the mandatory `structured_output` call. Report
+    // the contract miss as its own reason so the shadow run can surface an
+    // actionable, non-misleading failure instead of "Subagent stopped with error".
+    // A cancelled run still wins as `aborted`.
+    if (stopReason === 'completed') {
+      if (cancelled) return { output, stopReason: 'aborted' }
+      return { output, diagnostic: STRUCTURED_OUTPUT_MISSING_DIAGNOSTIC, stopReason: 'no-structured-output' }
+    }
   }
   return { output, stopReason }
 }

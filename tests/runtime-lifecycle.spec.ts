@@ -667,6 +667,33 @@ Review the completed turn.
     expect(debug).not.toContain('stack')
   })
 
+  it('classifies a completed turn with missing structured output as STRUCTURED_OUTPUT_MISSING', async () => {
+    const harness = await setup(() => ({
+      id: SessionId('child-no-structure'),
+      localAgent: undefined,
+      result: Promise.resolve({
+        output: [{ type: 'text', text: 'Investigation complete; the report follows in text.' }],
+        diagnostic: 'Shadow subagent completed its turn without calling the mandatory structured_output tool; no report was captured or relayed.',
+        stopReason: 'no-structured-output',
+      }),
+      dispose: () => Promise.resolve(),
+    }))
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'failed',
+        stage: 'run',
+        reasonCode: 'STRUCTURED_OUTPUT_MISSING',
+        providerStopReason: 'no-structured-output',
+        error: {
+          message: 'Shadow subagent completed its turn without calling the mandatory structured_output tool; no report was captured or relayed.',
+        },
+      })
+    })
+    expect(harness.deliveries).toHaveLength(0)
+  })
+
   it('attributes a user-message cancellation and records its diagnostic timeline', async () => {
     const harness = await setup(request => ({
       id: SessionId('child-aborted'),
