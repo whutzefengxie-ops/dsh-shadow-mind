@@ -4,7 +4,7 @@
 
 本文基于最新一批用户投诉，对 Shadow Mind 的设置页与调度模型做第二轮收敛：产品从「多 Shadow 陪审团 + 命令审查」收敛为**一个 Shadow 审查者**单一能力，并重做交互。文中标注了实施结果；取代 `settings-ux-analysis.md` 中仍按多定义模型描述的部分。
 
-> **实施状态（代码完成，待 live 重启复验）**：运行时、工具面、客户端、测试与文档已全部按本方案落地并通过 `pnpm run check`。要点：单一 `default` 定义自动创建（旧定义只读保留、概率统一 70%、默认超时 600 秒）；管理面 `catalog` 幂等确保 `default.md`，全新安装打开设置页即有可编辑卡片（修复空态误报「无法读取 Shadow Mind 数据」）；多定义 CRUD API 删除；`synthesis.ts`、`prefilter.ts` 与 `command-gate.ts` 整体删除；设置页重构为单 Shadow 卡片 + toast + 概率滑杆（10%–100%、步进 10%、默认 70%）。**live 验收尚未完成**：新 `lib/` 已部署进 live profile（备份 `lib.bak-20260828-101939`、`lib.bak-20260828-102950-pre-600s`、`lib.bak-20260828-111929-pre-catalog-fix`），但 harness 尚未重启——重启后的复验清单：会话工具面四项（`list_shadows`/`update_default_shadow`/`get_shadow_config`/`update_shadow_config`）、设置页单 Shadow 卡片（开关 + 滑杆 + 右下 toast）、旧定义只读提示、首个轮次后 `default.md`（概率 0.7、默认超时 600s）。复验通过前，对应 PR 应保持 draft / 不合并。
+> **实施状态（代码完成；服务端 live 验收通过，仅剩客户端渲染确认）**：运行时、工具面、客户端、测试与文档已全部按本方案落地并通过 `pnpm run check`。要点：单一 `default` 定义自动创建（旧定义只读保留、概率默认 70%、默认超时 600 秒）；管理面 `catalog` 幂等确保 `default.md`，全新安装打开设置页即有可编辑卡片（修复空态误报「无法读取 Shadow Mind 数据」）；多定义 CRUD API 删除；`synthesis.ts`、`prefilter.ts` 与 `command-gate.ts` 整体删除；设置页重构为单 Shadow 卡片 + toast + 概率滑杆（10%–100%、步进 10%、默认 70%）。**live 验收进度**：harness 已重启并用新构建运行——会话工具面四项（`list_shadows`/`update_default_shadow`/`get_shadow_config`/`update_shadow_config`）已生效，`get_shadow_config` 读到默认超时 `600`、无任何已删键，`list_shadows` 显示 `default` 已自动创建（概率默认 0.7，用户可经设置页滑杆改，如 0.8 已落盘）、旧 `implementation-reviewer` 只读保留不再调度、diagnostics 为空；新 `lib/` 已部署进 live profile（历次备份见下文）。**唯一未完成项**：用户在浏览器 Ctrl+F5 后确认超时字段渲染出占位符 `600` 与「留空使用全局默认值：600 秒（10 分钟）。」——通过前，对应 PR 应保持 draft / 不合并。
 
 ## 1. 反思：反馈背后的根因（举一反三）
 
@@ -106,7 +106,7 @@
 - **阶段 A（UI 层）**：toast、页面重构、滑杆、控件、错误文案映射 ✅
 - **阶段 B（运行时收敛）**：单 Shadow 调度、砍合成、删谓词、schema 收敛、删除命令闸门 ✅
 - **阶段 C（文档与测试）** ✅；`pnpm run check`（typert 校验 + typecheck + 137 测试 + 构建 + 冒烟）全绿。
-- **阶段 D（live 部署与复验）**：lib/ 已部署进 live profile ✅；harness 重启 + 上述复验清单 ⏳（未完成）。
+- **阶段 D（live 部署与复验）**：lib/ 已部署进 live profile ✅；harness 已重启并用新构建运行；服务端验收通过（工具面四项、`default.md` 自动创建、默认超时 600s、旧定义只读提示）✅；**唯一未闭环 = 用户 Ctrl+F5 确认超时字段渲染占位符 600 与说明文字** ⏳。
 
 ## 5. 决策记录
 
