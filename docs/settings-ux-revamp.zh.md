@@ -101,13 +101,13 @@
 ### 3.10 文档与测试
 
 - docs：本文档；`target-architecture`、`review-quality-directions`、`installation-runtime-validation`、`subagent-binding-and-command-gate-design`、`technical-design` 中多 Shadow/谓词/合成/闸门描述标注「已移除」；`examples/shadow-minds/` 保留作为预设数据源并注明。
-- tests：删除 scheduler 多选/prefilter/synthesis/command-gate 相关 spec；registry/模板/工具/typert/组装流程 spec 同步收敛；新增单 Shadow 语义测试（旧定义不参与调度）。
+- tests：删除 scheduler 多选/prefilter/synthesis/command-gate 相关 spec；registry/模板/工具/typert/组装流程 spec 同步收敛；新增单 Shadow 语义测试（旧定义不参与调度）。多轮重叠（issue #3）跟进：运行时在仍有审查运行时就**延迟**该轮（每 root 的 FIFO 待审队列，逐个串行补跑），不再静默丢弃重叠轮次；确认的策略为「任务批内延迟补跑、跨新用户消息丢弃未补跑的过期轮次」；两条路径均有强制回归测试。
 
 ## 4. 实施阶段与结果
 
 - **阶段 A（UI 层）**：toast、页面重构、滑杆、控件、错误文案映射 ✅
 - **阶段 B（运行时收敛）**：单 Shadow 调度、砍合成、删谓词、schema 收敛、删除命令闸门 ✅
-- **阶段 C（文档与测试）** ✅；`pnpm run check`（typert 校验 + typecheck + 137 测试 + 构建 + 冒烟）全绿。
+- **阶段 C（文档与测试）** ✅；`pnpm run check`（typert 校验 + typecheck + 139 测试 + 构建 + 冒烟）全绿。
 - **阶段 D（live 部署与复验）**：lib/ 已部署进 live profile ✅；harness 已重启并用新构建运行；服务端验收通过（工具面四项、`default.md` 自动创建、默认超时 600s、旧定义只读提示）✅；浏览器设置页单卡片、toast 与超时默认值 600 显示均确认 ✅；客户端对旧形态快照 optional 容错（版本错位不再整屏报错）✅。
 
 ## 5. 决策记录

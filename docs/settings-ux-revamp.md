@@ -101,13 +101,13 @@ The page keeps a single **Shadow review** card: switch, probability slider, revi
 ### 3.10 Docs and tests
 
 - docs: this document; `target-architecture`, `review-quality-directions`, `installation-runtime-validation`, `subagent-binding-and-command-gate-design`, and `technical-design` get their multi-Shadow/predicate/synthesis/gate descriptions marked "removed"; `examples/shadow-minds/` stays as the preset data source and is noted as such.
-- tests: delete the scheduler multi-selection/prefilter/synthesis/command-gate specs; converge the registry/template/tool/typert/assembled-flow specs; add single-Shadow semantics tests (legacy definitions never scheduled).
+- tests: delete the scheduler multi-selection/prefilter/synthesis/command-gate specs; converge the registry/template/tool/typert/assembled-flow specs; add single-Shadow semantics tests (legacy definitions never scheduled). Issue #3 follow-up: the runtime defers a qualifying turn while a review is still running (per-root FIFO pending-turn queue, drained one-at-a-time after each review finishes) so an overlapping turn is no longer silently dropped; the confirmed policy is "within a task batch defer and eventually run; across a new user message drop un-run deferred turns as stale". Regression tests cover both paths.
 
 ## 4. Implementation phases and results
 
 - **Phase A (UI layer)**: toasts, page restructure, slider, controls, error-copy mapping ✅
 - **Phase B (runtime convergence)**: single-Shadow scheduling, cut synthesis, delete predicates, schema convergence, delete the command gate ✅
-- **Phase C (docs and tests)** ✅; `pnpm run check` (typert verification + typecheck + 137 tests + build + smoke) is green.
+- **Phase C (docs and tests)** ✅; `pnpm run check` (typert verification + typecheck + 139 tests + build + smoke) is green.
 - **Phase D (live deployment and verification)**: lib/ deployed into the live profile ✅; the harness was restarted and runs the new build; server-side acceptance passed (four-tool surface, `default.md` auto-created, default timeout 600s, read-only legacy note) ✅; the browser single-card settings page, toasts, and the 600 default-timeout display are all confirmed ✅; the client tolerates an old-host-shaped snapshot via the optional field (version skew no longer full-page errors) ✅.
 
 ## 5. Decision record
