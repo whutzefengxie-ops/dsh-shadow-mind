@@ -4,7 +4,7 @@
 
 This document responds to the latest wave of user complaints with a second round of convergence for the Shadow Mind settings page and scheduling model: the product moves from "a multi-Shadow jury plus a command review" to **one Shadow reviewer** — a single capability — with reworked interactions. It records the implementation results and supersedes the parts of `settings-ux-analysis.md` that still describe the multi-definition model.
 
-> **Implementation status (complete)**: runtime, tool surface, client, tests, and docs all follow this plan and pass `pnpm run check`. Highlights: a single `default` definition is auto-created (legacy definitions kept read-only, probability unified to 70%, default timeout 600 seconds); the multi-definition CRUD API is deleted; `synthesis.ts`, `prefilter.ts`, and `command-gate.ts` are deleted outright; the settings page is rebuilt as a single Shadow card with toasts and a 10%–100% probability slider (step 10%, default 70%).
+> **Implementation status (code complete, live restart verification pending)**: runtime, tool surface, client, tests, and docs all follow this plan and pass `pnpm run check`. Highlights: a single `default` definition is auto-created (legacy definitions kept read-only, probability unified to 70%, default timeout 600 seconds); the multi-definition CRUD API is deleted; `synthesis.ts`, `prefilter.ts`, and `command-gate.ts` are deleted outright; the settings page is rebuilt as a single Shadow card with toasts and a 10%–100% probability slider (step 10%, default 70%). **Live acceptance is NOT done**: the new `lib/` was deployed into the live profile (backups `lib.bak-20260828-101939`, `lib.bak-20260828-102950-pre-600s`), but the harness has not been restarted — the post-restart checklist: the four-tool surface (`list_shadows`/`update_default_shadow`/`get_shadow_config`/`update_shadow_config`), the single-card settings page (switch + slider + bottom-right toasts), the read-only legacy-definition note, and `default.md` after the first turn (probability 0.7, default timeout 600s). Until that passes, the corresponding PR must stay draft / not merge.
 
 ## 1. Reflection: root causes behind the feedback
 
@@ -105,7 +105,8 @@ The page keeps a single **Shadow review** card: switch, probability slider, revi
 
 - **Phase A (UI layer)**: toasts, page restructure, slider, controls, error-copy mapping ✅
 - **Phase B (runtime convergence)**: single-Shadow scheduling, cut synthesis, delete predicates, schema convergence, delete the command gate ✅
-- **Phase C (docs and tests)** ✅; `pnpm run check` (typert verification + typecheck + 135 tests + build + smoke) is green.
+- **Phase C (docs and tests)** ✅; `pnpm run check` (typert verification + typecheck + 136 tests + build + smoke) is green.
+- **Phase D (live deployment and verification)**: lib/ deployed into the live profile ✅; harness restart plus the checklist above ⏳ (pending).
 
 ## 5. Decision record
 
