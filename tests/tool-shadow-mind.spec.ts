@@ -3,7 +3,7 @@ import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
-import { CallId } from '@deepseek-ai/dsh-llm'
+import { ToolCallId } from '@deepseek-ai/dsh-llm'
 import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type ShadowMindRuntime from '../src/runtime/index.ts'
 import { resolveSettings } from '../src/runtime/config.ts'
@@ -147,7 +147,7 @@ async function execute(
 ) {
   return ctx.tools.execute({
     signal: testSignal,
-    callId: CallId(`call-${name}`),
+    callId: ToolCallId(`call-${name}`),
     name,
     arguments: args,
     ...agent === undefined ? {} : { agent },

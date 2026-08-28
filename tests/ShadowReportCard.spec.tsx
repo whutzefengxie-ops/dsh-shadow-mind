@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { ShadowReportCard, type ShadowReportCardProps } from '../src/client/ShadowReportCard.tsx'
 import type { ShadowReviewCycle, ShadowRunView } from '../src/runtime/types.ts'
 

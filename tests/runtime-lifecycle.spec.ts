@@ -6,7 +6,7 @@ import { Context } from '@deepseek-ai/cordis'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import {
-  CallId,
+  ToolCallId,
   createMessage,
   createToolResultMessage,
   createUserMessage,
@@ -23,6 +23,7 @@ import ShadowMindRuntime, { DEFAULT_SHADOW_ID } from '../src/runtime/index.ts'
 import { MemorySettings } from './memory-settings.ts'
 
 const CAPABILITIES: SubagentCapabilities = {
+  agentOptions: true,
   outputSchema: true,
   depthLimit: true,
   toolFilter: true,
@@ -132,7 +133,7 @@ Review the completed tool-using turn.
 
 function emitToolTurn(harness: RuntimeHarness, turn = 1): number {
   const step = 1
-  const callId = CallId(`call-${String(turn)}`)
+  const callId = ToolCallId(`call-${String(turn)}`)
   const session = harness.agent.session
   session.append('turn/start', { turn })
   session.append('user/message', createUserMessage({

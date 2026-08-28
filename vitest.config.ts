@@ -30,4 +30,9 @@ function standardDecoratorPlugin() {
 
 export default defineConfig({
   plugins: [standardDecoratorPlugin()],
+  test: {
+    // The default include walks every spec file under the repo root, which
+    // also picks up a harness checkout mounted inside the workspace by CI.
+    include: ['tests/**/*.spec.{ts,tsx}'],
+  },
 })

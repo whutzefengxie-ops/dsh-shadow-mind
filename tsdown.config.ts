@@ -9,7 +9,6 @@ const PACKAGE_ID = '@whutzefengxie-ops/dsh-shadow-mind'
 const CLIENT_EXTERNALS = new Set([
   'react',
   'react/jsx-runtime',
-  '@deepseek-ai/dsh-client-runtime/client',
   '@deepseek-ai/dsh-client-ui-primitives',
 ])
 const CSS_VIRTUAL_PREFIX = '\0shadow-mind-css:'
@@ -78,7 +77,9 @@ const client: UserConfig = {
   plugins: [{
     name: 'shadow-mind-client-imports',
     resolveId(source: string) {
-      if (!source.startsWith('@deepseek-ai/') || CLIENT_EXTERNALS.has(source)) return null
+      if (!source.startsWith('@deepseek-ai/')
+        || CLIENT_EXTERNALS.has(source)
+        || source.startsWith('@deepseek-ai/dsh-session/')) return null
       throw new Error(`client bundle cannot import runtime value ${JSON.stringify(source)}`)
     },
   }, {

@@ -10,7 +10,7 @@ The core design idea for this project comes from [pi-shadow-mind](https://github
 
 ## Install
 
-The plugin requires DeepSeek Harness `0.1.1-rc.2` or a compatible master build. Pin a reviewed commit when installing from GitHub:
+The plugin requires DeepSeek Harness `0.1.2-alpha.1` or a compatible master build. Pin a reviewed commit when installing from GitHub:
 
 ```sh
 dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#<commit-sha>

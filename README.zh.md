@@ -10,7 +10,7 @@
 
 ## 安装
 
-插件要求 DeepSeek Harness `0.1.1-rc.2` 或兼容的 master 构建。从 GitHub 安装时应固定已经审查的 commit：
+插件要求 DeepSeek Harness `0.1.2-alpha.1` 或兼容的 master 构建。从 GitHub 安装时应固定已经审查的 commit：
 
 ```sh
 dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#<commit-sha>

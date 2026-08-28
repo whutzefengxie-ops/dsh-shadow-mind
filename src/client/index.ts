@@ -1,9 +1,12 @@
 /** Shadow Mind Web administration registered under Settings → Plugins. */
 
-import type { ClientContext, SessionId } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-commands/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type {} from '@deepseek-ai/dsh-client-ui-session/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import shadowMindRemote from '../generated/typert.remote-client.js'
@@ -44,7 +47,7 @@ export const inject = [
   'locale',
   'sessions',
   'remote',
-  'conversationEvents',
+  'uiConversation',
 ]
 
 /** Unwrap one generated Remote business result. */
@@ -79,11 +82,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
       remote.cycles(sessionId),
     ))
     scope.effect(() => () => { reviewStore.dispose() }, 'ui-shadow-mind: review lifecycle store')
-    scope.effect(() => scope.conversationEvents.register(shadowReviewDefinition), 'ui-shadow-mind: review projection')
-    scope.effect(
-      () => scope.conversationEvents.register(shadowRelayMarkerDefinition),
-      'ui-shadow-mind: relay marker projection',
-    )
+    scope.uiConversation.events.register(shadowReviewDefinition)
+    scope.uiConversation.events.register(shadowRelayMarkerDefinition)
     scope.slots.inject('conversation.chat.node', () => scope.slots.register({
       name: 'conversation.chat.node',
       key: 'shadow-mind-review',

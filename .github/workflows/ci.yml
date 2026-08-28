@@ -13,10 +13,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # The dsh-0.1.2 client surface is not published to npm yet, so devDeps
+      # link against the harness source. Check out the pinned release commit
+      # (fork tag dsh-v0.1.2-alpha.1) and expose it at the sibling path the
+      # `link:../deepseek-harness/...` entries resolve from.
+      - uses: actions/checkout@v4
+        with:
+          repository: whutzefengxie-ops/deepseek-harness
+          ref: cd5ef8148158c3a752a658978873241fdf8e2bbc
+          fetch-depth: 1
+          path: harness-source
+      - name: Link the harness checkout where the devDeps expect it
+        run: ln -s "$GITHUB_WORKSPACE/harness-source" "$GITHUB_WORKSPACE/../deepseek-harness"
+
       - uses: actions/setup-node@v4
         with:
           node-version: 24
       - run: corepack enable
+
+      # corepack picks each repo's packageManager from its package.json
+      # (pnpm 11.7.0 for the harness, 10.15.1 for this repo).
+      - name: Install the pinned harness
+        run: cd ../deepseek-harness && pnpm install --frozen-lockfile
+      - name: Build the harness host and client faces
+        run: cd ../deepseek-harness && pnpm run build:lib
+
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
       - run: npm pack --dry-run
