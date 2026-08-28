@@ -8,27 +8,23 @@ import { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 import { ShadowRegistry } from './registry.ts';
-import type { CreateShadowDefinition, ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowModelCatalog, ShadowReviewCycle, UpdateShadowDefinition, UpdateShadowMindSettings } from './types.ts';
+import type { ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowModelCatalog, ShadowReviewCycle, UpdateShadowMindSettings } from './types.ts';
 export { Config } from './config.ts';
 export * from './types.ts';
 export * from './protocol.ts';
-export { ShadowRegistry, parseShadowDefinition, SHADOW_ID_PATTERN } from './registry.ts';
+export { ShadowRegistry, parseShadowDefinition, SHADOW_ID_PATTERN, DEFAULT_SHADOW_PROMPT } from './registry.ts';
 export { seededRandom } from './random.ts';
 export { optionalModelRoute, SHADOW_MODEL_ROUTE_PATTERN } from './model-route.ts';
-export { modelEligible, selectShadows } from './scheduler.ts';
+export { shouldRunShadow } from './scheduler.ts';
 export { buildShadowPrompt, projectTrajectory, projectTrajectoryWithAnchors, summarizeToolResult } from './trajectory.ts';
 export { PERSONA_AFFINITIES, PROBE_CLASSES_V1, renderProbeChecklist } from './probes.ts';
-export { boostPredicates, matchesPredicate, prefilterPredicates } from './prefilter.ts';
-export { preferIndependentCandidates, resolveIndependence, vendorFamily } from './vendor.ts';
+export { resolveIndependence, vendorFamily } from './vendor.ts';
+export { containsHoldoutLiteral, redactHoldoutLiterals } from './holdout.ts';
 export { classifyChallenge, classifyChallengeObservation, observeChallenge, } from './value-loop.ts';
 export type { ChallengeObservation, ShadowValueClassification, ValueLoopChallenge, } from './value-loop.ts';
 export { detectPatterns } from './review-window.ts';
 export type { ReviewEntry, ReviewWindowOptions, StagnationDetection, } from './review-window.ts';
-export { buildSynthesisPrompt, containsHoldoutLiteral, redactHoldoutLiterals, selectShadowConflict, } from './synthesis.ts';
-export type { ShadowConflict } from './synthesis.ts';
 export { ReportBatcher } from './report-batcher.ts';
-export { CommandGate, GATE_OUTPUT_SCHEMA } from './command-gate.ts';
-export type { CommandGateStats, GateCommand, GateJudgeOutcome, GateTier, GateVerdict } from './command-gate.ts';
 export { buildShadowModelCatalog } from './model-catalog.ts';
 export type { ShadowCatalogModel, ShadowModelCatalog, ShadowModelEffort, ShadowModelFailure, ShadowModelGroup, ShadowModelReasoning, } from './model-catalog.ts';
 declare module '@deepseek-ai/cordis' {
@@ -50,7 +46,6 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     private readonly settingsScope;
     private random;
     private readonly owners;
-    private readonly gate;
     private stopped;
     /** @param ctx Cordis context carrying agents, subagents, and settings. @param config Deployment base settings. */
     constructor(ctx: Context, config?: ShadowMindConfig);
@@ -70,54 +65,18 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
      */
     modelCatalog(): Promise<ShadowModelCatalog>;
     /**
-     * Create one complete definition submitted by the Web administration page.
-     * @param input Validated wire fields.
+     * Persist the complete single Shadow definition submitted by the Web
+     * administration page as `default.md`.
+     * @param input Validated wire fields for the default Shadow.
      * @returns Persisted definition.
      */
-    remoteExportCreate(input: ShadowDefinitionInput): Promise<ShadowDefinition>;
+    remoteExportSaveDefault(input: ShadowDefinitionInput): Promise<ShadowDefinition>;
     /**
-     * Replace every editable field of one definition from the Web administration page.
-     * @param input Complete wire fields including the existing id.
-     * @returns Persisted definition.
-     */
-    remoteExportUpdate(input: ShadowDefinitionInput): Promise<ShadowDefinition>;
-    /**
-     * Enable or disable one definition from the Web administration page.
-     * @param id Definition id.
-     * @param enabled Next scheduling state.
-     * @returns Persisted definition.
-     */
-    remoteExportSetEnabled(id: string, enabled: boolean): Promise<ShadowDefinition>;
-    /**
-     * Delete one definition from the Web administration page while preserving its debug log.
-     * @param id Definition id.
-     */
-    remoteExportDelete(id: string): Promise<void>;
-    /**
-     * Create a definition atomically.
+     * Persist the complete single Shadow definition as `default.md`.
      * @param input Complete definition fields.
      * @returns Validated persisted definition.
      */
-    createDefinition(input: CreateShadowDefinition): Promise<ShadowDefinition>;
-    /**
-     * Update a definition atomically.
-     * @param id Existing definition id.
-     * @param patch Fields to replace.
-     * @returns Updated validated definition.
-     */
-    updateDefinition(id: string, patch: UpdateShadowDefinition): Promise<ShadowDefinition>;
-    /**
-     * Enable or disable a definition atomically.
-     * @param id Existing definition id.
-     * @param enabled Next scheduling state.
-     * @returns Updated validated definition.
-     */
-    setEnabled(id: string, enabled: boolean): Promise<ShadowDefinition>;
-    /**
-     * Delete a definition while preserving debug logs.
-     * @param id Existing definition id.
-     */
-    deleteDefinition(id: string): Promise<void>;
+    saveDefaultDefinition(input: ShadowDefinitionInput): Promise<ShadowDefinition>;
     /**
      * Return the current immutable resolved settings.
      * @returns Live resolved settings snapshot.
@@ -203,12 +162,6 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     private resetCoordination;
     /** Start a fresh user-owned budget and review epoch. */
     private resetSessionGovernance;
-    /** Replace one selected conflict with a fresh synthesized report, or fail open. */
-    private synthesizeConflict;
-    /** Record a fail-open synthesis outcome without report text. */
-    private recordSynthesisFailure;
-    /** Append synthesis diagnostics and contain storage failures. */
-    private appendSynthesisDebug;
     /** Deliver only reports still current at the end of the batch window. */
     private deliver;
     /** Find one retained run record by its opaque id. */
@@ -231,24 +184,6 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     private releaseOwner;
     /** Whether an asynchronous run may still affect this exact root. */
     private accepts;
-    /** Per-root command-gate counters for runtime status. */
-    private gateStats;
-    /** Resolve the model selection the gate judge runs under. */
-    private gateModelSelection;
-    /**
-     * Settle one intercepted command through a fresh gate-judge child. Every
-     * failure path returns a `failure` outcome instead of throwing, so the
-     * gate's fail-open/fail-closed policy stays the only decision maker.
-     * @param agent Root agent whose command is under review.
-     * @param command Extracted command under review.
-     * @param signal Root turn signal; the judge aborts with it.
-     * @returns One judge settlement.
-     */
-    private judgeVerdict;
-    /** Build the bounded judge prompt from the environment declaration and recent trajectory. */
-    private buildGateJudgePrompt;
-    /** Append one gate diagnostic record without letting storage failures escape. */
-    private appendGateLog;
     /** Whether an agent is a top-level root rather than a subagent child. */
     private isRoot;
     /** Reject commands and APIs that target a child agent. */

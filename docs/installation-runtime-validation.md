@@ -183,7 +183,7 @@ The current implementation behaves as follows:
 | Global settings and Markdown definitions | Preserved | Persistent configuration |
 | Accepted report, `shadow-report` provenance, anchored Report card | Preserved | Persistent Session fact |
 | active, pending, non-report terminal cycles, pause | Cleared | Current-process control state |
-| `totalRuns`, `lastRun`, `prefilterSkips`, `recentReviews`, value-loop, and synthesis counters | Cleared | Current-process diagnostics; UI and command output must name the scope |
+| `totalRuns`, `lastRun`, `recentReviews`, and value-loop counters (prefilter/synthesis counters were removed with their features) | Cleared | Current-process diagnostics; UI and command output must name the scope |
 | `spentChars` and budget tier | Cleared to `0`/`standard` | Violates the “since the latest real user message” budget promise and requires remediation |
 
 The verified Session reported `1 total runs`, `2363 chars`, and one recent report before restart. The definition, durable report, and relay marker remained afterward, while status changed to `0 total runs`, `0 chars`, zero recent reports, and no `lastRun`. Resetting process metrics agrees with the internal type descriptions; resetting `spentChars` lets a service restart bypass the soft and hard limits.
@@ -196,7 +196,7 @@ The following three classes must be exposed consistently in the UI, Remote types
 
 1. **Persistent Session facts:** accepted relays and provenance, plus anchored Report cards recoverable from the Session log.
 2. **Persistent governance state:** `spentChars` and the budget tier for the current root since the latest real user message. A service restart is not a user message and must not reset them.
-3. **Current-process diagnostics and controls:** active, pending, pause, run cycles, `totalRuns`, `lastRun`, prefilter, value-loop, recent-review projection, cooldown, escalation, and synthesis counters. They may reset, but every presentation must say “current process.”
+3. **Current-process diagnostics and controls:** active, pending, pause, run cycles, `totalRuns`, `lastRun`, value-loop, recent-review projection, cooldown, and escalation (prefilter/synthesis counters were removed with their features). They may reset, but every presentation must say “current process.”
 
 This remediation does not restore an active child or non-report card as executable work. Process termination ends those lifecycles; restart recovers only persistent facts and budget governance.
 

@@ -8,13 +8,13 @@ import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import type ShadowMindRuntime from '../src/runtime/index.ts'
 import { resolveSettings } from '../src/runtime/config.ts'
 import type {
-  CreateShadowDefinition,
   ShadowDefinition,
+  ShadowDefinitionInput,
   ShadowMindSettings,
   ShadowMindStatus,
-  UpdateShadowDefinition,
   UpdateShadowMindSettings,
 } from '../src/runtime/index.ts'
+import { DEFAULT_SHADOW_ID } from '../src/runtime/index.ts'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import ApprovalService, { type ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
@@ -29,62 +29,50 @@ class RuntimeStub {
   paused = false
   lastRun: ShadowMindStatus['lastRun']
 
+  constructor() {
+    this.definitions.set(DEFAULT_SHADOW_ID, {
+      id: DEFAULT_SHADOW_ID,
+      name: 'Shadow',
+      enabled: true,
+      debug: false,
+      activationProbability: 0.7,
+      activeForModels: [],
+      tools: [],
+      capture: 'full',
+      context: 'standard',
+      thinkFirst: false,
+      holdout: false,
+      prompt: 'Review.',
+      sourcePath: `/shadow-minds/${DEFAULT_SHADOW_ID}.md`,
+    })
+  }
+
   listDefinitions() {
     return Promise.resolve({ definitions: [...this.definitions.values()], diagnostics: [] })
   }
 
-  createDefinition(input: CreateShadowDefinition): Promise<ShadowDefinition> {
+  saveDefaultDefinition(input: ShadowDefinitionInput): Promise<ShadowDefinition> {
+    if (input.id !== DEFAULT_SHADOW_ID) return Promise.reject(new Error('only the default Shadow can be saved'))
     const definition: ShadowDefinition = {
-      ...input,
-      capture: input.capture ?? 'full',
-      context: input.context ?? 'standard',
-      thinkFirst: input.thinkFirst ?? false,
-      preFilters: input.preFilters ?? [],
-      boostFilters: input.boostFilters ?? [],
-      boostFactor: input.boostFactor ?? 1,
-      holdout: input.holdout ?? false,
+      id: input.id,
+      name: input.name,
+      enabled: input.enabled,
+      debug: input.debug,
+      activationProbability: input.activationProbability,
+      activeForModels: input.activeForModels,
+      ...input.runWithModel === null ? {} : { runWithModel: input.runWithModel },
+      ...input.reasoningEffort === null ? {} : { reasoningEffort: input.reasoningEffort },
+      ...input.timeoutSeconds === null ? {} : { timeoutSeconds: input.timeoutSeconds },
+      tools: input.tools,
+      capture: input.capture,
+      context: input.context,
+      thinkFirst: input.thinkFirst,
+      holdout: input.holdout,
+      prompt: input.prompt,
       sourcePath: `/shadow-minds/${input.id}.md`,
     }
     this.definitions.set(input.id, definition)
     return Promise.resolve(definition)
-  }
-
-  updateDefinition(id: string, patch: UpdateShadowDefinition): Promise<ShadowDefinition> {
-    const current = this.definitions.get(id)
-    if (current === undefined) return Promise.reject(new Error(`missing ${id}`))
-    const merged = { ...current, ...patch }
-    const definition: ShadowDefinition = {
-      id: current.id,
-      sourcePath: current.sourcePath,
-      name: merged.name,
-      enabled: merged.enabled,
-      debug: merged.debug,
-      activationProbability: merged.activationProbability,
-      activeForModels: merged.activeForModels,
-      ...merged.runWithModel == null ? {} : { runWithModel: merged.runWithModel },
-      ...merged.reasoningEffort == null ? {} : { reasoningEffort: merged.reasoningEffort },
-      ...merged.timeoutSeconds == null ? {} : { timeoutSeconds: merged.timeoutSeconds },
-      tools: merged.tools,
-      capture: merged.capture ?? 'full',
-      context: merged.context ?? 'standard',
-      thinkFirst: merged.thinkFirst ?? false,
-      preFilters: merged.preFilters ?? [],
-      boostFilters: merged.boostFilters ?? [],
-      boostFactor: merged.boostFactor ?? 1,
-      holdout: merged.holdout ?? false,
-      prompt: merged.prompt,
-    }
-    this.definitions.set(id, definition)
-    return Promise.resolve(definition)
-  }
-
-  setEnabled(id: string, enabled: boolean): Promise<ShadowDefinition> {
-    return this.updateDefinition(id, { enabled })
-  }
-
-  deleteDefinition(id: string): Promise<void> {
-    this.definitions.delete(id)
-    return Promise.resolve()
   }
 
   currentSettings(): ShadowMindSettings {
@@ -108,20 +96,12 @@ class RuntimeStub {
       pendingSchedules: 0,
       epoch: 0,
       totalRuns: 0,
-      prefilterSkips: 0,
-      effectiveProbabilities: [],
       valueLoop: [],
       spentChars: 0,
       budgetTier: 'standard',
       cooldowns: [],
       pendingEscalations: [],
       recentReviews: [],
-      synthesisRuns: 0,
-      synthesisFailures: 0,
-      gateDenies: 0,
-      gateAllows: 0,
-      gateJudgeRuns: 0,
-      gateJudgeFailures: 0,
       ...this.lastRun === undefined ? {} : { lastRun: this.lastRun },
     }
   }
@@ -192,11 +172,7 @@ describe('Shadow Mind management tools and command', () => {
     const { ctx, plugin, agent } = await setup()
     expect(ctx.tools.schemas(agent).map(schema => schema.name)).toEqual([
       'list_shadows',
-      'create_shadow',
-      'update_shadow',
-      'enable_shadow',
-      'disable_shadow',
-      'delete_shadow',
+      'update_default_shadow',
       'get_shadow_config',
       'update_shadow_config',
     ])
@@ -208,53 +184,81 @@ describe('Shadow Mind management tools and command', () => {
     expect(ctx.commands.find(agent, 'shadow')).toBeUndefined()
   })
 
-  it('requires allowed-once before creating a definition', async () => {
+  it('requires allowed-once before updating the default Shadow', async () => {
     const denied = await setup('rejected')
-    const args = { id: 'security', name: 'Security', prompt: 'Review security risks.' }
-    const deniedResult = await execute(denied.ctx, denied.agent, 'create_shadow', args)
+    const args = { name: 'Security', prompt: 'Review security risks.' }
+    const deniedResult = await execute(denied.ctx, denied.agent, 'update_default_shadow', args)
     expect(deniedResult.isError).toBe(true)
-    expect(denied.runtime.definitions.size).toBe(0)
+    expect(denied.runtime.definitions.get(DEFAULT_SHADOW_ID)?.name).toBe('Shadow')
     const decisions = denied.agent.session.events.filter(event => event.type === 'approval/decided')
     expect(decisions).toHaveLength(1)
     expect(decisions[0]?.data.outcome).toBe('rejected')
 
     const allowed = await setup()
-    const allowedResult = await execute(allowed.ctx, allowed.agent, 'create_shadow', args)
+    const allowedResult = await execute(allowed.ctx, allowed.agent, 'update_default_shadow', args)
     expect(allowedResult.isError).toBe(false)
-    expect(allowed.runtime.definitions.get('security')).toMatchObject({
-      id: 'security',
-      enabled: true,
-      debug: false,
-      activationProbability: 0.3,
-      tools: [],
+    expect(allowed.runtime.definitions.get(DEFAULT_SHADOW_ID)).toMatchObject({
+      id: DEFAULT_SHADOW_ID,
+      name: 'Security',
+      prompt: 'Review security risks.',
     })
   })
 
-  it('updates definitions, settings, and the root command through their public entries', async () => {
+  it('rejects empty updates, missing defaults, and requires a calling agent', async () => {
     const { ctx, runtime, agent } = await setup()
-    await runtime.createDefinition({
-      id: 'reviewer',
-      name: 'Reviewer',
-      enabled: true,
-      debug: false,
-      activationProbability: 1,
-      activeForModels: [],
-      tools: [],
-      prompt: 'Review.',
+    expect((await execute(ctx, undefined, 'update_default_shadow', { name: 'X' })).isError).toBe(true)
+    expect((await execute(ctx, agent, 'update_default_shadow', {})).isError).toBe(true)
+    runtime.definitions.delete(DEFAULT_SHADOW_ID)
+    expect((await execute(ctx, agent, 'update_default_shadow', { name: 'X' })).isError).toBe(true)
+  })
+
+  it('updates the default Shadow, settings, and the root command through their public entries', async () => {
+    const { ctx, runtime, agent } = await setup()
+
+    expect((await execute(ctx, agent, 'update_default_shadow', {
+      name: 'Updated',
+      enabled: false,
+      activation_probability: 0.4,
+      run_with_model: 'mock/shadow',
+      reasoning_effort: 'high',
+      timeout_seconds: 7,
+      tools: ['custom_read'],
+      capture: 'since-compaction',
+      context: 'minimal',
+      think_first: true,
+      prompt: 'Review deeply.',
+    })).isError).toBe(false)
+    expect(runtime.definitions.get(DEFAULT_SHADOW_ID)).toMatchObject({
+      name: 'Updated',
+      enabled: false,
+      activationProbability: 0.4,
+      runWithModel: 'mock/shadow',
+      reasoningEffort: 'high',
+      timeoutSeconds: 7,
+      tools: ['custom_read'],
+      capture: 'since-compaction',
+      context: 'minimal',
+      thinkFirst: true,
+      prompt: 'Review deeply.',
     })
 
-    expect((await execute(ctx, agent, 'disable_shadow', { id: 'reviewer' })).isError).toBe(false)
-    expect(runtime.definitions.get('reviewer')?.enabled).toBe(false)
-    expect((await execute(ctx, agent, 'update_shadow', { id: 'reviewer', prompt: 'Review deeply.' })).isError)
+    expect((await execute(ctx, agent, 'update_default_shadow', {
+      run_with_model: null,
+      reasoning_effort: null,
+      timeout_seconds: null,
+    })).isError).toBe(false)
+    expect(runtime.definitions.get(DEFAULT_SHADOW_ID)).not.toHaveProperty('runWithModel')
+    expect(runtime.definitions.get(DEFAULT_SHADOW_ID)).not.toHaveProperty('reasoningEffort')
+    expect(runtime.definitions.get(DEFAULT_SHADOW_ID)).not.toHaveProperty('timeoutSeconds')
+
+    expect((await execute(ctx, agent, 'update_shadow_config', { defaultShadowTimeoutSeconds: 3 })).isError)
       .toBe(false)
-    expect(runtime.definitions.get('reviewer')?.prompt).toBe('Review deeply.')
-    expect((await execute(ctx, agent, 'update_shadow_config', { maxParallelShadows: 4 })).isError).toBe(false)
-    expect(runtime.settings.maxParallelShadows).toBe(4)
+    expect(runtime.settings.defaultShadowTimeoutSeconds).toBe(3)
 
     const status = await ctx.commands.execute(agent, '/shadow', [], testSignal)
     expect(status?.result.kind).toBe('success')
     expect(status?.result.kind === 'success' ? status.result.text : '').toBe(
-      'Shadow Mind active; 0 running; 0 pending schedules; 0 total runs; 0 prefilter skips; standard budget (0 chars); 0 syntheses/0 failed; 0 recent reports; no completed runs.',
+      'Shadow Mind active; 0 running; 0 total runs; no completed runs.',
     )
     const paused = await ctx.commands.execute(agent, '/shadow pause', [], testSignal)
     expect(paused?.result.kind).toBe('success')
@@ -272,9 +276,9 @@ describe('Shadow Mind management tools and command', () => {
     expect(invalid?.result).toEqual({ kind: 'error', text: 'Usage: /shadow [status|pause|resume|toggle]' })
 
     runtime.lastRun = {
-      runId: 'run-reviewer',
-      shadowId: 'reviewer',
-      shadowName: 'Reviewer',
+      runId: 'run-default',
+      shadowId: DEFAULT_SHADOW_ID,
+      shadowName: 'Updated',
       capturedThroughSeq: 1,
       finishedAt: '2026-08-25T00:00:00.000Z',
       outcome: 'report',
@@ -284,106 +288,31 @@ describe('Shadow Mind management tools and command', () => {
     }
     const completed = await ctx.commands.execute(agent, '/shadow status', [], testSignal)
     expect(completed?.result.kind === 'success' ? completed.result.text : '').toContain(
-      'last reviewer report at 2026-08-25T00:00:00.000Z',
+      `last ${DEFAULT_SHADOW_ID} report at 2026-08-25T00:00:00.000Z`,
     )
   })
 
   it('executes every management operation and projects every presentation', async () => {
     const { ctx, runtime, agent } = await setup()
-    const input = {
-      id: 'full',
-      name: 'Full definition',
-      enabled: false,
-      debug: true,
-      activation_probability: 0.8,
-      active_for_models: ['mock/*'],
-      run_with_model: 'mock/shadow',
-      reasoning_effort: 'high',
-      timeout_seconds: 7,
-      tools: ['custom_read'],
-      capture: 'since-compaction',
-      context: 'minimal',
-      think_first: true,
-      pre_filter: ['tool-failure'],
-      boost_filter: ['long-output'],
-      boost_factor: 2,
-      holdout: true,
-      prompt: 'Review every field.',
-    }
 
-    expect((await execute(ctx, undefined, 'create_shadow', input)).isError).toBe(true)
-    expect((await execute(ctx, agent, 'create_shadow', input)).isError).toBe(false)
-    expect(runtime.definitions.get('full')).toMatchObject({
-      activationProbability: 0.8,
-      activeForModels: ['mock/*'],
-      runWithModel: 'mock/shadow',
-      reasoningEffort: 'high',
-      timeoutSeconds: 7,
-      tools: ['custom_read'],
-      capture: 'since-compaction',
-      context: 'minimal',
-      thinkFirst: true,
-      preFilters: ['tool-failure'],
-      boostFilters: ['long-output'],
-      boostFactor: 2,
-      holdout: true,
-    })
+    expect((await execute(ctx, agent, 'update_default_shadow', { prompt: 'Review every field.' })).isError)
+      .toBe(false)
 
     const listed = await execute(ctx, agent, 'list_shadows', {})
-    expect(JSON.stringify(listed.content)).toContain('Full definition')
+    expect(JSON.stringify(listed.content)).toContain('Review every field.')
     expect(JSON.stringify(listed.content)).not.toContain('holdout_keys')
-    expect((await execute(ctx, agent, 'update_shadow', { id: 'full' })).isError).toBe(true)
-    expect((await execute(ctx, agent, 'update_shadow', {
-      id: 'full',
-      name: 'Updated',
-      enabled: true,
-      debug: false,
-      activation_probability: 0.2,
-      active_for_models: ['other/*'],
-      run_with_model: 'other/shadow',
-      reasoning_effort: 'medium',
-      timeout_seconds: 9,
-      tools: ['read_extra'],
-      capture: 'full',
-      context: 'standard',
-      think_first: false,
-      pre_filter: ['last-report-covers'],
-      boost_filter: ['repeated-failure'],
-      boost_factor: 3,
-      holdout: false,
-      prompt: 'Updated prompt.',
-    })).isError).toBe(false)
-    expect((await execute(ctx, agent, 'update_shadow', {
-      id: 'full',
-      run_with_model: null,
-      reasoning_effort: null,
-      timeout_seconds: null,
-    })).isError).toBe(false)
-    expect(runtime.definitions.get('full')).not.toHaveProperty('runWithModel')
-    expect(runtime.definitions.get('full')).not.toHaveProperty('reasoningEffort')
-    expect(runtime.definitions.get('full')).not.toHaveProperty('timeoutSeconds')
-    expect((await execute(ctx, agent, 'enable_shadow', { id: 'full' })).isError).toBe(false)
-    expect((await execute(ctx, agent, 'disable_shadow', { id: 'full' })).isError).toBe(false)
 
     const current = await execute(ctx, agent, 'get_shadow_config', {})
-    expect(JSON.stringify(current.content)).toContain('heartbeatProbability')
+    expect(JSON.stringify(current.content)).toContain('defaultShadowTimeoutSeconds')
     expect((await execute(ctx, agent, 'update_shadow_config', {})).isError).toBe(true)
     expect((await execute(ctx, agent, 'update_shadow_config', {
-      heartbeatProbability: 0.5,
-      maxParallelShadows: 2,
       defaultShadowTimeoutSeconds: 3,
       headlessDrainTimeoutSeconds: 4,
       resultBatchWindowMs: 5,
-      defaultShadowModel: 'mock/model',
-      defaultReasoningEffort: 'high',
       argumentDisclosure: 'full',
       randomSeed: 7,
       maxPromptChars: 1_000,
       maxReportChars: 500,
-      preferIndependentVendor: true,
-      longOutputBoostChars: 200,
-      lastReportCoversCount: 3,
-      repeatedFailureBoostThreshold: 4,
       valueLoopEnabled: false,
       valueLoopWindowTurns: 3,
       reviewWindowSize: 8,
@@ -399,45 +328,32 @@ describe('Shadow Mind management tools and command', () => {
       sessionShadowHardBudgetChars: 20_000,
       frugalShadowModel: 'mock/frugal',
       staleReportDecay: 0.2,
-      conflictSynthesisEnabled: true,
-      conflictSynthesisTimeoutSeconds: 6,
     })).isError).toBe(false)
     expect(runtime.settings).toMatchObject({
-      defaultShadowModel: 'mock/model',
       argumentDisclosure: 'full',
-      preferIndependentVendor: true,
       valueLoopEnabled: false,
       reasoningEffortLadder: ['low', 'high'],
       frugalShadowModel: 'mock/frugal',
-      conflictSynthesisEnabled: true,
     })
     expect((await execute(ctx, agent, 'update_shadow_config', {
-      defaultShadowModel: null,
-      defaultReasoningEffort: null,
       randomSeed: null,
       sessionShadowSoftBudgetChars: null,
       sessionShadowHardBudgetChars: null,
       frugalShadowModel: null,
     })).isError).toBe(false)
-    expect(runtime.settings).not.toHaveProperty('defaultShadowModel')
-    expect(runtime.settings).not.toHaveProperty('defaultReasoningEffort')
     expect(runtime.settings).not.toHaveProperty('randomSeed')
     expect(runtime.settings).not.toHaveProperty('sessionShadowSoftBudgetChars')
     expect(runtime.settings).not.toHaveProperty('sessionShadowHardBudgetChars')
     expect(runtime.settings).not.toHaveProperty('frugalShadowModel')
 
     expect(present(ctx, agent, 'list_shadows', {})).toEqual({ card: 'generic', title: 'List Shadow Minds', kind: 'read' })
-    expect(present(ctx, agent, 'create_shadow', input)).toMatchObject({ title: 'Create Shadow full', rawInput: 'full' })
-    expect(present(ctx, agent, 'update_shadow', { id: 'full' })).toMatchObject({ title: 'Update Shadow full' })
-    expect(present(ctx, agent, 'enable_shadow', { id: 'full' })).toMatchObject({ title: 'Enable Shadow full' })
-    expect(present(ctx, agent, 'disable_shadow', { id: 'full' })).toMatchObject({ title: 'Disable Shadow full' })
-    expect(present(ctx, agent, 'delete_shadow', { id: 'full' })).toMatchObject({ title: 'Delete Shadow full' })
+    expect(present(ctx, agent, 'update_default_shadow', {})).toMatchObject({
+      title: 'Update default Shadow',
+      rawInput: DEFAULT_SHADOW_ID,
+    })
     expect(present(ctx, agent, 'get_shadow_config', {})).toMatchObject({ title: 'Read Shadow Mind config' })
     expect(present(ctx, agent, 'update_shadow_config', {})).toMatchObject({ title: 'Update Shadow Mind config' })
     expect(ctx.tools.get('list_shadows', agent)?.output.render({}, { result: 'rendered' }))
       .toEqual([{ type: 'text', text: 'rendered' }])
-
-    expect((await execute(ctx, agent, 'delete_shadow', { id: 'full' })).isError).toBe(false)
-    expect(runtime.definitions.has('full')).toBe(false)
   })
 })

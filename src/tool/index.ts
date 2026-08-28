@@ -1,4 +1,4 @@
-/** Model management tools and the `/shadow` root-agent command. @module @whutzefengxie-ops/dsh-shadow-mind/tool */
+/** Shadow management tools and the `/shadow` root-agent command. @module @whutzefengxie-ops/dsh-shadow-mind/tool */
 
 import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
@@ -6,11 +6,11 @@ import type { ToolRunContext } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-commands'
 import type {} from '@deepseek-ai/dsh-user-approval'
 import type {
-  CreateShadowDefinition,
   ShadowDefinition,
-  UpdateShadowDefinition,
+  ShadowDefinitionInput,
   UpdateShadowMindSettings,
 } from '../runtime/index.ts'
+import { DEFAULT_SHADOW_ID } from '../runtime/index.ts'
 
 /** Cordis plugin name. */
 export const name = 'tool-shadow-mind'
@@ -61,9 +61,6 @@ function definitionView(definition: ShadowDefinition): Record<string, unknown> {
     capture: definition.capture,
     context: definition.context,
     think_first: definition.thinkFirst,
-    pre_filter: definition.preFilters,
-    boost_filter: definition.boostFilters,
-    boost_factor: definition.boostFactor,
     holdout: definition.holdout,
     prompt: definition.prompt,
   }
@@ -74,17 +71,41 @@ function result(value: unknown): { result: string } {
   return { result: JSON.stringify(value, null, 2) }
 }
 
-/** Recover the definition id type after tool schema validation. */
-function shadowId(value: unknown): string {
-  return value as string
+/** Convert one parsed update_default_shadow argument record into a merged default-definition input. */
+function mergedDefault(args: Record<string, unknown>, current: ShadowDefinition): ShadowDefinitionInput {
+  return {
+    id: DEFAULT_SHADOW_ID,
+    name: args.name === undefined ? current.name : args.name as string,
+    enabled: args.enabled === undefined ? current.enabled : args.enabled as boolean,
+    debug: args.debug === undefined ? current.debug : args.debug as boolean,
+    activationProbability: args.activation_probability === undefined
+      ? current.activationProbability
+      : args.activation_probability as number,
+    activeForModels: args.active_for_models === undefined ? current.activeForModels : args.active_for_models as string[],
+    runWithModel: args.run_with_model === undefined
+      ? current.runWithModel ?? null
+      : args.run_with_model as string | null,
+    reasoningEffort: args.reasoning_effort === undefined
+      ? current.reasoningEffort ?? null
+      : args.reasoning_effort as string | null,
+    timeoutSeconds: args.timeout_seconds === undefined
+      ? current.timeoutSeconds ?? null
+      : args.timeout_seconds as number | null,
+    tools: args.tools === undefined ? current.tools : args.tools as string[],
+    capture: args.capture === undefined ? current.capture : args.capture as ShadowDefinition['capture'],
+    context: args.context === undefined ? current.context : args.context as ShadowDefinition['context'],
+    thinkFirst: args.think_first === undefined ? current.thinkFirst : args.think_first as boolean,
+    holdout: current.holdout,
+    prompt: args.prompt === undefined ? current.prompt : args.prompt as string,
+  }
 }
 
-/** Definition authoring parameter schema shared conceptually by create and update. */
-const DEFINITION_PARAMETERS = {
+/** Editable fields of the single default Shadow definition. */
+const DEFAULT_SHADOW_PARAMETERS = {
   name: { type: 'string' as const, description: 'Human-readable Shadow name.' },
-  enabled: { type: 'boolean' as const, description: 'Whether automatic scheduling may select this Shadow.' },
+  enabled: { type: 'boolean' as const, description: 'Whether automatic scheduling may select the Shadow.' },
   debug: { type: 'boolean' as const, description: 'Whether run lifecycle transitions append local JSONL diagnostics.' },
-  activation_probability: { type: 'number' as const, description: 'Independent probability from 0 through 1.' },
+  activation_probability: { type: 'number' as const, description: 'Per-turn review probability from 0 through 1.' },
   active_for_models: {
     type: 'array' as const,
     description: 'Optional model or provider/model glob filters.',
@@ -92,7 +113,7 @@ const DEFINITION_PARAMETERS = {
   },
   run_with_model: {
     oneOf: [{ type: 'string' as const }, { type: 'null' as const }] as const,
-    description: 'Optional provider/model route; null clears the override.',
+    description: 'Optional provider/model route; null clears the override and inherits the root agent model.',
   },
   reasoning_effort: {
     oneOf: [{ type: 'string' as const }, { type: 'null' as const }] as const,
@@ -121,32 +142,8 @@ const DEFINITION_PARAMETERS = {
     type: 'boolean' as const,
     description: 'Require a tool-free planning request before investigation.',
   },
-  pre_filter: {
-    type: 'array' as const,
-    description: 'Named deterministic predicates that skip a selected run before spawn.',
-    items: {
-      type: 'string' as const,
-      enum: ['last-report-covers', 'tool-failure', 'no-tool-calls'] as const,
-    },
-  },
-  boost_filter: {
-    type: 'array' as const,
-    description: 'Named deterministic predicates that multiply activation probability.',
-    items: {
-      type: 'string' as const,
-      enum: ['misleading-success', 'repeated-failure', 'long-output'] as const,
-    },
-  },
-  boost_factor: {
-    type: 'number' as const,
-    description: 'Probability multiplier applied when any boost predicate matches.',
-  },
-  holdout: {
-    type: 'boolean' as const,
-    description: 'Apply owner-side literal redaction using the local holdout sidecar.',
-  },
   prompt: { type: 'string' as const, description: 'Non-empty Shadow instructions.' },
-}
+} as const
 
 /** Register all Shadow management tools and the human command. */
 export function apply(ctx: Context): void {
@@ -175,14 +172,14 @@ export function apply(ctx: Context): void {
           ].join(', ')
       return {
         kind: 'success',
-        text: `Shadow Mind ${status.paused ? 'paused' : 'active'}; ${String(status.active.length)} running; ${String(status.pendingSchedules)} pending schedules; ${String(status.totalRuns)} total runs; ${String(status.prefilterSkips)} prefilter skips; ${status.budgetTier} budget (${String(status.spentChars)} chars); ${String(status.synthesisRuns)} syntheses/${String(status.synthesisFailures)} failed; ${String(status.recentReviews.length)} recent reports; ${lastRun}.`,
+        text: `Shadow Mind ${status.paused ? 'paused' : 'active'}; ${String(status.active.length)} running; ${String(status.totalRuns)} total runs; ${lastRun}.`,
       }
     },
   })
 
   ctx.tools.register(defineTool({
     name: 'list_shadows',
-    description: 'List Shadow Mind definitions and isolated file diagnostics. This does not start a Shadow.',
+    description: 'List Shadow definitions and isolated file diagnostics. The single scheduled Shadow is `default`; other files are read-only legacy definitions.',
     parameters: {},
     output: textOutput(),
     execute: async () => {
@@ -196,123 +193,25 @@ export function apply(ctx: Context): void {
   }))
 
   ctx.tools.register(defineTool({
-    name: 'create_shadow',
-    description: 'Create one Markdown-backed Shadow definition. This changes local configuration and requires user approval.',
+    name: 'update_default_shadow',
+    description: 'Update selected fields of the single default Shadow definition. This changes local configuration and requires user approval.',
     parameters: {
-      id: { type: 'string', required: true, description: 'Lowercase stable id used as the filename.' },
-      ...DEFINITION_PARAMETERS,
-      name: { ...DEFINITION_PARAMETERS.name, required: true },
-      prompt: { ...DEFINITION_PARAMETERS.prompt, required: true },
+      ...DEFAULT_SHADOW_PARAMETERS,
     },
     output: textOutput(),
     execute: async (args, exec) => {
-      const id = shadowId(args.id)
-      await approve(ctx, exec, `Create Shadow definition ${id}`)
-      const input: CreateShadowDefinition = {
-        id,
-        name: args.name,
-        enabled: args.enabled ?? true,
-        debug: args.debug ?? false,
-        activationProbability: args.activation_probability ?? 0.3,
-        activeForModels: args.active_for_models ?? [],
-        ...args.run_with_model == null ? {} : { runWithModel: args.run_with_model },
-        ...args.reasoning_effort == null ? {} : { reasoningEffort: args.reasoning_effort },
-        ...args.timeout_seconds == null ? {} : { timeoutSeconds: args.timeout_seconds },
-        tools: args.tools ?? [],
-        capture: args.capture ?? 'full',
-        context: args.context ?? 'standard',
-        thinkFirst: args.think_first ?? false,
-        preFilters: args.pre_filter ?? [],
-        boostFilters: args.boost_filter ?? [],
-        boostFactor: args.boost_factor ?? 1,
-        holdout: args.holdout ?? false,
-        prompt: args.prompt,
+      const entries = Object.entries(args as Record<string, unknown>).filter(([, value]) => value !== undefined)
+      if (entries.length === 0) throw new Error('update_default_shadow requires at least one field to update')
+      const catalog = await ctx.shadowMind.listDefinitions()
+      const current = catalog.definitions.find(definition => definition.id === DEFAULT_SHADOW_ID)
+      if (current === undefined) {
+        throw new Error(`the default Shadow (${DEFAULT_SHADOW_ID}) does not exist yet`)
       }
-      return result(definitionView(await ctx.shadowMind.createDefinition(input)))
+      await approve(ctx, exec, 'Update the default Shadow definition')
+      const next = mergedDefault(Object.fromEntries(entries), current)
+      return result(definitionView(await ctx.shadowMind.saveDefaultDefinition(next)))
     },
-    presentCall: (args) => {
-      const id = shadowId(args.id)
-      return { card: 'generic', title: `Create Shadow ${id}`, kind: 'execute', rawInput: id }
-    },
-  }))
-
-  ctx.tools.register(defineTool({
-    name: 'update_shadow',
-    description: 'Update selected fields of one Shadow definition. This changes local configuration and requires user approval.',
-    parameters: {
-      id: { type: 'string', required: true, description: 'Existing Shadow id.' },
-      ...DEFINITION_PARAMETERS,
-    },
-    output: textOutput(),
-    execute: async (args, exec) => {
-      const id = shadowId(args.id)
-      const patch: UpdateShadowDefinition = {
-        ...args.name === undefined ? {} : { name: args.name },
-        ...args.enabled === undefined ? {} : { enabled: args.enabled },
-        ...args.debug === undefined ? {} : { debug: args.debug },
-        ...args.activation_probability === undefined ? {} : { activationProbability: args.activation_probability },
-        ...args.active_for_models === undefined ? {} : { activeForModels: args.active_for_models },
-        ...args.run_with_model === undefined ? {} : { runWithModel: args.run_with_model ?? undefined },
-        ...args.reasoning_effort === undefined ? {} : { reasoningEffort: args.reasoning_effort ?? undefined },
-        ...args.timeout_seconds === undefined ? {} : { timeoutSeconds: args.timeout_seconds ?? undefined },
-        ...args.tools === undefined ? {} : { tools: args.tools },
-        ...args.capture === undefined ? {} : { capture: args.capture },
-        ...args.context === undefined ? {} : { context: args.context },
-        ...args.think_first === undefined ? {} : { thinkFirst: args.think_first },
-        ...args.pre_filter === undefined ? {} : { preFilters: args.pre_filter },
-        ...args.boost_filter === undefined ? {} : { boostFilters: args.boost_filter },
-        ...args.boost_factor === undefined ? {} : { boostFactor: args.boost_factor },
-        ...args.holdout === undefined ? {} : { holdout: args.holdout },
-        ...args.prompt === undefined ? {} : { prompt: args.prompt },
-      }
-      if (Object.keys(patch).length === 0) throw new Error('update_shadow requires at least one field to update')
-      await approve(ctx, exec, `Update Shadow definition ${id}`)
-      return result(definitionView(await ctx.shadowMind.updateDefinition(id, patch)))
-    },
-    presentCall: (args) => {
-      const id = shadowId(args.id)
-      return { card: 'generic', title: `Update Shadow ${id}`, kind: 'execute', rawInput: id }
-    },
-  }))
-
-  for (const [toolName, enabled] of [['enable_shadow', true], ['disable_shadow', false]] as const) {
-    ctx.tools.register(defineTool({
-      name: toolName,
-      description: `${enabled ? 'Enable' : 'Disable'} one Shadow definition. This changes local configuration and requires user approval.`,
-      parameters: { id: { type: 'string', required: true, description: 'Existing Shadow id.' } },
-      output: textOutput(),
-      execute: async (args, exec) => {
-        const id = shadowId(args.id)
-        await approve(ctx, exec, `${enabled ? 'Enable' : 'Disable'} Shadow definition ${id}`)
-        return result(definitionView(await ctx.shadowMind.setEnabled(id, enabled)))
-      },
-      presentCall: (args) => {
-        const id = shadowId(args.id)
-        return {
-          card: 'generic',
-          title: `${enabled ? 'Enable' : 'Disable'} Shadow ${id}`,
-          kind: 'execute',
-          rawInput: id,
-        }
-      },
-    }))
-  }
-
-  ctx.tools.register(defineTool({
-    name: 'delete_shadow',
-    description: 'Delete one Shadow definition while preserving its debug log. This requires user approval.',
-    parameters: { id: { type: 'string', required: true, description: 'Existing Shadow id.' } },
-    output: textOutput(),
-    execute: async (args, exec) => {
-      const id = shadowId(args.id)
-      await approve(ctx, exec, `Delete Shadow definition ${id}`)
-      await ctx.shadowMind.deleteDefinition(id)
-      return result({ deleted: id })
-    },
-    presentCall: (args) => {
-      const id = shadowId(args.id)
-      return { card: 'generic', title: `Delete Shadow ${id}`, kind: 'execute', rawInput: id }
-    },
+    presentCall: () => ({ card: 'generic', title: 'Update default Shadow', kind: 'execute', rawInput: DEFAULT_SHADOW_ID }),
   }))
 
   ctx.tools.register(defineTool({
@@ -328,19 +227,9 @@ export function apply(ctx: Context): void {
     name: 'update_shadow_config',
     description: 'Update selected Shadow Mind scheduling settings. This changes local configuration and requires user approval.',
     parameters: {
-      heartbeatProbability: { type: 'number', description: 'Turn-level heartbeat probability from 0 through 1.' },
-      maxParallelShadows: { type: 'number', description: 'Positive integer concurrency bound per root.' },
       defaultShadowTimeoutSeconds: { type: 'number', description: 'Positive default run deadline.' },
       headlessDrainTimeoutSeconds: { type: 'number', description: 'Positive headless convergence deadline.' },
       resultBatchWindowMs: { type: 'number', description: 'Non-negative report batching window.' },
-      defaultShadowModel: {
-        oneOf: [{ type: 'string' }, { type: 'null' }],
-        description: 'Fallback provider/model route; null clears the user override.',
-      },
-      defaultReasoningEffort: {
-        oneOf: [{ type: 'string' }, { type: 'null' }],
-        description: 'Fallback adapter-owned reasoning effort; null clears the user override.',
-      },
       argumentDisclosure: { type: 'string', enum: ['redacted', 'full'], description: 'Tool-call argument projection policy.' },
       randomSeed: {
         oneOf: [{ type: 'number' }, { type: 'null' }],
@@ -348,10 +237,6 @@ export function apply(ctx: Context): void {
       },
       maxPromptChars: { type: 'number', description: 'Complete prompt bound; 0 disables the limit.' },
       maxReportChars: { type: 'number', description: 'Accepted report bound; 0 disables the limit.' },
-      preferIndependentVendor: { type: 'boolean', description: 'Prefer independently-vendored candidate routes when at least two remain.' },
-      longOutputBoostChars: { type: 'number', description: 'Tool-result size that triggers the long-output boost.' },
-      lastReportCoversCount: { type: 'number', description: 'Repeated envelope count for last-report suppression.' },
-      repeatedFailureBoostThreshold: { type: 'number', description: 'Same-tool failure count that triggers a boost.' },
       valueLoopEnabled: { type: 'boolean', description: 'Persist metadata-only challenge dispositions.' },
       valueLoopWindowTurns: { type: 'number', description: 'Root turns observed before a challenge becomes ignored.' },
       reviewWindowSize: { type: 'number', description: 'Accepted report entries retained per definition.' },
@@ -380,39 +265,6 @@ export function apply(ctx: Context): void {
         description: 'Provider/model route used after the soft budget; null clears the user override.',
       },
       staleReportDecay: { type: 'number', description: 'Repeated-envelope probability decay from 0 through 1.' },
-      conflictSynthesisEnabled: { type: 'boolean', description: 'Replace one conflicting report pair with one synthesis.' },
-      conflictSynthesisTimeoutSeconds: { type: 'number', description: 'Positive synthesis deadline.' },
-      synthesisModel: {
-        oneOf: [{ type: 'string' }, { type: 'null' }],
-        description: 'Provider/model route for conflict-synthesis runs; null clears the user override.',
-      },
-      synthesisReasoningEffort: {
-        oneOf: [{ type: 'string' }, { type: 'null' }],
-        description: 'Reasoning effort for conflict-synthesis runs; null clears the user override.',
-      },
-      commandGateEnabled: { type: 'boolean', description: 'Whether root pwsh-style commands pass through the command gate.' },
-      commandGateTools: { type: 'array', description: 'Tool names the gate intercepts.', items: { type: 'string' } },
-      commandGateScope: { type: 'string', enum: ['root-only', 'root-and-subagents'], description: 'Which agents the gate inspects.' },
-      commandGateDenyPatterns: { type: 'array', description: 'Regular expressions that deny a command before any judge runs.', items: { type: 'string' } },
-      commandGateAllowPatterns: { type: 'array', description: 'Regular expressions that allow a command when no deny pattern matches.', items: { type: 'string' } },
-      commandGateProtectedProcesses: { type: 'array', description: 'Protected process names; destructive commands naming one are denied.', items: { type: 'string' } },
-      commandGateProtectedServices: { type: 'array', description: 'Protected service names; destructive commands naming one are denied.', items: { type: 'string' } },
-      commandGateContext: {
-        oneOf: [{ type: 'string' }, { type: 'null' }],
-        description: 'Free-text environment declaration injected into every gate judge prompt; null clears it.',
-      },
-      commandGateModel: {
-        oneOf: [{ type: 'string' }, { type: 'null' }],
-        description: 'Provider/model route for the gate judge; null clears the user override.',
-      },
-      commandGateReasoningEffort: {
-        oneOf: [{ type: 'string' }, { type: 'null' }],
-        description: 'Reasoning effort for the gate judge; null clears the user override.',
-      },
-      commandGateJudgeTimeoutSeconds: { type: 'number', description: 'Deadline for one gate judge verdict in seconds.' },
-      commandGateOnJudgeFailure: { type: 'string', enum: ['deny', 'allow'], description: 'Fail closed or fail open when the judge times out or fails.' },
-      commandGateMaxParallel: { type: 'number', description: 'Maximum concurrent gate judges.' },
-      commandGateVerdictTtlSeconds: { type: 'number', description: 'Seconds an identical command reuses the previous judge verdict.' },
     },
     output: textOutput(),
     execute: async (args, exec) => {

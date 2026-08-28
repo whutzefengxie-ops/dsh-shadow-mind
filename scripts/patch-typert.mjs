@@ -96,20 +96,7 @@ function patchJs(text) {
   text = text.replace(/^  'agentPreset': z\.union\(\[z\.literal\(null\), z\.string\(\)\]\)\.readonly\(\),\n/gmu, '')
   text = text.replace(/^  'agentPreset': z\.string\(\)\.readonly\(\)\.optional\(\),\n/gmu, '')
 
-  // 4. Gate counters in the status V2 codec: strip any drifted copies first,
-  // then insert the canonical four right after synthesisFailures.
-  const counters = `  'synthesisFailures': z.number().readonly(),
-  'gateDenies': z.number().readonly(),
-  'gateAllows': z.number().readonly(),
-  'gateJudgeRuns': z.number().readonly(),
-  'gateJudgeFailures': z.number().readonly(),`
-  if (!text.includes(`  'synthesisFailures': z.number().readonly(),`)) {
-    throw new Error('status V2 schema anchor not found (synthesisFailures)')
-  }
-  text = text.replace(/(  'synthesisFailures': z\.number\(\)\.readonly\(\),\n)(?:  'gate(?:Denies|Allows|JudgeRuns|JudgeFailures)': z\.number\(\)\.readonly\(\),\n)*/gu, '$1')
-  text = text.replace(`  'synthesisFailures': z.number().readonly(),`, counters)
-
-  // 5. Drop the unreferenced legacy V1 status codecs.
+  // 4. Drop the unreferenced legacy V1 status codecs.
   text = text.replace(/const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_(?:pause|resume|status|toggle)_result\$schema = z\.object\(\{[\s\S]*?\n\}\)\n/gu, '')
 
   // 5b. Normalize the reflected UpdateShadowDefinition declaration (the
@@ -194,7 +181,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_1$schema =
   }
 
   // 8. Align every descriptor's sourceLocation with the live runtime source.
-  const methods = ['catalog', 'modelCatalog', 'create', 'update', 'setEnabled', 'delete', 'status', 'cycles', 'pause', 'resume', 'toggle', 'retry']
+  const methods = ['catalog', 'modelCatalog', 'saveDefault', 'status', 'cycles', 'pause', 'resume', 'toggle', 'retry']
   for (const method of methods) {
     const line = sourceLine(`@Remote('${method}')`)
     const pattern = new RegExp(`(      method: '${method}',[\\s\\S]*?      sourceLocation: )\\{"file":"src/runtime/index\\.ts","line":\\d+,"column":\\d+\\},`, 'u')

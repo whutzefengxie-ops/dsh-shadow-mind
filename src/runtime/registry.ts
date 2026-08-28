@@ -1,20 +1,23 @@
 /**
  * Markdown/YAML Shadow definition registry with isolated diagnostics and atomic writes.
+ * The runtime schedules exactly one Shadow definition (`default`); every other
+ * Markdown file is kept read-only for diagnostics and never participates in scheduling.
  * @module @whutzefengxie-ops/dsh-shadow-mind/registry
  */
 
-import { appendFile, lstat, mkdir, readFile, readdir, rm } from 'node:fs/promises'
+import { appendFile, lstat, mkdir, readFile, readdir } from 'node:fs/promises'
 import { basename, join, resolve } from 'node:path'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 import { writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { optionalModelRoute } from './model-route.ts'
-import { boostPredicates, prefilterPredicates } from './prefilter.ts'
+import { DEFAULT_ACTIVATION_PROBABILITY } from './config.ts'
+import { DEFAULT_SHADOW_ID } from './types.ts'
 import type {
   CreateShadowDefinition,
   ShadowCatalog,
   ShadowDefinition,
+  ShadowDefinitionInput,
   ShadowDiagnostic,
-  UpdateShadowDefinition,
 } from './types.ts'
 
 /** Valid Shadow identifiers and canonical definition filenames. */
@@ -37,11 +40,35 @@ const FRONTMATTER_KEYS = new Set([
   'capture',
   'context',
   'think_first',
+  // Accepted but ignored: the skip/boost predicate library was removed; legacy
+  // definition files carrying these keys must keep loading instead of failing.
   'pre_filter',
   'boost_filter',
   'boost_factor',
   'holdout',
 ])
+
+/** Built-in duty prompt used when `default.md` is created from scratch. */
+export const DEFAULT_SHADOW_PROMPT = [
+  'Review the root agent\'s latest turn against its task and the rendered trajectory.',
+  '',
+  'Priority checks:',
+  '',
+  '1. Did the root miss an explicit requirement, constraint, or acceptance condition from the user?',
+  '2. Does a conclusion contradict tool results, file contents, test output, or recorded errors?',
+  '3. Did the changes introduce a functional defect, security issue, data-loss risk, concurrency problem, or platform-specific breakage?',
+  '4. Did the root claim completion without required verification?',
+  '5. Did the root repeat the same failing action without changing its input or addressing the cause?',
+  '',
+  'Rules:',
+  '',
+  '- Report only issues directly supported by the rendered trajectory and worth the user\'s action.',
+  '- Never report style preferences, naming opinions, or generic improvements.',
+  '- Never guess hidden reasoning, redacted arguments, or omitted tool results.',
+  '- Every report must state the problem, the evidence, the impact, and a suggested fix.',
+  '- `refs` must only contain rendered sequence numbers from the current trajectory.',
+  '- Return `report` with a verdict (challenge/gap/confirm/uncertain) for actionable findings, `silent` when the review found nothing actionable, and `not_relevant` when the turn does not suit a review.',
+].join('\n')
 
 /** Return whether a parsed YAML value is a plain mapping. */
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -128,7 +155,7 @@ export function parseShadowDefinition(source: string, sourcePath: string): Shado
   const prompt = normalized.slice(closing + '\n---\n'.length).trim()
   if (prompt === '') throw new Error('Markdown body must be non-empty')
 
-  const probability = parsed['activation_probability'] ?? 0.3
+  const probability = parsed['activation_probability'] ?? DEFAULT_ACTIVATION_PROBABILITY
   if (typeof probability !== 'number' || !Number.isFinite(probability) || probability < 0 || probability > 1) {
     throw new Error('activation_probability must be a finite number from 0 through 1')
   }
@@ -143,16 +170,6 @@ export function parseShadowDefinition(source: string, sourcePath: string): Shado
 
   const runWithModel = optionalModelRoute(optionalString(parsed, 'run_with_model'), 'run_with_model')
   const reasoningEffort = optionalString(parsed, 'reasoning_effort')
-  const preFilters = stringArray(parsed, 'pre_filter')
-  const unknownPreFilters = preFilters.filter(name => !prefilterPredicates.has(name))
-  if (unknownPreFilters.length > 0) throw new Error(`unknown pre_filter predicate(s): ${unknownPreFilters.join(', ')}`)
-  const boostFilters = stringArray(parsed, 'boost_filter')
-  const unknownBoostFilters = boostFilters.filter(name => !boostPredicates.has(name))
-  if (unknownBoostFilters.length > 0) throw new Error(`unknown boost_filter predicate(s): ${unknownBoostFilters.join(', ')}`)
-  const boostFactor = parsed['boost_factor'] ?? 1
-  if (typeof boostFactor !== 'number' || !Number.isFinite(boostFactor) || boostFactor < 1) {
-    throw new Error('boost_factor must be a finite number greater than or equal to 1')
-  }
   return Object.freeze({
     id,
     name,
@@ -167,9 +184,6 @@ export function parseShadowDefinition(source: string, sourcePath: string): Shado
     capture: optionalChoice(parsed, 'capture', ['full', 'since-compaction'] as const, 'full'),
     context: optionalChoice(parsed, 'context', ['standard', 'minimal'] as const, 'standard'),
     thinkFirst: optionalBoolean(parsed, 'think_first', false),
-    preFilters: Object.freeze(preFilters),
-    boostFilters: Object.freeze(boostFilters),
-    boostFactor,
     holdout: optionalBoolean(parsed, 'holdout', false),
     prompt,
     sourcePath: resolve(sourcePath),
@@ -193,63 +207,48 @@ function serializeDefinition(definition: CreateShadowDefinition): string {
   if (definition.capture !== undefined && definition.capture !== 'full') metadata['capture'] = definition.capture
   if (definition.context !== undefined && definition.context !== 'standard') metadata['context'] = definition.context
   if (definition.thinkFirst === true) metadata['think_first'] = true
-  if (definition.preFilters !== undefined && definition.preFilters.length > 0) {
-    metadata['pre_filter'] = [...definition.preFilters]
-  }
-  if (definition.boostFilters !== undefined && definition.boostFilters.length > 0) {
-    metadata['boost_filter'] = [...definition.boostFilters]
-  }
-  if (definition.boostFactor !== undefined && definition.boostFactor !== 1) metadata['boost_factor'] = definition.boostFactor
   if (definition.holdout === true) metadata['holdout'] = true
   return `---\n${stringifyYaml(metadata, { sortMapEntries: true }).trimEnd()}\n---\n\n${definition.prompt.trim()}\n`
 }
 
-/** Convert a loaded definition to the authoring form used by atomic updates. */
-function editable(definition: ShadowDefinition): CreateShadowDefinition {
-  return {
-    id: definition.id,
-    name: definition.name,
-    enabled: definition.enabled,
-    debug: definition.debug,
-    activationProbability: definition.activationProbability,
-    activeForModels: [...definition.activeForModels],
-    ...definition.runWithModel === undefined ? {} : { runWithModel: definition.runWithModel },
-    ...definition.reasoningEffort === undefined ? {} : { reasoningEffort: definition.reasoningEffort },
-    ...definition.timeoutSeconds === undefined ? {} : { timeoutSeconds: definition.timeoutSeconds },
-    tools: [...definition.tools],
-    capture: definition.capture,
-    context: definition.context,
-    thinkFirst: definition.thinkFirst,
-    preFilters: [...definition.preFilters],
-    boostFilters: [...definition.boostFilters],
-    boostFactor: definition.boostFactor,
-    holdout: definition.holdout,
-    prompt: definition.prompt,
+/** Build the definition seeded when no `default.md` exists yet. */
+function defaultSeed(legacy: readonly ShadowDefinition[]): CreateShadowDefinition {
+  // Migration: adopt the first legacy definition's duty so an existing user's
+  // reviewer persona survives, while the probability converges to the new 70%
+  // product default.
+  const first = legacy[0]
+  if (first === undefined) {
+    return {
+      id: DEFAULT_SHADOW_ID,
+      name: 'Shadow',
+      enabled: true,
+      debug: false,
+      activationProbability: DEFAULT_ACTIVATION_PROBABILITY,
+      activeForModels: [],
+      tools: [],
+      capture: 'full',
+      context: 'standard',
+      thinkFirst: false,
+      holdout: false,
+      prompt: DEFAULT_SHADOW_PROMPT,
+    }
   }
-}
-
-/** Apply an update while omitting execution overrides that were explicitly cleared. */
-function updatedDefinition(current: ShadowDefinition, patch: UpdateShadowDefinition): CreateShadowDefinition {
-  const merged = { ...editable(current), ...patch }
   return {
-    id: current.id,
-    name: merged.name,
-    enabled: merged.enabled,
-    debug: merged.debug,
-    activationProbability: merged.activationProbability,
-    activeForModels: merged.activeForModels,
-    ...merged.runWithModel === undefined ? {} : { runWithModel: merged.runWithModel },
-    ...merged.reasoningEffort === undefined ? {} : { reasoningEffort: merged.reasoningEffort },
-    ...merged.timeoutSeconds === undefined ? {} : { timeoutSeconds: merged.timeoutSeconds },
-    tools: merged.tools,
-    capture: patch.capture ?? current.capture,
-    context: patch.context ?? current.context,
-    thinkFirst: patch.thinkFirst ?? current.thinkFirst,
-    preFilters: patch.preFilters ?? current.preFilters,
-    boostFilters: patch.boostFilters ?? current.boostFilters,
-    boostFactor: patch.boostFactor ?? current.boostFactor,
-    holdout: patch.holdout ?? current.holdout,
-    prompt: merged.prompt,
+    id: DEFAULT_SHADOW_ID,
+    name: first.name,
+    enabled: first.enabled,
+    debug: first.debug,
+    activationProbability: DEFAULT_ACTIVATION_PROBABILITY,
+    activeForModels: [],
+    ...first.runWithModel === undefined ? {} : { runWithModel: first.runWithModel },
+    ...first.reasoningEffort === undefined ? {} : { reasoningEffort: first.reasoningEffort },
+    ...first.timeoutSeconds === undefined ? {} : { timeoutSeconds: first.timeoutSeconds },
+    tools: [...first.tools],
+    capture: first.capture,
+    context: first.context,
+    thinkFirst: first.thinkFirst,
+    holdout: false,
+    prompt: first.prompt,
   }
 }
 
@@ -355,65 +354,65 @@ export class ShadowRegistry {
   }
 
   /**
-   * Create a new canonical `<id>.md` definition.
-   * @param input Complete definition fields.
+   * Load the single scheduled Shadow definition, creating `default.md` on first
+   * access. When legacy definition files exist, the default is seeded from the
+   * first one so an existing user's reviewer persona survives migration; its
+   * activation probability always converges to the 70% product default.
+   * @returns The validated default definition.
+   */
+  async defaultDefinition(): Promise<ShadowDefinition> {
+    const path = join(this.root, `${DEFAULT_SHADOW_ID}.md`)
+    const catalog = await this.list()
+    const existing = catalog.definitions.find(definition => definition.id === DEFAULT_SHADOW_ID)
+    if (existing !== undefined) return existing
+    const legacy = catalog.definitions.filter(definition => definition.id !== DEFAULT_SHADOW_ID)
+    const seeded = defaultSeed(legacy)
+    try {
+      await lstat(path)
+      throw new Error(`shadow definition path already exists: ${path}`)
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+    const parsed = parseShadowDefinition(serializeDefinition(seeded), path)
+    await writeFileAtomic(path, serializeDefinition(parsed), { mode: 0o600, dirMode: 0o700 })
+    return parsed
+  }
+
+  /**
+   * Persist the complete single Shadow definition as `default.md`.
+   * @param input Complete wire fields for the default Shadow.
    * @returns Validated definition with its source path.
    */
-  async create(input: CreateShadowDefinition): Promise<ShadowDefinition> {
-    return this.mutate(input.id, async () => {
+  async saveDefault(input: ShadowDefinitionInput): Promise<ShadowDefinition> {
+    if (input.id !== DEFAULT_SHADOW_ID) {
+      throw new Error(`only the default Shadow can be saved; expected id ${JSON.stringify(DEFAULT_SHADOW_ID)}`)
+    }
+    return this.mutate(DEFAULT_SHADOW_ID, async () => {
       if (input.holdout === true) await this.holdoutKeys(input.id)
-      const path = join(this.root, `${input.id}.md`)
-      const catalog = await this.list()
-      if (catalog.definitions.some(definition => definition.id === input.id)) {
-        throw new Error(`shadow ${JSON.stringify(input.id)} already exists`)
+      const path = join(this.root, `${DEFAULT_SHADOW_ID}.md`)
+      const current = (await this.list()).definitions.find(definition => definition.id === DEFAULT_SHADOW_ID)
+      const next: CreateShadowDefinition = {
+        id: input.id,
+        name: input.name,
+        enabled: input.enabled,
+        debug: input.debug,
+        activationProbability: input.activationProbability,
+        activeForModels: [...input.activeForModels],
+        ...input.runWithModel === null ? {} : { runWithModel: input.runWithModel },
+        ...input.reasoningEffort === null ? {} : { reasoningEffort: input.reasoningEffort },
+        ...input.timeoutSeconds === null ? {} : { timeoutSeconds: input.timeoutSeconds },
+        tools: [...input.tools],
+        capture: input.capture,
+        context: input.context,
+        thinkFirst: input.thinkFirst,
+        // The Web form cannot administer the operator-managed sidecar; saving
+        // never silently enables holdout when the file did not ask for it.
+        holdout: current?.holdout === true || input.holdout === true,
+        prompt: input.prompt,
       }
-      try {
-        await lstat(path)
-        throw new Error(`shadow definition path already exists: ${path}`)
-      } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
-      }
-      const parsed = parseShadowDefinition(serializeDefinition(input), path)
+      const parsed = parseShadowDefinition(serializeDefinition(next), path)
       await writeFileAtomic(path, serializeDefinition(parsed), { mode: 0o600, dirMode: 0o700 })
       return parsed
-    })
-  }
-
-  /**
-   * Update one existing definition and preserve its source path.
-   * @param id Existing definition id.
-   * @param patch Fields to replace.
-   * @returns Updated validated definition.
-   */
-  async update(id: string, patch: UpdateShadowDefinition): Promise<ShadowDefinition> {
-    return this.mutate(id, async () => {
-      const current = await this.expect(id)
-      const next = updatedDefinition(current, patch)
-      if (next.holdout === true) await this.holdoutKeys(id)
-      const parsed = parseShadowDefinition(serializeDefinition(next), current.sourcePath)
-      await writeFileAtomic(current.sourcePath, serializeDefinition(parsed), { mode: 0o600, dirMode: 0o700 })
-      return parsed
-    })
-  }
-
-  /**
-   * Set one existing definition's enabled flag.
-   * @param id Existing definition id.
-   * @param enabled Next scheduling state.
-   * @returns Updated validated definition.
-   */
-  setEnabled(id: string, enabled: boolean): Promise<ShadowDefinition> {
-    return this.update(id, { enabled })
-  }
-
-  /**
-   * Delete one definition file while preserving its debug log.
-   * @param id Existing definition id.
-   */
-  async delete(id: string): Promise<void> {
-    await this.mutate(id, async () => {
-      const current = await this.expect(id)
-      await rm(current.sourcePath)
     })
   }
 
@@ -431,13 +430,6 @@ export class ShadowRegistry {
         { encoding: 'utf8', mode: 0o600 },
       )
     })
-  }
-
-  /** Find one current winning definition or fail loud. */
-  private async expect(id: string): Promise<ShadowDefinition> {
-    const definition = (await this.list()).definitions.find(candidate => candidate.id === id)
-    if (definition === undefined) throw new Error(`shadow ${JSON.stringify(id)} does not exist`)
-    return definition
   }
 
   /** Serialize same-id mutations while allowing independent ids to overlap. */

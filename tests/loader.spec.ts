@@ -32,11 +32,7 @@ describe('built plugin entry points', () => {
       expect(ctx.get('shadowMind')).toBeDefined()
       expect(ctx.tools.schemas().map(schema => schema.name)).toEqual([
         'list_shadows',
-        'create_shadow',
-        'update_shadow',
-        'enable_shadow',
-        'disable_shadow',
-        'delete_shadow',
+        'update_default_shadow',
         'get_shadow_config',
         'update_shadow_config',
       ])

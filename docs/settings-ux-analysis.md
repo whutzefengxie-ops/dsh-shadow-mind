@@ -2,7 +2,9 @@
 
 [中文](settings-ux-analysis.zh.md) | English
 
-This document analyzes the field tiers of the Shadow Mind settings page (Settings → Plugins → Shadow Mind), the root cause of create failures, the fixes, and the design of the bundled reference templates. It is the implementation basis for the settings-page rework.
+> **Superseded**: the first-round tiering described here (still under the multi-definition model) is superseded by [`settings-ux-revamp.md`](settings-ux-revamp.md) (single Shadow reviewer, command-review capability removed, toast/slider/switch interaction rework). This page is kept for the record.
+
+This document analyzes the field tiers of the Shadow Mind settings page (Settings → Plugins → Shadow Mind), the root cause of create failures, the fixes, and the design of the bundled reference templates. It was the implementation basis for the settings-page rework.
 
 ## 1. Problems
 

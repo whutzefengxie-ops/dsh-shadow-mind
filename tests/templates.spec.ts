@@ -1,23 +1,21 @@
 import { describe, expect, it } from 'vitest'
-import { definitionInput, templateDraft } from '../src/client/ShadowMindSettingsTab.tsx'
+import { definitionDraft, definitionInput } from '../src/client/ShadowMindSettingsTab.tsx'
 import { en, zh } from '../src/client/locales.ts'
 import { SHADOW_TEMPLATES } from '../src/client/templates.ts'
 
-describe('Shadow Mind reference templates', () => {
-  it('ships unique, well-formed, adoptable templates', () => {
+describe('Shadow Mind review-style presets', () => {
+  it('ships unique, well-formed presets', () => {
     expect(SHADOW_TEMPLATES.length).toBeGreaterThanOrEqual(6)
     const ids = SHADOW_TEMPLATES.map(template => template.id)
     expect(new Set(ids).size).toBe(ids.length)
     for (const template of SHADOW_TEMPLATES) {
       expect(template.id).toMatch(/^[a-z0-9][a-z0-9_-]*$/u)
       expect(template.prompt.trim()).not.toBe('')
-      expect(template.activationProbability).toBeGreaterThanOrEqual(0)
-      expect(template.activationProbability).toBeLessThanOrEqual(1)
       expect(template.capture === 'full' || template.capture === 'since-compaction').toBe(true)
     }
   })
 
-  it('keeps every template name and description present in both dictionaries', () => {
+  it('keeps every preset name and description present in both dictionaries', () => {
     for (const template of SHADOW_TEMPLATES) {
       expect(zh[template.nameKey]).toBeTruthy()
       expect(zh[template.descriptionKey]).toBeTruthy()
@@ -26,21 +24,35 @@ describe('Shadow Mind reference templates', () => {
     }
   })
 
-  it('prefills a valid create draft that keeps holdout off', () => {
+  it('fills a valid default-definition draft that keeps holdout off and the preset probability untouched', () => {
     for (const template of SHADOW_TEMPLATES) {
-      const draft = templateDraft(template, zh[template.nameKey])
-      const input = definitionInput(draft)
+      const draft = definitionDraft({
+        id: 'default',
+        name: 'Shadow',
+        enabled: true,
+        debug: false,
+        activationProbability: 0.7,
+        activeForModels: [],
+        tools: [],
+        capture: 'full',
+        context: 'standard',
+        thinkFirst: false,
+        holdout: false,
+        prompt: 'Placeholder.',
+        sourcePath: '/defs/default.md',
+      })
+      const filled = { ...draft, prompt: template.prompt, capture: template.capture }
+      const input = definitionInput(filled)
       expect(input).toBeDefined()
-      expect(input?.id).toBe(template.id)
-      expect(input?.name).toBe(zh[template.nameKey])
+      expect(input?.id).toBe('default')
       expect(input?.prompt).toBe(template.prompt.trim())
       expect(input?.capture).toBe(template.capture)
-      expect(input?.activationProbability).toBe(template.activationProbability)
+      expect(input?.activationProbability).toBe(0.7)
       expect(input?.holdout).toBe(false)
     }
   })
 
-  it('keeps template prompts probe-checklist aligned with the shipped probe library', () => {
+  it('keeps preset prompts probe-checklist aligned with the shipped probe library', () => {
     for (const template of SHADOW_TEMPLATES.filter(candidate => candidate.id !== 'implementation-reviewer')) {
       expect(template.prompt).toContain('## Probe checklist')
       expect(template.prompt).toContain('evidence gap')

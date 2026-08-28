@@ -1,4 +1,4 @@
 # Bilingual-pair consistency record. Both languages carry equal authority.
 # Recompute each value with: git hash-object -- <path>
-review-quality-directions.md: dbd3b1eb15c85b95e1abfee2b26cfe8ac9394912
-review-quality-directions.zh.md: 687a1bdb41b49448fa8c684268a2ec541ce1445d
+review-quality-directions.md: c95ae53796f939fef7243eb921c959907adb2980
+review-quality-directions.zh.md: 7e47dddaef41f190ec438939482bceefade72daf
