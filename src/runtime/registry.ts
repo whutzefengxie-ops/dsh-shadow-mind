@@ -242,7 +242,10 @@ function defaultSeed(legacy: readonly ShadowDefinition[]): CreateShadowDefinitio
     activeForModels: [],
     ...first.runWithModel === undefined ? {} : { runWithModel: first.runWithModel },
     ...first.reasoningEffort === undefined ? {} : { reasoningEffort: first.reasoningEffort },
-    ...first.timeoutSeconds === undefined ? {} : { timeoutSeconds: first.timeoutSeconds },
+    // timeoutSeconds is deliberately NOT inherited: the user asked for the new
+    // 10-minute global default to govern migration, so a legacy definition's
+    // stale timeout must not override it. The user can still set a timeout on
+    // the default Shadow through the settings page advanced field.
     tools: [...first.tools],
     capture: first.capture,
     context: first.context,

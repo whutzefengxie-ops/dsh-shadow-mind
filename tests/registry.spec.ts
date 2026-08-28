@@ -186,6 +186,7 @@ describe('ShadowRegistry', () => {
         'name: Contrarian',
         'enabled: true',
         'activation_probability: 0.3',
+        'timeout_seconds: 300',
         'capture: since-compaction',
         '---',
         '',
@@ -208,6 +209,8 @@ describe('ShadowRegistry', () => {
         capture: 'since-compaction',
         prompt: 'Challenge the strongest claim.',
       })
+      // A stale legacy timeout must not override the new 10-minute default.
+      expect(created).not.toHaveProperty('timeoutSeconds')
       // Legacy files stay on disk, read-only, and never scheduled.
       const catalog = await registry.list()
       expect(catalog.definitions.map(item => item.id).sort()).toEqual(['contrarian', DEFAULT_SHADOW_ID, 'hacker'])
