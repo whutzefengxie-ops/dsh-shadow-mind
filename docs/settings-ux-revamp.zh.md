@@ -4,7 +4,7 @@
 
 本文基于最新一批用户投诉，对 Shadow Mind 的设置页与调度模型做第二轮收敛：产品从「多 Shadow 陪审团 + 命令审查」收敛为**一个 Shadow 审查者**单一能力，并重做交互。文中标注了实施结果；取代 `settings-ux-analysis.md` 中仍按多定义模型描述的部分。
 
-> **实施状态（代码完成；服务端 live 验收通过，仅剩客户端渲染确认）**：运行时、工具面、客户端、测试与文档已全部按本方案落地并通过 `pnpm run check`。要点：单一 `default` 定义自动创建（旧定义只读保留、概率默认 70%、默认超时 600 秒）；管理面 `catalog` 幂等确保 `default.md`，全新安装打开设置页即有可编辑卡片（修复空态误报「无法读取 Shadow Mind 数据」）；多定义 CRUD API 删除；`synthesis.ts`、`prefilter.ts` 与 `command-gate.ts` 整体删除；设置页重构为单 Shadow 卡片 + toast + 概率滑杆（10%–100%、步进 10%、默认 70%）。**live 验收进度**：harness 已重启并用新构建运行——会话工具面四项（`list_shadows`/`update_default_shadow`/`get_shadow_config`/`update_shadow_config`）已生效，`get_shadow_config` 读到默认超时 `600`、无任何已删键，`list_shadows` 显示 `default` 已自动创建（概率默认 0.7，用户可经设置页滑杆改，如 0.8 已落盘）、旧 `implementation-reviewer` 只读保留不再调度、diagnostics 为空；新 `lib/` 已部署进 live profile（历次备份见下文）。**唯一未完成项**：用户重启 harness（使宿主加载新 catalog 契约）后在浏览器 Ctrl+F5 确认超时字段渲染出占位符 `600` 与「留空使用全局默认值：600 秒（10 分钟）。」——重启**前**客户端已降级为通用提示（新客户端对「缺 `defaultShadowTimeoutSeconds`」的旧形态快照经真实解码验证可正常通过，不会整屏报错），但不会显示确切数字；该数字显示依赖宿主重启。通过前，对应 PR 应保持 draft / 不合并。
+> **实施状态（已完成；live 验收通过）**：运行时、工具面、客户端、测试与文档已全部按本方案落地并通过 `pnpm run check`，live 端验收亦已完成。要点：单一 `default` 定义自动创建（旧定义只读保留、概率默认 70%、默认超时 600 秒）；管理面 `catalog` 幂等确保 `default.md`，全新安装打开设置页即有可编辑卡片（修复空态误报「无法读取 Shadow Mind 数据」）；多定义 CRUD API 删除；`synthesis.ts`、`prefilter.ts` 与 `command-gate.ts` 整体删除；设置页重构为单 Shadow 卡片 + toast + 概率滑杆（10%–100%、步进 10%、默认 70%）。**live 验收进度**：harness 重启后以新构建运行——会话工具面四项（`list_shadows`/`update_default_shadow`/`get_shadow_config`/`update_shadow_config`）生效；`get_shadow_config` 读到默认超时 `600`、无任何已删键；`list_shadows` 显示 `default` 已自动创建（概率默认 0.7，用户可经设置页滑杆改，如 0.8 已落盘）、旧 `implementation-reviewer` 只读保留不再调度、diagnostics 为空；浏览器设置页单 Shadow 卡片、toast 与超时默认值 `600`（「留空使用全局默认值：600 秒（10 分钟）。」）均已确认。客户端对「缺 `defaultShadowTimeoutSeconds`」的旧形态快照经真实解码验证可降级通过（不整屏报错），配合 optional 容错消除了客户端↔宿主版本错位的整页崩溃。
 
 > **超时根因与有效性证据**：旧构建（默认超时 300s）的 `implementation-reviewer.jsonl` 中，所有 `SHADOW_TIMEOUT` 都恰好在启动后 **300s** 触发（5 处，如 14:39:02→14:44:02），而成功完成的运行时长多在 **150–294s**——说明超时是**预算耗尽**（恰好撞 300s 顶），而非 provider 挂起或队列停滞。新构建（默认 600s）的 `default.jsonl` 已记录 **6 次成功运行**（66s、122s、124s、160s、165s、180s），**零次超时**。600s 提供了额外余量、已直接缓解该成因；若未来某次真正耗时的审查仍超过 600s，会在日志以 600s 顶触发，届时再评估是否上调。
 
@@ -108,7 +108,7 @@
 - **阶段 A（UI 层）**：toast、页面重构、滑杆、控件、错误文案映射 ✅
 - **阶段 B（运行时收敛）**：单 Shadow 调度、砍合成、删谓词、schema 收敛、删除命令闸门 ✅
 - **阶段 C（文档与测试）** ✅；`pnpm run check`（typert 校验 + typecheck + 137 测试 + 构建 + 冒烟）全绿。
-- **阶段 D（live 部署与复验）**：lib/ 已部署进 live profile ✅；harness 已重启并用新构建运行；服务端验收通过（工具面四项、`default.md` 自动创建、默认超时 600s、旧定义只读提示）✅；**唯一未闭环 = 用户 Ctrl+F5 确认超时字段渲染占位符 600 与说明文字** ⏳。
+- **阶段 D（live 部署与复验）**：lib/ 已部署进 live profile ✅；harness 已重启并用新构建运行；服务端验收通过（工具面四项、`default.md` 自动创建、默认超时 600s、旧定义只读提示）✅；浏览器设置页单卡片、toast 与超时默认值 600 显示均确认 ✅；客户端对旧形态快照 optional 容错（版本错位不再整屏报错）✅。
 
 ## 5. 决策记录
 
