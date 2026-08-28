@@ -6,6 +6,8 @@
 
 > **实施状态（代码完成；服务端 live 验收通过，仅剩客户端渲染确认）**：运行时、工具面、客户端、测试与文档已全部按本方案落地并通过 `pnpm run check`。要点：单一 `default` 定义自动创建（旧定义只读保留、概率默认 70%、默认超时 600 秒）；管理面 `catalog` 幂等确保 `default.md`，全新安装打开设置页即有可编辑卡片（修复空态误报「无法读取 Shadow Mind 数据」）；多定义 CRUD API 删除；`synthesis.ts`、`prefilter.ts` 与 `command-gate.ts` 整体删除；设置页重构为单 Shadow 卡片 + toast + 概率滑杆（10%–100%、步进 10%、默认 70%）。**live 验收进度**：harness 已重启并用新构建运行——会话工具面四项（`list_shadows`/`update_default_shadow`/`get_shadow_config`/`update_shadow_config`）已生效，`get_shadow_config` 读到默认超时 `600`、无任何已删键，`list_shadows` 显示 `default` 已自动创建（概率默认 0.7，用户可经设置页滑杆改，如 0.8 已落盘）、旧 `implementation-reviewer` 只读保留不再调度、diagnostics 为空；新 `lib/` 已部署进 live profile（历次备份见下文）。**唯一未完成项**：用户在浏览器 Ctrl+F5 后确认超时字段渲染出占位符 `600` 与「留空使用全局默认值：600 秒（10 分钟）。」——通过前，对应 PR 应保持 draft / 不合并。
 
+> **超时根因与有效性证据**：旧构建（默认超时 300s）的 `implementation-reviewer.jsonl` 中，所有 `SHADOW_TIMEOUT` 都恰好在启动后 **300s** 触发（5 处，如 14:39:02→14:44:02），而成功完成的运行时长多在 **150–294s**——说明超时是**预算耗尽**（恰好撞 300s 顶），而非 provider 挂起或队列停滞。新构建（默认 600s）的 `default.jsonl` 已记录 **6 次成功运行**（66s、122s、124s、160s、165s、180s），**零次超时**。600s 提供了额外余量、已直接缓解该成因；若未来某次真正耗时的审查仍超过 600s，会在日志以 600s 顶触发，届时再评估是否上调。
+
 ## 1. 反思：反馈背后的根因（举一反三）
 
 用户投诉的六条只是表象，背后有五类根因。方案必须解决根因，而不是只挪位置：

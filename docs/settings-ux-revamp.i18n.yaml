@@ -1,4 +1,4 @@
 # Bilingual-pair consistency record. Both languages carry equal authority.
 # Recompute each value with: git hash-object -- <path>
-settings-ux-revamp.md: d86e07be44baee3faf1280b694b281d50a08be83
-settings-ux-revamp.zh.md: 9c253af01a5545d540e4332e8057d9947a6699b5
+settings-ux-revamp.md: 36a9b4f4b41f7bb8c3b3979ad6272b679301194b
+settings-ux-revamp.zh.md: 54aac9bdb37d940ea201400bb877d0f9d0ac78e3
