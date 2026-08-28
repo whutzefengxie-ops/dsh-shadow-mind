@@ -49,6 +49,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_catalog_result$schema = z.
   'sourcePath': z.string().readonly(),
 })).readonly(),
   'modelCatalog': _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema,
+  'defaultShadowTimeoutSeconds': z.number().readonly(),
   'diagnostics': z.array(z.object({
   'path': z.string().readonly(),
   'error': z.string().readonly(),
@@ -253,7 +254,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowModelCatalog',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":442,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":447,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/retry',
@@ -294,7 +295,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":620,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":625,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/cycles',
@@ -325,7 +326,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowReviewCycle[]',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_cycles_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":557,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":562,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/saveDefault',
@@ -351,7 +352,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowDefinition',
         schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_saveDefault_result$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":453,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":458,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/pause',
@@ -381,7 +382,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":575,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":580,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/resume',
@@ -411,7 +412,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":592,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":597,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/status',
@@ -441,7 +442,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":494,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":499,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/toggle',
@@ -471,7 +472,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":606,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":611,"column":3},
     },
   ],
   model: {
@@ -869,7 +870,7 @@ export const TYPERT = {
           },
           {
             "name": "ShadowAdministrationSnapshot",
-            "declaration": "export interface ShadowAdministrationSnapshot extends ShadowCatalog {\n    readonly definitionRoot: string;\n}"
+            "declaration": "export interface ShadowAdministrationSnapshot extends ShadowCatalog {\n    readonly definitionRoot: string;\n    readonly defaultShadowTimeoutSeconds: number;\n}"
           },
           {
             "name": "ShadowCatalog",

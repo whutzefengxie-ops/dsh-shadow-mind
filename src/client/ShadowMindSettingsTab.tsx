@@ -1,11 +1,10 @@
 import { Component, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { ObservableSnapshot, SessionId, SettingsScopeSnapshot } from '@deepseek-ai/dsh-client-runtime/client'
+import type { SessionId } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import type {
   ShadowAdministrationSnapshot,
   ShadowDefinition,
   ShadowDefinitionInput,
-  ShadowMindSettings,
   ShadowMindStatus,
   ShadowRunOutcome,
 } from '../runtime/types.ts'
@@ -20,10 +19,6 @@ import css from './ShadowMindSettingsTab.module.css'
 
 /** Browser operations injected by the Shadow Mind client plugin. */
 export interface ShadowMindSettingsTabInjected {
-  hooks: {
-    /** Live settings snapshot bound by the renderer as useSettings. */
-    settings: ObservableSnapshot<SettingsScopeSnapshot<ShadowMindSettings>>
-  }
   /** Persist the complete single default Shadow definition. */
   saveDefault: (input: ShadowDefinitionInput) => Promise<ShadowDefinition>
   catalog: () => Promise<ShadowAdministrationSnapshot>
@@ -185,7 +180,6 @@ function friendlyError(t: ShadowMindSettingsTabProps['t'], error: unknown): stri
 function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactNode {
   const { t } = props
   const currentSession = props.useSessions(snapshot => snapshot.current)
-  const settings = props.useSettings(snapshot => snapshot)
   const [catalog, setCatalog] = useState<ShadowAdministrationSnapshot | null>(null)
   const [status, setStatus] = useState<ShadowMindStatus | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -193,7 +187,7 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
   const [definitionEdit, setDefinitionEdit] = useState<DefinitionDraft | null>(null)
   const { toasts, push, dismiss } = useToasts()
 
-  const defaultTimeoutSeconds = settings.status === 'ready' ? settings.value?.defaultShadowTimeoutSeconds : undefined
+  const defaultTimeoutSeconds = catalog?.defaultShadowTimeoutSeconds
   const currentDefinition = catalog?.definitions.find(definition => definition.id === DEFAULT_SHADOW_ID)
   const legacyDefinitions = useMemo(
     () => catalog?.definitions.filter(definition => definition.id !== DEFAULT_SHADOW_ID) ?? [],

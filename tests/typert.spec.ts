@@ -160,6 +160,7 @@ describe('Shadow Remote descriptors', () => {
       definitionRoot: '/definitions',
       definitions: [definition],
       diagnostics: [],
+      defaultShadowTimeoutSeconds: 600,
       modelCatalog: {
         groups: [{
           id: 'deepseek-official',

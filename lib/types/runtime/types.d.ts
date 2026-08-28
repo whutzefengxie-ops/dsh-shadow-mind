@@ -63,6 +63,8 @@ export interface ShadowAdministrationSnapshot extends ShadowCatalog {
     readonly definitionRoot: string;
     /** Live DSH provider/model/effort directory plus the agent-preset roster. */
     readonly modelCatalog: ShadowModelCatalog;
+    /** Resolved default Shadow deadline in seconds, shown as the inherit hint. */
+    readonly defaultShadowTimeoutSeconds: number;
 }
 /** Complete editable definition submitted by the Web administration page. */
 export interface ShadowDefinitionInput {

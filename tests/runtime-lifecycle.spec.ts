@@ -211,6 +211,7 @@ describe('Shadow runtime lifecycle', () => {
     }), { definitions: {} })
 
     const first = await harness.runtime.remoteExportCatalog()
+    expect(first.defaultShadowTimeoutSeconds).toBe(600)
     expect(first.definitions.map(item => item.id)).toContain(DEFAULT_SHADOW_ID)
     expect(first.definitions.find(item => item.id === DEFAULT_SHADOW_ID)).toMatchObject({
       activationProbability: 0.7,

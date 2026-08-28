@@ -432,7 +432,12 @@ export class ShadowMindRuntime extends TypertRemoteService {
   async remoteExportCatalog(): Promise<ShadowAdministrationSnapshot> {
     await this.registry.defaultDefinition()
     const catalog = await this.registry.list()
-    return { definitionRoot: this.registry.root, modelCatalog: await this.modelCatalog(), ...catalog }
+    return {
+      definitionRoot: this.registry.root,
+      modelCatalog: await this.modelCatalog(),
+      defaultShadowTimeoutSeconds: this.settingsValue.defaultShadowTimeoutSeconds,
+      ...catalog,
+    }
   }
 
   /**
