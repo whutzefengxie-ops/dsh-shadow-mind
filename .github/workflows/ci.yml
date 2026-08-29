@@ -41,4 +41,11 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
+      # The bundle installs the committed lib/, so a fresh build must reproduce
+      # it exactly. Fail on any drift (modified, deleted, or stray untracked
+      # build outputs) between the built tree and the committed artifacts.
+      - name: Verify committed lib matches the build
+        run: |
+          git status --porcelain -- lib > lib-drift.txt
+          if [ -s lib-drift.txt ]; then cat lib-drift.txt; exit 1; fi
       - run: npm pack --dry-run
