@@ -29,10 +29,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 # Resolve the default profile without PS7-only `(if ...)` expressions so the
-# script stays runnable on Windows PowerShell 5.1.
+# script stays runnable on Windows PowerShell 5.1. The variable must not be
+# named `$home`: PowerShell variable names are case-insensitive and `$HOME` is
+# a read-only automatic variable in both 5.1 and 7.
 if (-not $ProfilePath) {
-  $home = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }
-  $ProfilePath = Join-Path $home 'profiles\web\node_modules\@whutzefengxie-ops\dsh-shadow-mind'
+  $homeDir = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }
+  $ProfilePath = Join-Path $homeDir 'profiles/web/node_modules/@whutzefengxie-ops/dsh-shadow-mind'
 }
 $root = $PSScriptRoot | Split-Path -Parent
 $libSrc = Join-Path $root 'lib'
@@ -80,13 +82,13 @@ Copy-Item -Path (Join-Path $docsSrc '*') -Destination (Join-Path $ProfilePath 'd
 
 # 3. Move any chunk no longer referenced into the backup, so the profile stays clean.
 $referenced = @()
-foreach ($file in @('lib\index.js', 'lib\tool.js', 'lib\typert.js')) {
+foreach ($file in @('lib/index.js', 'lib/tool.js', 'lib/typert.js')) {
   $raw = Get-Content (Join-Path $ProfilePath $file) -Raw
   $referenced += [regex]::Matches($raw, 'runtime-[A-Za-z0-9_-]+\.js') | ForEach-Object { $_.Value }
 }
 $referenced = $referenced | Select-Object -Unique
 New-Item -ItemType Directory -Path (Join-Path $bak 'chunks-stale') -Force | Out-Null
-Get-ChildItem (Join-Path $ProfilePath 'lib\chunks') | ForEach-Object {
+Get-ChildItem (Join-Path $ProfilePath 'lib/chunks') | ForEach-Object {
   if ($referenced -notcontains $_.Name) {
     Move-Item -Path $_.FullName -Destination (Join-Path $bak 'chunks-stale') -Force
     Write-Output "stale chunk moved: $($_.Name)"
@@ -96,7 +98,7 @@ Get-ChildItem (Join-Path $ProfilePath 'lib\chunks') | ForEach-Object {
 # 4. Self-consistency: every chunk referenced by an entry bundle must exist on disk.
 # A missing referenced chunk would make the harness fail to load the runtime on the
 # next restart (the same failure class as "Shadow Mind data is unavailable").
-$chunksOnDisk = @(Get-ChildItem (Join-Path $ProfilePath 'lib\chunks') -File | ForEach-Object { $_.Name })
+$chunksOnDisk = @(Get-ChildItem (Join-Path $ProfilePath 'lib/chunks') -File | ForEach-Object { $_.Name })
 $missing = @($referenced | Where-Object { $chunksOnDisk -notcontains $_ })
 if ($missing.Count -gt 0) {
   throw "deployed lib is not self-consistent: referenced chunk(s) missing: $($missing -join ', ')"
@@ -105,12 +107,12 @@ Write-Output "referenced chunks present on disk: $(if ($referenced) { $reference
 
 if (-not $SkipInspect) {
   Write-Output '--- deployed bundle hashes (should read OK) ---'
-  foreach ($f in @('lib\index.js', 'lib\tool.js', 'lib\typert.js', 'lib\client.js')) {
+  foreach ($f in @('lib/index.js', 'lib/tool.js', 'lib/typert.js', 'lib/client.js')) {
     $a = (Get-FileHash -Algorithm SHA256 (Join-Path $root $f)).Hash
     $b = (Get-FileHash -Algorithm SHA256 (Join-Path $ProfilePath $f)).Hash
     Write-Output ("{0} {1}" -f $f, ($(if ($a -eq $b) { 'OK' } else { 'MISMATCH' })))
   }
-  Write-Output "profile chunks: $((Get-ChildItem (Join-Path $ProfilePath 'lib\chunks')).Name -join ', ')"
+  Write-Output "profile chunks: $((Get-ChildItem (Join-Path $ProfilePath 'lib/chunks')).Name -join ', ')"
 }
 
 Write-Output ''

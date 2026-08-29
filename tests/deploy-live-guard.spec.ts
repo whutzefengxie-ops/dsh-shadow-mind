@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
-import { chmodSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { delimiter, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,10 +10,11 @@ import { describe, expect, it } from 'vitest'
  * Regression net for the deploy-live safety gate. Structural assertions pin
  * the ordering of every git invocation against its exit-code check; behavior
  * tests execute the real script with a fake `git` on PATH (Windows PowerShell
- * 5.1 locally, pwsh 7 in CI) and assert the gate aborts BEFORE touching the
- * profile directory.
+ * 5.1 locally, pwsh 7 in CI) and cover both the abort paths and one complete
+ * end-to-end deploy into a seeded temporary profile.
  */
 const scriptPath = fileURLToPath(new URL('../scripts/deploy-live.ps1', import.meta.url))
+const repoRoot = fileURLToPath(new URL('..', import.meta.url))
 
 const WINDOWS = process.platform === 'win32'
 
@@ -68,20 +69,41 @@ process.exit(0)
 }
 
 /** Run the real deploy script against the fake git; returns combined output and exit code. */
-function runDeployScript(mode: string, shimDir: string, profileDir: string): { exit: number; output: string } {
+function runDeployScript(
+  mode: string,
+  shimDir: string,
+  args: readonly string[],
+  envOverrides: Readonly<Record<string, string | undefined>> = {},
+): { exit: number; output: string } {
   const available = shell()
   if (available === undefined) throw new Error('no PowerShell available')
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     FAKE_GIT_MODE: mode,
     PATH: `${shimDir}${delimiter}${process.env.PATH ?? ''}`,
   }
+  for (const [key, value] of Object.entries(envOverrides)) {
+    if (value === undefined) delete env[key]
+    else env[key] = value
+  }
   const result = spawnSync(
     available.shell,
-    ['-NoProfile', '-File', scriptPath, '-ProfilePath', profileDir],
+    // -ExecutionPolicy Bypass keeps `-File` working on stock Windows machines
+    // whose policy (Restricted) would otherwise block the script itself.
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath, ...args],
     { encoding: 'utf8', env },
   )
   return { exit: result.status ?? -1, output: `${result.stdout ?? ''}${result.stderr ?? ''}` }
+}
+
+/** Chunk names referenced by the repo's built entry bundles. */
+function referencedChunks(): string[] {
+  const names = new Set<string>()
+  for (const file of ['lib/index.js', 'lib/tool.js', 'lib/typert.js']) {
+    const content = readFileSync(join(repoRoot, file), 'utf8')
+    for (const match of content.matchAll(/runtime-[A-Za-z0-9_-]+\.js/gu)) names.add(match[0])
+  }
+  return [...names].sort()
 }
 
 describe('deploy-live safety gate (structure)', () => {
@@ -140,7 +162,7 @@ describe.skipIf(shell() === undefined)('deploy-live safety gate (behavior)', () 
       const profileDir = mkdtempSync(join(tmpdir(), 'dsh-fake-profile-'))
       try {
         writeFakeGit(shimDir)
-        const result = runDeployScript(entry.mode, shimDir, profileDir)
+        const result = runDeployScript(entry.mode, shimDir, ['-ProfilePath', profileDir])
         expect(result.exit).not.toBe(0)
         expect(result.output).toContain('deploy refused')
         expect(result.output).toContain(entry.message)
@@ -152,4 +174,42 @@ describe.skipIf(shell() === undefined)('deploy-live safety gate (behavior)', () 
       }
     })
   }
+
+  it('completes a full deploy through the default profile resolution', () => {
+    const shimDir = mkdtempSync(join(tmpdir(), 'dsh-fake-git-'))
+    // The default profile path derives from DSH_HOME or USERPROFILE; redirect
+    // both to a temp home so the success path runs against a seeded sandbox
+    // profile instead of the real one.
+    const tempHome = mkdtempSync(join(tmpdir(), 'dsh-fake-home-'))
+    const profileDir = join(tempHome, '.dsh', 'profiles', 'web', 'node_modules', '@whutzefengxie-ops', 'dsh-shadow-mind')
+    try {
+      writeFakeGit(shimDir)
+      mkdirSync(join(profileDir, 'lib', 'chunks'), { recursive: true })
+      writeFileSync(join(profileDir, 'lib', 'chunks', 'runtime-STALE123.js'), 'stale', 'utf8')
+      const result = runDeployScript('ok', shimDir, [], { DSH_HOME: undefined, USERPROFILE: tempHome })
+      expect(result.exit).toBe(0)
+
+      // A timestamped backup was created before the copy.
+      const backups = readdirSync(profileDir).filter(name => name.startsWith('lib.bak-'))
+      expect(backups).toHaveLength(1)
+      const backup = backups[0]
+      expect(backup).toBeDefined()
+
+      // The entry bundles in the profile equal the repo build.
+      for (const file of ['lib/index.js', 'lib/tool.js', 'lib/typert.js', 'lib/client.js']) {
+        expect(readFileSync(join(profileDir, file), 'utf8')).toBe(readFileSync(join(repoRoot, file), 'utf8'))
+      }
+
+      // Only referenced chunks remain; the seeded stale chunk moved into the backup.
+      expect(readdirSync(join(profileDir, 'lib', 'chunks')).sort()).toEqual(referencedChunks())
+      expect(readFileSync(join(profileDir, backup!, 'chunks-stale', 'runtime-STALE123.js'), 'utf8')).toBe('stale')
+
+      // The self-consistency and hash verification steps ran.
+      expect(result.output).toContain('referenced chunks present')
+      expect(result.output).toContain('lib/client.js OK')
+    } finally {
+      rmSync(shimDir, { recursive: true, force: true })
+      rmSync(tempHome, { recursive: true, force: true })
+    }
+  })
 })
