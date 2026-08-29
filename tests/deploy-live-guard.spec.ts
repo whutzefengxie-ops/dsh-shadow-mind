@@ -96,6 +96,19 @@ function runDeployScript(
   return { exit: result.status ?? -1, output: `${result.stdout ?? ''}${result.stderr ?? ''}` }
 }
 
+/**
+ * Normalize rendered PowerShell output so message substrings survive console
+ * formatting: pwsh 7 wraps long error records at 80 columns when there is no
+ * TTY, decorating each wrapped line with a `|` marker and ANSI color codes.
+ * Strip those and fold all whitespace into single spaces.
+ */
+function collapsedOutput(text: string): string {
+  return text
+    .replace(/\u001b\[[0-9;]*m/gu, '')
+    .replace(/\|/gu, ' ')
+    .replace(/\s+/gu, ' ')
+}
+
 /** Chunk names referenced by the repo's built entry bundles. */
 function referencedChunks(): string[] {
   const names = new Set<string>()
@@ -164,9 +177,7 @@ describe.skipIf(shell() === undefined)('deploy-live safety gate (behavior)', () 
         writeFakeGit(shimDir)
         const result = runDeployScript(entry.mode, shimDir, ['-ProfilePath', profileDir])
         expect(result.exit).not.toBe(0)
-        // pwsh 7 wraps long error records at terminal width (80 cols without a
-        // TTY), so fold all whitespace before asserting message substrings.
-        const collapsed = result.output.replace(/\s+/gu, ' ')
+        const collapsed = collapsedOutput(result.output)
         expect(collapsed).toContain('deploy refused')
         expect(collapsed).toContain(entry.message)
         // The gate must fail before any backup/copy: the profile stays empty.
