@@ -98,8 +98,13 @@ const client: UserConfig = {
       const file = cssFiles.get(virtualId)
       if (file === undefined) throw new Error(`missing stylesheet for ${virtualId}`)
       this.addWatchFile(file)
+      // Feed lightningcss a cwd-relative filename so its CSS Modules `[hash]`
+      // is machine-independent: an absolute path would leak the checkout
+      // location into every generated class name and break byte-reproducible
+      // builds across platforms.
+      const stableFile = relative(process.cwd(), file).split('\\').join('/')
       const result = transform({
-        filename: file,
+        filename: stableFile,
         code: await readFile(file),
         cssModules: { pattern: '[hash]_[local]' },
         minify: true,
@@ -113,7 +118,15 @@ const client: UserConfig = {
   }, {
     name: 'shadow-mind-release-whitespace',
     renderChunk(code: string) {
-      return { code: code.replace(/[ \t]+(?=\r?\n)/gu, ''), map: null }
+      return {
+        code: code
+          // Region comments embed resolved module paths, which differ between
+          // machines (real harness checkout vs symlinked CI checkout). Drop
+          // them so the shipped bundle is reproducible byte-for-byte.
+          .replace(/[ \t]*\/\/#(?:region|endregion)[^\n]*\n?/gu, '')
+          .replace(/[ \t]+(?=\r?\n)/gu, ''),
+        map: null,
+      }
     },
   }],
   outputOptions: {
