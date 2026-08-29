@@ -14,6 +14,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { ToolSchema } from '@deepseek-ai/dsh-llm'
 import type { ToolExecution, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { ToolArgsError, validateJsonSchemaValue, type ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
+import { narrowShadowOutput } from './shadow-output.ts'
 
 /** The model-facing tool name a structured child must call to finish. */
 export const STRUCTURED_OUTPUT_TOOL = 'structured_output'
@@ -44,9 +45,16 @@ export interface StructuredAttachment {
  * @param childCtx - the child agent's scope context (`setup`'s argument).
  * @param schema - the trusted, already-asserted schema subset to enforce (see
  *   `assertObjectJsonSchema` in dsh-tools).
+ * @param anchorSeqs - rendered trajectory anchors the child may cite in `refs`;
+ *   when provided, refs outside this set are rejected in-turn. `undefined`
+ *   skips the rendered-window membership rule.
  * @returns the attachment handle (read `captured()` after the child settles).
  */
-export function attachStructuredRuntime(childCtx: Context, schema: ObjectJsonSchema): StructuredAttachment {
+export function attachStructuredRuntime(
+  childCtx: Context,
+  schema: ObjectJsonSchema,
+  anchorSeqs?: ReadonlySet<number>,
+): StructuredAttachment {
   /**
    * Validated values staged by the capture tool body, awaiting THEIR OWN
    * authoritative `tools/result` notification. The execution object's identity
@@ -65,7 +73,10 @@ export function attachStructuredRuntime(childCtx: Context, schema: ObjectJsonSch
     name: STRUCTURED_OUTPUT_TOOL,
     description:
       'Report your final structured result. Call this exactly once, when your answer is complete; '
-      + 'the arguments must match this tool\'s parameter schema exactly.',
+      + 'the arguments must match this tool\'s parameter schema exactly. '
+      + 'For status "report": content must be non-empty, verdict must be "challenge", "gap", "confirm", or "uncertain", '
+      + 'refs must be a strictly ascending list of at most eight rendered seq values, and severity is an optional finite number from 0 through 1. '
+      + 'For status "not_relevant" or "silent", omit verdict, severity, and refs.',
     // ToolSchema.parameters is the wire-level JSON Schema object; the
     // asserted subset type is structurally exactly that.
     parameters: schema as unknown as Record<string, unknown>,
@@ -87,6 +98,12 @@ export function attachStructuredRuntime(childCtx: Context, schema: ObjectJsonSch
       // ToolArgsError → isError result with INVALID_ARGS: the model retries
       // within the same turn, exactly like a schema-validated defineTool call.
       if (violations.length > 0) throw new ToolArgsError(violations)
+      // The JSON Schema subset cannot express cross-field rules (ascending
+      // rendered anchors, verdict required on reports, severity range,
+      // report-only fields). Enforce them here so the model retries in-turn
+      // instead of losing the whole run at the post-completion backstop.
+      const narrowed = narrowShadowOutput(args, anchorSeqs)
+      if ('violations' in narrowed) throw new ToolArgsError([...narrowed.violations])
       // Two-phase commit, keyed by THIS execution: later transformable
       // waterfalls may still turn the success into an error. ToolRuntime has
       // already frozen model-bound arguments at the actual input boundary.

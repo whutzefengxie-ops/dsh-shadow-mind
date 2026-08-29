@@ -28,6 +28,7 @@ import { resolveIndependence } from './vendor.ts'
 import { containsHoldoutLiteral, redactHoldoutLiterals } from './holdout.ts'
 import { buildShadowModelCatalog } from './model-catalog.ts'
 import { effectivePromptCapChars, resolveModelPromptCapChars } from './model-context.ts'
+import { narrowShadowOutput, type ShadowOutput } from './shadow-output.ts'
 import {
   classifyChallenge,
   type ShadowValueClassification,
@@ -128,18 +129,6 @@ const OUTPUT_SCHEMA: ObjectJsonSchema = {
   required: ['status', 'content'],
 }
 
-type ShadowOutput = {
-  readonly status: 'not_relevant' | 'silent'
-  readonly content: ''
-  readonly refs: readonly []
-} | {
-  readonly status: 'report'
-  readonly content: string
-  readonly verdict: ShadowVerdict
-  readonly severity?: number
-  readonly refs: readonly number[]
-}
-
 interface ActiveShadow {
   readonly shadowId: string
   readonly shadowName: string
@@ -217,55 +206,6 @@ interface MutableValueStats {
   adopted: number
   rejected: number
   ignored: number
-}
-
-/** Narrow a provider-validated structured result for TypeScript. */
-function shadowOutput(value: unknown, projectedSeqs: ReadonlySet<number>): ShadowOutput | undefined {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined
-  const record = value as Record<string, unknown>
-  const status = record['status']
-  const content = record['content']
-  if ((status !== 'not_relevant' && status !== 'silent' && status !== 'report') || typeof content !== 'string') {
-    return undefined
-  }
-  const verdict = record['verdict']
-  const severity = record['severity']
-  const refs = record['refs']
-  if (status !== 'report') {
-    // Silent/not_relevant never relay body text, so an explanatory content string is
-    // tolerated and normalized away instead of failing the whole run: the tool-level
-    // JSON Schema subset cannot express the cross-field "empty content" rule, while
-    // the runtime contract keeps report-only fields (verdict/severity/refs) rejected
-    // because carrying them on a non-report status is a genuine state-machine error.
-    if (Object.hasOwn(record, 'verdict') || Object.hasOwn(record, 'severity')
-      || Object.hasOwn(record, 'refs')) return undefined
-    return { status, content: '', refs: [] }
-  }
-  if (content.trim() === ''
-    || verdict !== 'challenge' && verdict !== 'gap' && verdict !== 'confirm' && verdict !== 'uncertain') {
-    return undefined
-  }
-  if (severity !== undefined
-    && (typeof severity !== 'number' || !Number.isFinite(severity) || severity < 0 || severity > 1)) {
-    return undefined
-  }
-  if (refs !== undefined && (!Array.isArray(refs) || refs.length > 8)) return undefined
-  const rawAnchors: readonly unknown[] = refs === undefined ? [] : refs
-  const anchors: number[] = []
-  let previous = -1
-  for (const anchor of rawAnchors) {
-    if (typeof anchor !== 'number' || !Number.isSafeInteger(anchor)
-      || anchor <= 0 || anchor <= previous || !projectedSeqs.has(anchor)) return undefined
-    previous = anchor
-    anchors.push(anchor)
-  }
-  return {
-    status,
-    content,
-    verdict,
-    ...severity === undefined ? {} : { severity },
-    refs: Object.freeze([...anchors]),
-  }
 }
 
 /** Map provider-owned non-completion into a stable plugin reason. */
@@ -1023,6 +963,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
         maxDepth: 1,
         toolFilter: { allow: [...new Set([...DEFAULT_SHADOW_TOOLS, ...definition.tools])] },
         outputSchema: OUTPUT_SCHEMA,
+        structuredAnchorSeqs: projection.seqs,
         ...definition.context === 'minimal' ? { contextInheritance: 'none' as const } : {},
         ...definition.thinkFirst ? { thinkFirst: true } : {},
         ...selection === undefined ? {} : { modelSelection: selection },
@@ -1133,19 +1074,24 @@ export class ShadowMindRuntime extends TypertRemoteService {
     }
 
     entry.view = { ...entry.view, stage: 'validate' }
-    const output = shadowOutput(result.structured, projection.seqs)
-    if (output === undefined) {
+    const narrowed = narrowShadowOutput(result.structured, projection.seqs)
+    if ('violations' in narrowed) {
+      // The child-side tool already rejects these violations with INVALID_ARGS,
+      // so reaching this backstop means the capture path bypassed the tool
+      // contract (or a future provider weakened it); fail with the same
+      // violation list so the surface stays actionable.
       await this.finishRun(state, entry, 'failed', {
         stage: 'validate',
         reasonCode: 'INVALID_STRUCTURED_OUTPUT',
         providerStopReason: result.stopReason,
-        error: safeError(new Error('Shadow returned invalid structured output')),
+        error: safeError(new Error(`Shadow returned invalid structured output: ${narrowed.violations.join('; ')}`)),
         deliberationChars,
         independence: entry.independence,
         ...entry.route === undefined ? {} : { route: entry.route },
       })
       return
     }
+    const output = narrowed.value
     if (output.status !== 'report') {
       // A non-report status with an explanatory body is tolerated (the body is
       // never relayed), but the discard stays observable so a silently accepted
