@@ -47,5 +47,5 @@ jobs:
       - name: Verify committed lib matches the build
         run: |
           git status --porcelain -- lib > lib-drift.txt
-          if [ -s lib-drift.txt ]; then cat lib-drift.txt; exit 1; fi
+          if [ -s lib-drift.txt ]; then cat lib-drift.txt; git diff -- lib | head -200; exit 1; fi
       - run: npm pack --dry-run
