@@ -164,8 +164,11 @@ describe.skipIf(shell() === undefined)('deploy-live safety gate (behavior)', () 
         writeFakeGit(shimDir)
         const result = runDeployScript(entry.mode, shimDir, ['-ProfilePath', profileDir])
         expect(result.exit).not.toBe(0)
-        expect(result.output).toContain('deploy refused')
-        expect(result.output).toContain(entry.message)
+        // pwsh 7 wraps long error records at terminal width (80 cols without a
+        // TTY), so fold all whitespace before asserting message substrings.
+        const collapsed = result.output.replace(/\s+/gu, ' ')
+        expect(collapsed).toContain('deploy refused')
+        expect(collapsed).toContain(entry.message)
         // The gate must fail before any backup/copy: the profile stays empty.
         expect(readdirSync(profileDir)).toEqual([])
       } finally {
