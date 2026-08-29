@@ -36,6 +36,9 @@ export interface StructuredAttachment {
  * @param childCtx - the child agent's scope context (`setup`'s argument).
  * @param schema - the trusted, already-asserted schema subset to enforce (see
  *   `assertObjectJsonSchema` in dsh-tools).
+ * @param anchorSeqs - rendered trajectory anchors the child may cite in `refs`;
+ *   when provided, refs outside this set are rejected in-turn. `undefined`
+ *   skips the rendered-window membership rule.
  * @returns the attachment handle (read `captured()` after the child settles).
  */
-export declare function attachStructuredRuntime(childCtx: Context, schema: ObjectJsonSchema): StructuredAttachment;
+export declare function attachStructuredRuntime(childCtx: Context, schema: ObjectJsonSchema, anchorSeqs?: ReadonlySet<number>): StructuredAttachment;

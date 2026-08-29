@@ -23,6 +23,11 @@ declare module '@deepseek-ai/dsh-subagent' {
         readonly contextInheritance?: 'standard' | 'none';
         /** Whether this child plans once without tools before investigating. */
         readonly thinkFirst?: boolean;
+        /**
+         * Rendered trajectory anchors the child may cite in structured `refs`;
+         * the child-side `structured_output` tool rejects other seq values in-turn.
+         */
+        readonly structuredAnchorSeqs?: ReadonlySet<number>;
     }
     interface SubagentStopReasonMap {
         /** The child's turn completed normally but never satisfied the structured-output contract. */

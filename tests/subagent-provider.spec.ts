@@ -195,4 +195,111 @@ describe('Shadow Mind conditioned subagent provider', () => {
     await run.dispose()
     expect(ctx.agents.get(run.id)).toBeUndefined()
   })
+
+  it('rejects a non-ascending refs payload in-turn and captures the corrected retry', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    await mountAgentLoopTestDependencies(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SubagentRuntime)
+    installShadowMindProvider(ctx)
+
+    const adapter = new MockAdapter([
+      textResponse('1. Inspect the rendered sequence anchors.'),
+      // The exact shipped failure: refs out of ascending order passes the JSON
+      // Schema subset but violates the cross-field contract.
+      toolCallResponse('bad', 'structured_output', {
+        status: 'report',
+        content: 'The anchored claim needs correction.',
+        verdict: 'challenge',
+        refs: [15675, 15],
+      }),
+      toolCallResponse('good', 'structured_output', {
+        status: 'report',
+        content: 'The anchored claim needs correction.',
+        verdict: 'challenge',
+        refs: [15, 15675],
+      }),
+    ])
+    ctx.llm.registerAdapter(['selected'], adapter)
+    const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
+
+    const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+      label: 'shadow:reviewer',
+      parent,
+      prompt: [{ type: 'text', text: 'Plan first, then review the numbered trajectory.' }],
+      signal: new AbortController().signal,
+      maxDepth: 1,
+      outputSchema: OUTPUT_SCHEMA,
+      structuredAnchorSeqs: new Set([15, 15675]),
+      contextInheritance: 'none',
+      thinkFirst: true,
+      modelSelection: { provider: 'selected', model: 'review-model' },
+    })
+
+    const result = await run.result
+    expect(result).toMatchObject({
+      stopReason: 'completed',
+      structured: {
+        status: 'report',
+        content: 'The anchored claim needs correction.',
+        verdict: 'challenge',
+        refs: [15, 15675],
+      },
+    })
+    // Plan request, failed call, corrected retry: the same turn kept going.
+    expect(adapter.requests).toHaveLength(3)
+    const badResult = run.localAgent?.session.events.find(event =>
+      event.type === 'tool/result' && event.data.message.content[0]?.isError === true)
+    expect(badResult).toBeDefined()
+    expect(JSON.stringify(badResult)).toContain('strictly ascending')
+
+    await run.dispose()
+    expect(ctx.agents.get(run.id)).toBeUndefined()
+  })
+
+  it('rejects an anchor outside the rendered window in-turn without a structuredAnchorSeqs match', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    await mountAgentLoopTestDependencies(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SubagentRuntime)
+    installShadowMindProvider(ctx)
+
+    const adapter = new MockAdapter([
+      textResponse('1. Inspect the rendered sequence anchors.'),
+      toolCallResponse('bad-window', 'structured_output', {
+        status: 'report',
+        content: 'The anchored claim needs correction.',
+        verdict: 'challenge',
+        refs: [999999],
+      }),
+      textResponse('The window check rejected the anchor; finishing without a valid capture.'),
+    ])
+    ctx.llm.registerAdapter(['selected'], adapter)
+    const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
+
+    const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+      label: 'shadow:reviewer',
+      parent,
+      prompt: [{ type: 'text', text: 'Plan first, then review the numbered trajectory.' }],
+      signal: new AbortController().signal,
+      maxDepth: 1,
+      outputSchema: OUTPUT_SCHEMA,
+      structuredAnchorSeqs: new Set([15, 15675]),
+      contextInheritance: 'none',
+      thinkFirst: true,
+      modelSelection: { provider: 'selected', model: 'review-model' },
+    })
+
+    const result = await run.result
+    expect(result).toMatchObject({
+      stopReason: 'no-structured-output',
+      diagnostic: STRUCTURED_OUTPUT_MISSING_DIAGNOSTIC,
+    })
+    expect(result.structured).toBeUndefined()
+
+    await run.dispose()
+    expect(ctx.agents.get(run.id)).toBeUndefined()
+  })
 })

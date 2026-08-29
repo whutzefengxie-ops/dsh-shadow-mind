@@ -58,6 +58,11 @@ declare module '@deepseek-ai/dsh-subagent' {
     readonly contextInheritance?: 'standard' | 'none'
     /** Whether this child plans once without tools before investigating. */
     readonly thinkFirst?: boolean
+    /**
+     * Rendered trajectory anchors the child may cite in structured `refs`;
+     * the child-side `structured_output` tool rejects other seq values in-turn.
+     */
+    readonly structuredAnchorSeqs?: ReadonlySet<number>
   }
 
   interface SubagentStopReasonMap {
@@ -182,7 +187,7 @@ async function startInProcessRun(request: ResolvedSubagentStartRequest): Promise
       })
     }
     if (request.outputSchema !== undefined) {
-      structured = attachStructuredRuntime(childCtx, request.outputSchema)
+      structured = attachStructuredRuntime(childCtx, request.outputSchema, request.structuredAnchorSeqs)
     }
     if (request.contextInheritance === 'none') attachMinimalContext(childCtx)
     if (request.thinkFirst === true) attachThinkFirst(childCtx, activationBoundary)
