@@ -9,9 +9,12 @@
 #   pwsh scripts/deploy-live.ps1                      # default live web profile
 #   pwsh scripts/deploy-live.ps1 -ProfilePath <path>  # another installed profile
 #   pwsh scripts/deploy-live.ps1 -SkipInspect         # suppress the summary print
+#
+# The default profile path is derived from $env:DSH_HOME (falling back to
+# ~/.dsh, the Harness default home). Pass -ProfilePath to override.
 
 param(
-  [string]$ProfilePath = 'C:\Users\Administrator\.dsh\profiles\web\node_modules\@whutzefengxie-ops\dsh-shadow-mind',
+  [string]$ProfilePath = (Join-Path (if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }) 'profiles\web\node_modules\@whutzefengxie-ops\dsh-shadow-mind'),
   [switch]$SkipInspect
 )
 
