@@ -17,35 +17,52 @@
 # Safety gate: deploying from a dirty or outdated checkout silently reverts
 # whatever the live profile currently runs (for example fixes merged into main
 # but not yet checked out locally). Unless -AllowDirty is passed, the script
-# refuses to run when the checkout has uncommitted changes or its HEAD is not
-# origin/main.
+# refuses to run when the checkout has uncommitted changes, when git cannot
+# verify the tree or origin/main (failed status/fetch/rev-parse), or when HEAD
+# is not origin/main.
 
 param(
-  [string]$ProfilePath = (Join-Path (if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }) 'profiles\web\node_modules\@whutzefengxie-ops\dsh-shadow-mind'),
+  [string]$ProfilePath,
   [switch]$SkipInspect,
   [switch]$AllowDirty
 )
 
 $ErrorActionPreference = 'Stop'
+# Resolve the default profile without PS7-only `(if ...)` expressions so the
+# script stays runnable on Windows PowerShell 5.1.
+if (-not $ProfilePath) {
+  $home = if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }
+  $ProfilePath = Join-Path $home 'profiles\web\node_modules\@whutzefengxie-ops\dsh-shadow-mind'
+}
 $root = $PSScriptRoot | Split-Path -Parent
 $libSrc = Join-Path $root 'lib'
 $docsSrc = Join-Path $root 'docs'
 if (-not (Test-Path (Join-Path $libSrc 'client.js'))) { throw "built lib not found: $libSrc (run pnpm run build first)" }
 
 # 0. Safety gate: never deploy a tree that does not represent origin/main.
+# Native exit codes are not covered by $ErrorActionPreference, so every git
+# invocation must be captured and checked explicitly; a silently failed
+# status/fetch/rev-parse (index lock, offline, auth) must abort, never pass.
 if (-not $AllowDirty) {
-  if (git -C $root status --porcelain) {
+  $status = git -C $root status --porcelain
+  if ($LASTEXITCODE -ne 0) {
+    throw "deploy refused: cannot verify a clean tree (git status exited $LASTEXITCODE). Fix the repository and retry, or pass -AllowDirty to override."
+  }
+  if ($status) {
     throw "deploy refused: the checkout at $root has uncommitted changes. Commit or stash them, or pass -AllowDirty to override."
   }
-  # Native exit codes are not covered by $ErrorActionPreference, so a failed
-  # fetch (offline, proxy, auth) must abort explicitly: comparing against a
-  # stale origin/main ref would silently pass an outdated checkout.
   git -C $root fetch origin --quiet
   if ($LASTEXITCODE -ne 0) {
     throw "deploy refused: cannot verify origin/main (git fetch exited $LASTEXITCODE). Fix network/auth and retry, or pass -AllowDirty to override."
   }
   $head = git -C $root rev-parse HEAD
+  if ($LASTEXITCODE -ne 0 -or -not $head) {
+    throw "deploy refused: cannot resolve HEAD (git rev-parse exited $LASTEXITCODE). Fix the repository and retry, or pass -AllowDirty to override."
+  }
   $main = git -C $root rev-parse origin/main
+  if ($LASTEXITCODE -ne 0 -or -not $main) {
+    throw "deploy refused: cannot resolve origin/main (git rev-parse exited $LASTEXITCODE). Fix the repository and retry, or pass -AllowDirty to override."
+  }
   if ($head -ne $main) {
     throw "deploy refused: HEAD ($($head.Substring(0, 7))) is not origin/main ($($main.Substring(0, 7))). Update the checkout to origin/main before deploying, or pass -AllowDirty to override."
   }
