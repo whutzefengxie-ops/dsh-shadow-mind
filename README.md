@@ -40,9 +40,9 @@ GitHub installation consumes the committed `lib/` directory. This package has no
 
 Open **Settings → Plugins → Shadow Mind**. The page owns:
 
-- live scheduling settings, including heartbeat probability, parallelism, timeouts, report batching, model route, reasoning effort, disclosure, and size limits;
-- Markdown-backed Shadow definitions, including name, activation probability, model filters, execution model, capture window, context inheritance, think-first execution, predicates, holdout mode, tools, and prompt;
-- pause, resume, and status controls for the currently selected root session;
+- live scheduling settings, including timeouts, report batching, model route, reasoning effort, disclosure, and size limits;
+- Markdown-backed Shadow definitions, including name, activation probability, model filters, execution model, capture window, context inheritance, think-first execution, holdout mode, tools, and prompt;
+- the latest review outcome for the currently selected root session;
 - catalog diagnostics and the local definition directory.
 
 Definitions are stored in `$DSH_HOME/shadow-minds/*.md`. A minimal deterministic acceptance definition is:
@@ -65,7 +65,7 @@ think_first: true
 Review the completed task. If there is a concrete defect or missing requirement, return a concise report with verdict `challenge` or `gap` and only rendered sequence numbers in `refs`. Return `silent` when the review applies but adds nothing actionable, or `not_relevant` when it does not apply.
 ```
 
-Set the global heartbeat probability to `1` for deterministic acceptance. If `run_with_model` is omitted, the child inherits the root route; set a complete `provider/model` route to use another model. The default Shadow tools are `read`, `grep`, and `glob`; definition tools extend that allowlist and may carry write authority if the inherited sandbox permits it. The disabled starter library under [`examples/shadow-minds/`](examples/shadow-minds/) demonstrates the anchored probe vocabulary and is never installed into `$DSH_HOME` automatically.
+Set the definition's `activation_probability` to `1` for deterministic acceptance. If `run_with_model` is omitted, the child inherits the root route; set a complete `provider/model` route to use another model. The default Shadow tools are `read`, `grep`, and `glob`; definition tools extend that allowlist and may carry write authority if the inherited sandbox permits it. The disabled starter library under [`examples/shadow-minds/`](examples/shadow-minds/) demonstrates the anchored probe vocabulary and is never installed into `$DSH_HOME` automatically.
 
 ### Bind Shadows to DSH models
 
@@ -73,7 +73,7 @@ Every Shadow child can be bound to the DSH deployment's configured providers, mo
 
 ## Observe a run
 
-Shadow scheduling requires a completed root turn containing at least one durable tool result. In a new session, ask the root agent to read a repository file and analyze it. `/shadow status` reports pending schedules, active runs, total admitted runs, and the last outcome.
+Shadow scheduling requires a completed root turn containing at least one durable tool result. In a new session, ask the root agent to read a repository file and analyze it. Two human commands cover the cases automatic scheduling misses: `/shadow retry` re-runs the most recent failed or aborted review of this session, and `/shadow new` forces an immediate review while this session has not admitted any Shadow run yet. Active runs, total admitted runs, and the last outcome stay visible on the settings page and the per-turn conversation cards.
 
 When Shadow scheduling starts, a running placeholder appears immediately below the reviewed root response and warns that sending a new message cancels the review. The same card updates in place to report, silent, not-relevant, aborted, or failed. Repeated reviews remain at their actual turn positions. Report bodies use DSH's Markdown renderer for GFM, tables, code blocks, and TeX with its unsafe-content filtering.
 

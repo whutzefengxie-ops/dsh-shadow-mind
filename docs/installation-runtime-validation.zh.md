@@ -4,6 +4,8 @@
 
 本文给出从 DeepSeek Harness 源码宿主安装 `dsh-shadow-mind`、启动 Web profile、完成真实模型验收和验证重启语义的可执行流程，并定义已发现运行状态缺口的整改方案。已验证流程与目标行为分别标注；整改项只有在实现和自动化验收通过后才视为交付。
 
+> **命令面已更替。** 本文针对的是历史构建，当时 `/shadow` 支持 `status|pause|resume|toggle`。当前发布的命令面只有 `/shadow retry`（重试最近一次失败或中断的审查）与 `/shadow new`（在尚未准入任何运行前强制审查）。因此下文中所有 `/shadow status` 步骤均属历史：当前运行状态改由设置页状态行、各轮次对话卡片以及上述两条命令观察。
+
 ## 1. 目标与范围
 
 本方案要求部署者能够在隔离的 Harness home 中固定宿主与插件版本，确认 profile 实际加载 GitHub 构建产物，通过真实 DeepSeek 请求观察一次完整的 root 工具轮次、Shadow 审查、报告 relay 和 root follow-up，并在同一 Session 重启后检查持久数据与进程状态。
