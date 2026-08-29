@@ -178,13 +178,45 @@ export function projectTrajectory(
   return projectTrajectoryWithAnchors(events, capturedThroughSeq, argumentDisclosure, capture).text
 }
 
+/** Marker prepended when the oldest trajectory events were trimmed to fit the prompt bound. */
+const TRAJECTORY_TRIM_MARKER = '[earlier trajectory events trimmed to fit the prompt bound]'
+
 /**
- * Build the complete fresh-child prompt and fail closed above its configured
- * bound; a bound of zero (or less) disables the limit.
+ * Keep the newest trajectory events so the remainder (plus the trim marker)
+ * fits the character budget. Availability first: this never throws, and an
+ * absurdly small budget degrades to the marker alone.
+ * @param trajectory Projected trajectory text.
+ * @param budget Total characters available for the trimmed body plus marker.
+ * @returns The trimmed trajectory.
+ */
+function trimTrajectoryToBudget(trajectory: string, budget: number): string {
+  const contentBudget = budget - TRAJECTORY_TRIM_MARKER.length - 2
+  if (contentBudget <= 0) return TRAJECTORY_TRIM_MARKER.slice(0, budget)
+  const parts = trajectory.split('\n\n')
+  let start = 0
+  let suffixChars = 0
+  for (const part of parts) suffixChars += part.length
+  suffixChars += Math.max(0, (parts.length - 1) * 2)
+  while (start < parts.length - 1 && suffixChars > contentBudget) {
+    // The loop condition proves an element exists at `start`.
+    suffixChars -= parts[start]!.length + 2
+    start += 1
+  }
+  let kept = parts.slice(start).join('\n\n')
+  if (kept.length > contentBudget) kept = kept.slice(0, contentBudget)
+  return `${TRAJECTORY_TRIM_MARKER}\n\n${kept}`
+}
+
+/**
+ * Build the complete fresh-child prompt. When the prompt exceeds the configured
+ * bound, the oldest trajectory events are trimmed away so the prompt always
+ * fits; a bound of zero (or less) disables the limit. This builder never
+ * throws: an over-budget prompt degrades to a trimmed (or omitted) trajectory
+ * instead of failing the Shadow run.
  * @param definition Selected Shadow definition.
  * @param trajectory Projected root trajectory.
  * @param capturedThroughSeq Inclusive root sequence watermark.
- * @param maxPromptChars Complete prompt bound; 0 = unlimited.
+ * @param maxPromptChars Complete prompt soft bound; 0 = unlimited.
  * @returns Framed Shadow task.
  */
 export function buildShadowPrompt(
@@ -193,7 +225,7 @@ export function buildShadowPrompt(
   capturedThroughSeq: number,
   maxPromptChars: number,
 ): string {
-  const prompt = [
+  const header = [
     `You are the independent Shadow \"${definition.name}\" (${definition.id}).`,
     'Review the captured root-agent trajectory. Do not assume access to hidden reasoning or omitted tool output.',
     'Return status "not_relevant" when your specialty does not apply, "silent" when it applies but adds nothing actionable, or "report" with a concise self-contained finding.',
@@ -208,10 +240,15 @@ export function buildShadowPrompt(
     definition.prompt,
     '',
     `## Root trajectory (captured through session seq ${String(capturedThroughSeq)})`,
-    trajectory === '' ? '[no model-visible trajectory content]' : trajectory,
   ].join('\n')
-  if (maxPromptChars > 0 && prompt.length > maxPromptChars) {
-    throw new Error(`shadow prompt has ${String(prompt.length)} characters, above maxPromptChars ${String(maxPromptChars)}`)
+  let body = trajectory === '' ? '[no model-visible trajectory content]' : trajectory
+  if (maxPromptChars > 0) {
+    const budget = maxPromptChars - header.length - 1
+    if (body.length > budget) {
+      body = budget > 0
+        ? trimTrajectoryToBudget(body, budget)
+        : '[no model-visible trajectory content]'
+    }
   }
-  return prompt
+  return `${header}\n${body}`
 }

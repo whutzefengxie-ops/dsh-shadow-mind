@@ -129,9 +129,9 @@ export interface ShadowMindSettings {
   readonly argumentDisclosure: 'redacted' | 'full'
   /** Optional deterministic random seed. */
   readonly randomSeed?: number
-  /** Maximum complete framed prompt size; 0 disables the limit. */
+  /** Complete framed prompt soft bound; oversized prompts are trimmed to fit. 0 derives from the selected model context window. */
   readonly maxPromptChars: number
-  /** Maximum accepted report size; 0 disables the limit. */
+  /** Accepted report soft bound; oversized reports are truncated. 0 disables the limit. */
   readonly maxReportChars: number
   /** Whether accepted challenges are classified against later root behavior. */
   readonly valueLoopEnabled: boolean

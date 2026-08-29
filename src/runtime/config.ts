@@ -56,39 +56,58 @@ const SHADOW_MIND_SETTINGS_OBJECT = z.object({
   reasoningEffortLadder: z.array(z.string()).default(['low', 'medium', 'high']),
   sessionShadowSoftBudgetChars: z.number().step(1).min(1),
   sessionShadowHardBudgetChars: z.number().step(1).min(1),
-  frugalShadowModel: z.string().pattern(SHADOW_MODEL_ROUTE_PATTERN),
+  // Route shape is healed (invalid values are dropped) in the transform below,
+  // so a half-typed override degrades to unset instead of rejecting the config.
+  frugalShadowModel: z.string(),
   staleReportDecay: z.number().min(0).max(1).default(0),
 })
 
-/** User-editable settings plus cross-field budget and window validation. */
+/** Settings shape whose properties the healing transform may rewrite in place. */
+type MutableShadowMindSettings = { -readonly [K in keyof ShadowMindSettings]: ShadowMindSettings[K] }
+
+/**
+ * User-editable settings plus cross-field healing. Availability first: an
+ * inconsistent advanced combination degrades to a usable default instead of
+ * throwing, so leftover or half-edited values can never brick the plugin.
+ */
 export const SHADOW_MIND_SETTINGS_SCHEMA: Schema<ShadowMindSettings> = z.transform(
   SHADOW_MIND_SETTINGS_OBJECT,
   (value) => {
-    const settings = value as unknown as ShadowMindSettings
+    const settings = { ...value as unknown as ShadowMindSettings } as MutableShadowMindSettings
+
+    // Widen the review window to cover every configured stagnation window;
+    // a user tuning one stagnation knob must not invalidate the whole config.
     const largestWindow = Math.max(
       settings.spinningRepeatCount,
       settings.oscillationPeriods * 2,
       settings.noDriftRepeatCount,
       settings.diminishingWindowSize,
     )
-    if (settings.reviewWindowSize < largestWindow) {
-      throw new Error('reviewWindowSize must cover every configured stagnation window')
-    }
-    if (settings.reasoningEffortLadder.some(value => value.trim() === '')
-    || new Set(settings.reasoningEffortLadder).size !== settings.reasoningEffortLadder.length) {
-      throw new Error('reasoningEffortLadder must contain unique non-empty values')
-    }
-    const soft = settings.sessionShadowSoftBudgetChars
-    const hard = settings.sessionShadowHardBudgetChars
-    if (soft !== undefined && (hard === undefined || settings.frugalShadowModel === undefined)) {
-      throw new Error('sessionShadowSoftBudgetChars requires sessionShadowHardBudgetChars and frugalShadowModel')
-    }
+    if (settings.reviewWindowSize < largestWindow) settings.reviewWindowSize = largestWindow
+
+    // Drop blanks and duplicates; an unusable ladder falls back to the default.
+    const ladder = [...new Set(settings.reasoningEffortLadder.map(item => item.trim()).filter(item => item !== ''))]
+    settings.reasoningEffortLadder = ladder.length === 0 ? ['low', 'medium', 'high'] : ladder
+
+    // A partial or inconsistent frugal budget tier disables itself (unset means
+    // unlimited spend on the standard route) instead of rejecting the config.
+    let soft = settings.sessionShadowSoftBudgetChars
+    let hard = settings.sessionShadowHardBudgetChars
+    let frugal = settings.frugalShadowModel?.trim()
+    if (frugal !== undefined && !SHADOW_MODEL_ROUTE_PATTERN.test(frugal)) frugal = undefined
+    if (soft !== undefined && (hard === undefined || frugal === undefined)) soft = undefined
+    if (frugal !== undefined && soft === undefined) frugal = undefined
     if (soft !== undefined && hard !== undefined && soft >= hard) {
-      throw new Error('sessionShadowSoftBudgetChars must be less than sessionShadowHardBudgetChars')
+      soft = undefined
+      hard = undefined
+      frugal = undefined
     }
-    if (settings.frugalShadowModel !== undefined && soft === undefined) {
-      throw new Error('frugalShadowModel requires sessionShadowSoftBudgetChars')
-    }
+    if (soft === undefined) delete settings.sessionShadowSoftBudgetChars
+    else settings.sessionShadowSoftBudgetChars = soft
+    if (hard === undefined) delete settings.sessionShadowHardBudgetChars
+    else settings.sessionShadowHardBudgetChars = hard
+    if (frugal === undefined) delete settings.frugalShadowModel
+    else settings.frugalShadowModel = frugal
     return settings
   },
   true,

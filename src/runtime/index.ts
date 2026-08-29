@@ -27,6 +27,7 @@ import { installShadowMindProvider, SHADOW_MIND_SUBAGENT_PROVIDER } from './suba
 import { resolveIndependence } from './vendor.ts'
 import { containsHoldoutLiteral, redactHoldoutLiterals } from './holdout.ts'
 import { buildShadowModelCatalog } from './model-catalog.ts'
+import { effectivePromptCapChars, resolveModelPromptCapChars } from './model-context.ts'
 import {
   classifyChallenge,
   type ShadowValueClassification,
@@ -88,6 +89,12 @@ export type {
 } from './review-window.ts'
 export { ReportBatcher } from './report-batcher.ts'
 export { buildShadowModelCatalog } from './model-catalog.ts'
+export {
+  effectivePromptCapChars,
+  resolveModelPromptCapChars,
+  SHADOW_PROMPT_CHARS_PER_TOKEN,
+  SHADOW_PROMPT_RESERVE_CHARS,
+} from './model-context.ts'
 export type {
   ShadowCatalogModel,
   ShadowModelCatalog,
@@ -354,6 +361,15 @@ function deliberationLength(events: readonly SessionEvent[]): number {
     if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') chars += chunk.text.length
   }
   return chars
+}
+
+/**
+ * Fit an oversized report to the accepted bound. Truncation preserves run
+ * availability: the relayed finding keeps its verdict and refs while the body
+ * is cut at the bound (the trailing ellipsis is part of the bound).
+ */
+function truncateReportContent(content: string, bound: number): string {
+  return bound > 1 ? `${content.slice(0, bound - 1)}…` : content.slice(0, bound)
 }
 
 /** Root-only Shadow orchestration service. */
@@ -970,11 +986,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
         settings.argumentDisclosure,
         definition.capture,
       )
-      prompt = redactHoldoutLiterals(
-        buildShadowPrompt(definition, projection.text, entry.capturedThroughSeq, settings.maxPromptChars),
-        holdoutKeys,
-      )
-      state.spentChars += prompt.length
       nextFailureCode = 'MODEL_SELECTION_INVALID'
       const selection = modelSelection(definition, agent, {
         ...entry.frugalRoute === undefined ? {} : { route: entry.frugalRoute },
@@ -985,6 +996,22 @@ export class ShadowMindRuntime extends TypertRemoteService {
         minimalContext: definition.context === 'minimal',
         thinkFirst: definition.thinkFirst,
       })
+      // An unset prompt bound derives from the selected model's context window,
+      // and an over-budget prompt is trimmed to fit instead of failing the run.
+      const modelCap = await resolveModelPromptCapChars(
+        this.ctx,
+        shadowModelRoute(definition, agent, entry.frugalRoute),
+      )
+      prompt = redactHoldoutLiterals(
+        buildShadowPrompt(
+          definition,
+          projection.text,
+          entry.capturedThroughSeq,
+          effectivePromptCapChars(settings.maxPromptChars, modelCap),
+        ),
+        holdoutKeys,
+      )
+      state.spentChars += prompt.length
       stage = 'start'
       nextFailureCode = 'SUBAGENT_START_FAILED'
       entry.view = { ...entry.view, stage }
@@ -1167,10 +1194,8 @@ export class ShadowMindRuntime extends TypertRemoteService {
       return
     }
 
-    const reportContent = redactHoldoutLiterals(output.content.trim(), holdoutKeys)
-    if (reportContent === ''
-      || (settings.maxReportChars > 0 && reportContent.length > settings.maxReportChars)
-      || entry.childSessionId === undefined) {
+    let reportContent = redactHoldoutLiterals(output.content.trim(), holdoutKeys)
+    if (reportContent === '' || entry.childSessionId === undefined) {
       await this.finishRun(state, entry, 'failed', {
         stage: 'validate',
         reasonCode: 'INVALID_REPORT',
@@ -1181,6 +1206,10 @@ export class ShadowMindRuntime extends TypertRemoteService {
         ...entry.route === undefined ? {} : { route: entry.route },
       })
       return
+    }
+    // An oversized report is truncated to the bound instead of failing the run.
+    if (settings.maxReportChars > 0 && reportContent.length > settings.maxReportChars) {
+      reportContent = truncateReportContent(reportContent, settings.maxReportChars)
     }
 
     state.spentChars += reportContent.length
