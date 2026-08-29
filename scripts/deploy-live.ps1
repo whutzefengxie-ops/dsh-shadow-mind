@@ -9,13 +9,21 @@
 #   pwsh scripts/deploy-live.ps1                      # default live web profile
 #   pwsh scripts/deploy-live.ps1 -ProfilePath <path>  # another installed profile
 #   pwsh scripts/deploy-live.ps1 -SkipInspect         # suppress the summary print
+#   pwsh scripts/deploy-live.ps1 -AllowDirty          # bypass the safety gate (experimental only)
 #
 # The default profile path is derived from $env:DSH_HOME (falling back to
 # ~/.dsh, the Harness default home). Pass -ProfilePath to override.
+#
+# Safety gate: deploying from a dirty or outdated checkout silently reverts
+# whatever the live profile currently runs (for example fixes merged into main
+# but not yet checked out locally). Unless -AllowDirty is passed, the script
+# refuses to run when the checkout has uncommitted changes or its HEAD is not
+# origin/main.
 
 param(
   [string]$ProfilePath = (Join-Path (if ($env:DSH_HOME) { $env:DSH_HOME } else { Join-Path $env:USERPROFILE '.dsh' }) 'profiles\web\node_modules\@whutzefengxie-ops\dsh-shadow-mind'),
-  [switch]$SkipInspect
+  [switch]$SkipInspect,
+  [switch]$AllowDirty
 )
 
 $ErrorActionPreference = 'Stop'
@@ -23,6 +31,25 @@ $root = $PSScriptRoot | Split-Path -Parent
 $libSrc = Join-Path $root 'lib'
 $docsSrc = Join-Path $root 'docs'
 if (-not (Test-Path (Join-Path $libSrc 'client.js'))) { throw "built lib not found: $libSrc (run pnpm run build first)" }
+
+# 0. Safety gate: never deploy a tree that does not represent origin/main.
+if (-not $AllowDirty) {
+  if (git -C $root status --porcelain) {
+    throw "deploy refused: the checkout at $root has uncommitted changes. Commit or stash them, or pass -AllowDirty to override."
+  }
+  # Native exit codes are not covered by $ErrorActionPreference, so a failed
+  # fetch (offline, proxy, auth) must abort explicitly: comparing against a
+  # stale origin/main ref would silently pass an outdated checkout.
+  git -C $root fetch origin --quiet
+  if ($LASTEXITCODE -ne 0) {
+    throw "deploy refused: cannot verify origin/main (git fetch exited $LASTEXITCODE). Fix network/auth and retry, or pass -AllowDirty to override."
+  }
+  $head = git -C $root rev-parse HEAD
+  $main = git -C $root rev-parse origin/main
+  if ($head -ne $main) {
+    throw "deploy refused: HEAD ($($head.Substring(0, 7))) is not origin/main ($($main.Substring(0, 7))). Update the checkout to origin/main before deploying, or pass -AllowDirty to override."
+  }
+}
 
 # 1. Back up the currently deployed lib/ so a rollback is one copy.
 $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
