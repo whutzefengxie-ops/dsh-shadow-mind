@@ -211,13 +211,28 @@ describe('trajectory projection', () => {
     expect(projected).toContain('glob error')
   })
 
-  it('frames the full prompt and fails closed instead of truncating', () => {
+  it('frames the full prompt and trims the oldest events instead of failing above the bound', () => {
     const prompt = buildShadowPrompt(definition(), 'trajectory', 7, 10_000)
     expect(prompt).toContain('Find risks.')
     expect(prompt).toContain('captured through session seq 7')
     expect(prompt).toContain('For "not_relevant" and "silent", content must be an empty string')
     expect(buildShadowPrompt(definition(), '', 0, 10_000)).toContain('[no model-visible trajectory content]')
-    expect(() => buildShadowPrompt(definition(), 'trajectory', 7, 10)).toThrow('above maxPromptChars')
+
+    const headerLength = buildShadowPrompt(definition(), '', 7, 0).length
+      - '[no model-visible trajectory content]'.length
+    const longTrajectory = `oldest event line\n\n${'x'.repeat(100)}\n\nnewest event line`
+    const trimmed = buildShadowPrompt(definition(), longTrajectory, 7, headerLength + 100)
+    expect(trimmed.length).toBeLessThanOrEqual(headerLength + 100)
+    expect(trimmed).toContain('trimmed to fit the prompt bound')
+    expect(trimmed).toContain('newest event line')
+    expect(trimmed).not.toContain('oldest event line')
+    expect(trimmed).not.toContain('x'.repeat(100))
+  })
+
+  it('degrades to an omitted trajectory for an absurdly small bound instead of throwing', () => {
+    const prompt = buildShadowPrompt(definition(), 'trajectory', 7, 10)
+    expect(prompt).toContain('Find risks.')
+    expect(prompt).toContain('[no model-visible trajectory content]')
   })
 
   it('treats a non-positive bound as unlimited', () => {

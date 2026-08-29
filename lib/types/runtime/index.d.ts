@@ -26,6 +26,7 @@ export { detectPatterns } from './review-window.ts';
 export type { ReviewEntry, ReviewWindowOptions, StagnationDetection, } from './review-window.ts';
 export { ReportBatcher } from './report-batcher.ts';
 export { buildShadowModelCatalog } from './model-catalog.ts';
+export { effectivePromptCapChars, resolveModelPromptCapChars, SHADOW_PROMPT_CHARS_PER_TOKEN, SHADOW_PROMPT_RESERVE_CHARS, } from './model-context.ts';
 export type { ShadowCatalogModel, ShadowModelCatalog, ShadowModelEffort, ShadowModelFailure, ShadowModelGroup, ShadowModelReasoning, } from './model-catalog.ts';
 declare module '@deepseek-ai/cordis' {
     interface Context {

@@ -29,7 +29,11 @@ export declare const DEFAULT_DIMINISHING_WINDOW_SIZE = 5;
 export declare const DEFAULT_DIMINISHING_NOVELTY_THRESHOLD = 0.4;
 /** Default wall-clock stagnation cooldown in seconds. */
 export declare const DEFAULT_STAGNATION_COOLDOWN_SECONDS = 300;
-/** User-editable settings plus cross-field budget and window validation. */
+/**
+ * User-editable settings plus cross-field healing. Availability first: an
+ * inconsistent advanced combination degrades to a usable default instead of
+ * throwing, so leftover or half-edited values can never brick the plugin.
+ */
 export declare const SHADOW_MIND_SETTINGS_SCHEMA: Schema<ShadowMindSettings>;
 /** Cordis plugin configuration schema. */
 export declare const Config: Schema<ShadowMindConfig>;

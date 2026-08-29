@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { Config, DEFAULT_SHADOW_ID, DEFAULT_SHADOW_PROMPT, ShadowRegistry, parseShadowDefinition } from '../src/runtime/index.ts'
+import { resolveSettings } from '../src/runtime/config.ts'
 import type { ShadowDefinitionInput } from '../src/runtime/index.ts'
 
 function input(overrides: Partial<ShadowDefinitionInput> = {}): ShadowDefinitionInput {
@@ -111,34 +112,49 @@ describe('Shadow settings', () => {
     expect(Config({}).defaultShadowTimeoutSeconds).toBe(600)
   })
 
-  it('validates frugal model routes before the runtime starts', () => {
+  it('keeps a complete frugal model route before the runtime starts', () => {
     expect(Config({
       sessionShadowSoftBudgetChars: 100,
       sessionShadowHardBudgetChars: 1_000,
       frugalShadowModel: 'provider/org/model',
     }).frugalShadowModel).toBe('provider/org/model')
-    expect(() => Config({
-      sessionShadowSoftBudgetChars: 100,
-      sessionShadowHardBudgetChars: 1_000,
-      frugalShadowModel: 'model-only',
-    })).toThrow()
-    expect(() => Config({ frugalShadowModel: 'provider/org/model' })).toThrow('sessionShadowSoftBudgetChars')
   })
 
-  it('validates stagnation windows, effort ladders, and the frugal budget tier', () => {
-    expect(() => Config({ reviewWindowSize: 3, oscillationPeriods: 2 })).toThrow('reviewWindowSize')
-    expect(() => Config({ reasoningEffortLadder: ['high', 'high'] })).toThrow('unique')
-    expect(() => Config({ frugalShadowModel: 'mock/frugal' })).toThrow('sessionShadowSoftBudgetChars')
-    expect(() => Config({
+  it('heals advanced misconfigurations instead of rejecting the runtime', () => {
+    // The review window widens to cover every configured stagnation window.
+    expect(resolveSettings({
+      reviewWindowSize: 2,
+      spinningRepeatCount: 2,
+      oscillationPeriods: 2,
+      noDriftRepeatCount: 2,
+      diminishingWindowSize: 6,
+    }).reviewWindowSize).toBe(6)
+
+    // Blank and duplicate ladder rungs are dropped; an unusable ladder resets.
+    expect(resolveSettings({ reasoningEffortLadder: ['high', ' high ', ''] }).reasoningEffortLadder)
+      .toEqual(['high'])
+    expect(resolveSettings({ reasoningEffortLadder: ['', ' '] }).reasoningEffortLadder)
+      .toEqual(['low', 'medium', 'high'])
+
+    // A partial frugal tier disables itself instead of throwing.
+    expect(resolveSettings({ frugalShadowModel: 'mock/frugal' })).not.toHaveProperty('frugalShadowModel')
+    expect(resolveSettings({
       sessionShadowSoftBudgetChars: 100,
       sessionShadowHardBudgetChars: 1_000,
-    })).toThrow('frugalShadowModel')
-    expect(() => Config({
+    })).not.toHaveProperty('sessionShadowSoftBudgetChars')
+    expect(resolveSettings({
       sessionShadowSoftBudgetChars: 1_000,
       sessionShadowHardBudgetChars: 100,
       frugalShadowModel: 'mock/frugal',
-    })).toThrow('less than')
-    expect(Config({
+    })).not.toHaveProperty('sessionShadowSoftBudgetChars')
+    expect(resolveSettings({
+      sessionShadowSoftBudgetChars: 100,
+      sessionShadowHardBudgetChars: 1_000,
+      frugalShadowModel: 'model-only',
+    })).not.toHaveProperty('frugalShadowModel')
+
+    // A complete, consistent tier is preserved.
+    expect(resolveSettings({
       sessionShadowSoftBudgetChars: 100,
       sessionShadowHardBudgetChars: 1_000,
       frugalShadowModel: 'mock/frugal',
