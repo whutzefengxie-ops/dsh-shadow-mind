@@ -95,8 +95,20 @@ Follow the [installation and runtime validation plan](docs/installation-runtime-
 
 ## Development
 
+The devDependencies link against the DeepSeek Harness source (`../deepseek-harness`, a sibling of this checkout) because the dsh-0.1.2 client surface is not published to npm yet. Prepare it at the pinned release commit first (see `.github/workflows/ci.yml`):
+
 ```sh
-pnpm install
+corepack enable
+git clone https://github.com/whutzefengxie-ops/deepseek-harness.git ../deepseek-harness
+git -C ../deepseek-harness checkout cd5ef8148158c3a752a658978873241fdf8e2bbc
+pnpm --dir ../deepseek-harness install --frozen-lockfile
+pnpm --dir ../deepseek-harness run build:lib
+```
+
+Then install and check this repository (`CI=1` skips pnpm's interactive confirmation when the modules directory must be rebuilt from scratch):
+
+```sh
+CI=1 pnpm install --frozen-lockfile
 pnpm run check
 ```
 

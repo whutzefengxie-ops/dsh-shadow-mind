@@ -93,8 +93,20 @@ Shadow 进入调度后，被审查的 root 回复下方会立即出现运行占�
 
 ## 开发
 
+devDependencies 通过 `link:` 指向本仓库同级的 DeepSeek Harness 源码（`../deepseek-harness`，dsh-0.1.2 客户端面尚未发布到 npm）。先在固定发布提交上准备好它（见 `.github/workflows/ci.yml`）：
+
 ```sh
-pnpm install
+corepack enable
+git clone https://github.com/whutzefengxie-ops/deepseek-harness.git ../deepseek-harness
+git -C ../deepseek-harness checkout cd5ef8148158c3a752a658978873241fdf8e2bbc
+pnpm --dir ../deepseek-harness install --frozen-lockfile
+pnpm --dir ../deepseek-harness run build:lib
+```
+
+再安装并检查本仓库（`CI=1` 用于跳过 pnpm 在需要重建 modules 目录时的交互确认）：
+
+```sh
+CI=1 pnpm install --frozen-lockfile
 pnpm run check
 ```
 
