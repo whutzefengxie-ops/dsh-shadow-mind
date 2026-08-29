@@ -26,8 +26,11 @@ const testSignal = new AbortController().signal
 class RuntimeStub {
   readonly definitions = new Map<string, ShadowDefinition>()
   settings = resolveSettings()
-  paused = false
   lastRun: ShadowMindStatus['lastRun']
+  totalRuns = 0
+  admitted = 0
+  retried: string[] = []
+  reviewed = 0
 
   constructor() {
     this.definitions.set(DEFAULT_SHADOW_ID, {
@@ -91,11 +94,17 @@ class RuntimeStub {
 
   status(): ShadowMindStatus {
     return {
-      paused: this.paused,
-      active: [],
+      paused: false,
+      active: this.admitted > 0 ? [{
+        runId: `run-${String(this.admitted)}`,
+        shadowId: DEFAULT_SHADOW_ID,
+        shadowName: 'Shadow',
+        capturedThroughSeq: 1,
+        stage: 'prepare',
+      }] : [],
       pendingSchedules: 0,
       epoch: 0,
-      totalRuns: 0,
+      totalRuns: this.totalRuns,
       valueLoop: [],
       spentChars: 0,
       budgetTier: 'standard',
@@ -106,19 +115,27 @@ class RuntimeStub {
     }
   }
 
-  pause(): ShadowMindStatus {
-    this.paused = true
-    return this.status()
+  retryLatest(): Promise<ShadowMindStatus> {
+    if (this.lastRun === undefined
+      || (this.lastRun.outcome !== 'failed' && this.lastRun.outcome !== 'aborted')) {
+      return Promise.reject(new Error('this session has no failed or aborted Shadow run to retry'))
+    }
+    this.retried.push(this.lastRun.runId)
+    this.admitted += 1
+    this.totalRuns += 1
+    return Promise.resolve(this.status())
   }
 
-  resume(): ShadowMindStatus {
-    this.paused = false
-    return this.status()
-  }
-
-  toggle(): ShadowMindStatus {
-    this.paused = !this.paused
-    return this.status()
+  reviewNow(): Promise<ShadowMindStatus> {
+    if (this.totalRuns > 0) {
+      return Promise.reject(new Error(
+        `this session has already admitted ${this.totalRuns} Shadow run(s); use /shadow retry to rerun a failed review`,
+      ))
+    }
+    this.reviewed += 1
+    this.admitted += 1
+    this.totalRuns += 1
+    return Promise.resolve(this.status())
   }
 }
 
@@ -212,7 +229,7 @@ describe('Shadow Mind management tools and command', () => {
     expect((await execute(ctx, agent, 'update_default_shadow', { name: 'X' })).isError).toBe(true)
   })
 
-  it('updates the default Shadow, settings, and the root command through their public entries', async () => {
+  it('updates the default Shadow and settings through their public entries', async () => {
     const { ctx, runtime, agent } = await setup()
 
     expect((await execute(ctx, agent, 'update_default_shadow', {
@@ -254,42 +271,71 @@ describe('Shadow Mind management tools and command', () => {
     expect((await execute(ctx, agent, 'update_shadow_config', { defaultShadowTimeoutSeconds: 3 })).isError)
       .toBe(false)
     expect(runtime.settings.defaultShadowTimeoutSeconds).toBe(3)
+  })
 
-    const status = await ctx.commands.execute(agent, '/shadow', [], testSignal)
-    expect(status?.result.kind).toBe('success')
-    expect(status?.result.kind === 'success' ? status.result.text : '').toBe(
-      'Shadow Mind active; 0 running; 0 total runs; no completed runs.',
-    )
-    const paused = await ctx.commands.execute(agent, '/shadow pause', [], testSignal)
-    expect(paused?.result.kind).toBe('success')
-    expect(paused?.result.kind === 'success' ? paused.result.text : '').toContain('paused')
-    const resumed = await ctx.commands.execute(agent, '/shadow resume', [], testSignal)
-    expect(resumed?.result.kind).toBe('success')
-    expect(resumed?.result.kind === 'success' ? resumed.result.text : '').toContain('active')
-    const toggled = await ctx.commands.execute(agent, '/shadow toggle', [], testSignal)
-    expect(toggled?.result.kind).toBe('success')
-    expect(toggled?.result.kind === 'success' ? toggled.result.text : '').toContain('paused')
-    const explicitStatus = await ctx.commands.execute(agent, '/shadow status', [], testSignal)
-    expect(explicitStatus?.result.kind).toBe('success')
-    expect(explicitStatus?.result.kind === 'success' ? explicitStatus.result.text : '').toContain('paused')
-    const invalid = await ctx.commands.execute(agent, '/shadow unknown', [], testSignal)
-    expect(invalid?.result).toEqual({ kind: 'error', text: 'Usage: /shadow [status|pause|resume|toggle]' })
+  it('runs the two human commands: retry for the latest failure and new for untouched sessions', async () => {
+    const { ctx, runtime, agent } = await setup()
+
+    const empty = await ctx.commands.execute(agent, '/shadow', [], testSignal)
+    expect(empty?.result).toEqual({ kind: 'error', text: 'Usage: /shadow [retry|new]' })
+    const legacy = await ctx.commands.execute(agent, '/shadow status', [], testSignal)
+    expect(legacy?.result).toEqual({ kind: 'error', text: 'Usage: /shadow [retry|new]' })
+
+    const noFailure = await ctx.commands.execute(agent, '/shadow retry', [], testSignal)
+    expect(noFailure?.result).toEqual({
+      kind: 'error',
+      text: 'this session has no failed or aborted Shadow run to retry',
+    })
+
+    const fresh = await ctx.commands.execute(agent, '/shadow new', [], testSignal)
+    expect(fresh?.result).toEqual({
+      kind: 'success',
+      text: 'Shadow new admitted; 1 running: default/run-1.',
+    })
+    expect(runtime.reviewed).toBe(1)
+    expect(runtime.retried).toEqual([])
+
+    const repeated = await ctx.commands.execute(agent, '/shadow new', [], testSignal)
+    expect(repeated?.result).toEqual({
+      kind: 'error',
+      text: 'this session has already admitted 1 Shadow run(s); use /shadow retry to rerun a failed review',
+    })
 
     runtime.lastRun = {
-      runId: 'run-default',
+      runId: 'run-failed',
       shadowId: DEFAULT_SHADOW_ID,
-      shadowName: 'Updated',
+      shadowName: 'Shadow',
       capturedThroughSeq: 1,
       finishedAt: '2026-08-25T00:00:00.000Z',
+      outcome: 'failed',
+      stage: 'run',
+      deliberationChars: 12,
+      independence: 'independent',
+    }
+    const retried = await ctx.commands.execute(agent, '/shadow retry', [], testSignal)
+    expect(retried?.result).toEqual({
+      kind: 'success',
+      text: 'Shadow retry admitted; 1 running: default/run-2.',
+    })
+    expect(runtime.retried).toEqual(['run-failed'])
+    expect(runtime.reviewed).toBe(1)
+
+    runtime.lastRun = {
+      runId: 'run-reported',
+      shadowId: DEFAULT_SHADOW_ID,
+      shadowName: 'Shadow',
+      capturedThroughSeq: 2,
+      finishedAt: '2026-08-25T00:00:01.000Z',
       outcome: 'report',
       stage: 'relay',
       deliberationChars: 12,
       independence: 'independent',
     }
-    const completed = await ctx.commands.execute(agent, '/shadow status', [], testSignal)
-    expect(completed?.result.kind === 'success' ? completed.result.text : '').toContain(
-      `last ${DEFAULT_SHADOW_ID} report at 2026-08-25T00:00:00.000Z`,
-    )
+    const noRetryable = await ctx.commands.execute(agent, '/shadow retry', [], testSignal)
+    expect(noRetryable?.result).toEqual({
+      kind: 'error',
+      text: 'this session has no failed or aborted Shadow run to retry',
+    })
   })
 
   it('executes every management operation and projects every presentation', async () => {

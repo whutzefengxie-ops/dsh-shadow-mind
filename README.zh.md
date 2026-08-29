@@ -40,9 +40,9 @@ GitHub 安装直接使用仓库提交的 `lib/`。本包没有 `prepare` 脚本�
 
 进入 **设置 → 插件 → Shadow Mind**。该页面提供：
 
-- heartbeat 概率、并发数、超时、报告批处理、模型路由、reasoning effort、披露策略和长度上限等实时调度设置；
-- 由 Markdown 保存的 Shadow 定义，包括名称、激活概率、模型过滤、运行模型、截获视窗、context 继承、think-first 执行、谓词、holdout 模式、工具和提示词；
-- 当前所选 root Session 的暂停、恢复和状态控制；
+- 超时、报告批处理、模型路由、reasoning effort、披露策略和长度上限等实时调度设置；
+- 由 Markdown 保存的 Shadow 定义，包括名称、激活概率、模型过滤、运行模型、截获视窗、context 继承、think-first 执行、holdout 模式、工具和提示词；
+- 当前所选 root Session 的最近审查终态；
 - 定义目录和逐文件诊断。
 
 定义保存在 `$DSH_HOME/shadow-minds/*.md`。以下定义适合确定性验收：
@@ -65,7 +65,7 @@ think_first: true
 Review the completed task. If there is a concrete defect or missing requirement, return a concise report with verdict `challenge` or `gap` and only rendered sequence numbers in `refs`. Return `silent` when the review applies but adds nothing actionable, or `not_relevant` when it does not apply.
 ```
 
-验收时把全局 heartbeat 概率设为 `1`。省略 `run_with_model` 时 child 继承 root 的模型路由；如需单独模型，应填写完整的 `provider/model`。默认 Shadow 工具为 `read`、`grep` 和 `glob`；定义中的工具会扩展 allowlist，如果继承的 sandbox 允许，它们也可能具有写入能力。[`examples/shadow-minds/`](examples/shadow-minds/) 中默认禁用的 starter library 展示 anchored probe 词汇，安装过程绝不会自动把它写入 `$DSH_HOME`。
+验收时把定义的 `activation_probability` 设为 `1`。省略 `run_with_model` 时 child 继承 root 的模型路由；如需单独模型，应填写完整的 `provider/model`。默认 Shadow 工具为 `read`、`grep` 和 `glob`；定义中的工具会扩展 allowlist，如果继承的 sandbox 允许，它们也可能具有写入能力。[`examples/shadow-minds/`](examples/shadow-minds/) 中默认禁用的 starter library 展示 anchored probe 词汇，安装过程绝不会自动把它写入 `$DSH_HOME`。
 
 ### 把 Shadow 绑定到 DSH 的模型
 
@@ -73,7 +73,7 @@ Review the completed task. If there is a concrete defect or missing requirement,
 
 ## 验证实际运行
 
-只有包含至少一个持久化工具结果的已完成 root 轮次才会触发调度。在新会话中明确要求主 agent 读取一个仓库文件再分析。`/shadow status` 会显示等待调度数、活动运行数、累计准入运行数和最近结果。
+只有包含至少一个持久化工具结果的已完成 root 轮次才会触发调度。在新会话中明确要求主 agent 读取一个仓库文件再分析。自动调度未覆盖的场景由两条人工命令兜底：`/shadow retry` 重试当前会话最近一次失败或中断的审查；`/shadow new` 在当前会话尚未准入任何 Shadow 运行前强制立即审查一次。活动运行、累计准入运行数与最近终态继续通过设置页与各轮次对话卡片查看。
 
 Shadow 进入调度后，被审查的 root 回复下方会立即出现运行占位卡片；卡片会明确提示此时发送新消息会取消本轮审查。完成后，同一位置原位更新为报告、静默、无关、中断或失败终态，多轮审查不会合并到会话末尾。报告正文复用 DSH 的 Markdown 渲染，支持 GFM、表格、代码块和 TeX，并保留官方的不安全内容过滤。
 

@@ -8,7 +8,7 @@ import { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 import { ShadowRegistry } from './registry.ts';
-import type { ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowModelCatalog, ShadowReviewCycle, UpdateShadowMindSettings } from './types.ts';
+import type { ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowModelCatalog, ShadowReviewCycle, ShadowRunView, UpdateShadowMindSettings } from './types.ts';
 export { Config } from './config.ts';
 export * from './types.ts';
 export * from './protocol.ts';
@@ -131,6 +131,34 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
      * @returns Status after the retry was admitted.
      */
     retry(agent: Agent, runId: string): Promise<ShadowMindStatus>;
+    /**
+     * Find the most recently admitted failed or aborted run for a root.
+     * Runs are ordered by their captured trajectory watermark; equal
+     * watermarks fall back to admission time.
+     * @param agent Root agent whose session owns the runs.
+     * @returns The latest retryable run, or undefined when none exists.
+     */
+    latestFailedRun(agent: Agent): ShadowRunView | undefined;
+    /**
+     * Retry the most recently failed or aborted Shadow run of a root session.
+     * This is the `/shadow retry` command surface: the caller never supplies a
+     * run id, and every admission guard of {@link ShadowMindRuntime.retry}
+     * still applies.
+     * @param agent Root agent whose latest failure is retried.
+     * @returns Status after the retry was admitted.
+     */
+    retryLatest(agent: Agent): Promise<ShadowMindStatus>;
+    /**
+     * Forcibly admit one fresh Shadow review of the current session trajectory.
+     * This is the `/shadow new` command surface for sessions whose automatic
+     * scheduling has not admitted a run yet. Explicit user intent bypasses
+     * activation probability, pause, budget routing, and the definition's
+     * enabled flag, but never the root liveness checks; a still-pending
+     * scheduled review for the same capture point is superseded by this run.
+     * @param agent Root agent whose session is reviewed now.
+     * @returns Status after the review was admitted.
+     */
+    reviewNow(agent: Agent): Promise<ShadowMindStatus>;
     /** Handle turn closure and user-cancellation boundaries from the durable log. */
     private onSessionEvent;
     /** Admit challenge envelopes to the diagnostic value-loop window. */

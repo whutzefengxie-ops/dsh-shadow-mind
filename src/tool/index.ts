@@ -8,6 +8,7 @@ import type {} from '@deepseek-ai/dsh-user-approval'
 import type {
   ShadowDefinition,
   ShadowDefinitionInput,
+  ShadowMindStatus,
   UpdateShadowMindSettings,
 } from '../runtime/index.ts'
 import { DEFAULT_SHADOW_ID } from '../runtime/index.ts'
@@ -145,34 +146,32 @@ const DEFAULT_SHADOW_PARAMETERS = {
   prompt: { type: 'string' as const, description: 'Non-empty Shadow instructions.' },
 } as const
 
+/** Compact acknowledgment for one admitted manual Shadow run. */
+function admittedConfirmation(operation: 'retry' | 'new', status: ShadowMindStatus): string {
+  const runs = status.active.map(entry => `${entry.shadowId}/${entry.runId}`)
+  return runs.length === 0
+    ? `Shadow ${operation} acknowledged; no run is active.`
+    : `Shadow ${operation} admitted; ${String(runs.length)} running: ${runs.join(', ')}.`
+}
+
 /** Register all Shadow management tools and the human command. */
 export function apply(ctx: Context): void {
   ctx.commands.register({
     name: 'shadow',
-    description: 'Show, pause, resume, or toggle Shadow Mind scheduling',
-    input: { hint: '[status|pause|resume|toggle]', images: false },
-    handler: ({ agent, rawInput }) => {
-      const operation = rawInput.trim() || 'status'
-      const status = operation === 'status'
-        ? ctx.shadowMind.status(agent)
-        : operation === 'pause'
-          ? ctx.shadowMind.pause(agent)
-          : operation === 'resume'
-            ? ctx.shadowMind.resume(agent)
-            : operation === 'toggle'
-              ? ctx.shadowMind.toggle(agent)
-              : undefined
-      if (status === undefined) return { kind: 'error', text: 'Usage: /shadow [status|pause|resume|toggle]' }
-      const lastRun = status.lastRun === undefined
-        ? 'no completed runs'
-        : [
-            `last ${status.lastRun.shadowId} ${status.lastRun.outcome} at ${status.lastRun.finishedAt}`,
-            `stage ${status.lastRun.stage}`,
-            ...status.lastRun.reasonCode === undefined ? [] : [`reason ${status.lastRun.reasonCode}`],
-          ].join(', ')
-      return {
-        kind: 'success',
-        text: `Shadow Mind ${status.paused ? 'paused' : 'active'}; ${String(status.active.length)} running; ${String(status.totalRuns)} total runs; ${lastRun}.`,
+    description: 'Retry the latest failed Shadow review or force a fresh review',
+    input: { hint: '[retry|new]', images: false },
+    handler: async ({ agent, rawInput }) => {
+      const operation = rawInput.trim()
+      if (operation !== 'retry' && operation !== 'new') {
+        return { kind: 'error', text: 'Usage: /shadow [retry|new]' }
+      }
+      try {
+        const status = operation === 'retry'
+          ? await ctx.shadowMind.retryLatest(agent)
+          : await ctx.shadowMind.reviewNow(agent)
+        return { kind: 'success', text: admittedConfirmation(operation, status) }
+      } catch (error: unknown) {
+        return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
       }
     },
   })

@@ -616,6 +616,89 @@ export class ShadowMindRuntime extends TypertRemoteService {
     throw new Error(`Shadow run ${runId} was not found for this session`)
   }
 
+  /**
+   * Find the most recently admitted failed or aborted run for a root.
+   * Runs are ordered by their captured trajectory watermark; equal
+   * watermarks fall back to admission time.
+   * @param agent Root agent whose session owns the runs.
+   * @returns The latest retryable run, or undefined when none exists.
+   */
+  latestFailedRun(agent: Agent): ShadowRunView | undefined {
+    this.assertRoot(agent)
+    const state = this.owners.get(agent)
+    if (state === undefined) return undefined
+    let latest: ShadowRunView | undefined
+    for (const cycle of state.cycles.values()) {
+      for (const entry of cycle.runs) {
+        if (entry.view.phase !== 'failed' && entry.view.phase !== 'aborted') continue
+        if (latest === undefined
+          || entry.view.capturedThroughSeq > latest.capturedThroughSeq
+          || (entry.view.capturedThroughSeq === latest.capturedThroughSeq
+            && entry.view.startedAt > latest.startedAt)) {
+          latest = entry.view
+        }
+      }
+    }
+    return latest
+  }
+
+  /**
+   * Retry the most recently failed or aborted Shadow run of a root session.
+   * This is the `/shadow retry` command surface: the caller never supplies a
+   * run id, and every admission guard of {@link ShadowMindRuntime.retry}
+   * still applies.
+   * @param agent Root agent whose latest failure is retried.
+   * @returns Status after the retry was admitted.
+   */
+  async retryLatest(agent: Agent): Promise<ShadowMindStatus> {
+    const failed = this.latestFailedRun(agent)
+    if (failed === undefined) {
+      throw new Error('this session has no failed or aborted Shadow run to retry')
+    }
+    return this.retry(agent, failed.runId)
+  }
+
+  /**
+   * Forcibly admit one fresh Shadow review of the current session trajectory.
+   * This is the `/shadow new` command surface for sessions whose automatic
+   * scheduling has not admitted a run yet. Explicit user intent bypasses
+   * activation probability, pause, budget routing, and the definition's
+   * enabled flag, but never the root liveness checks; a still-pending
+   * scheduled review for the same capture point is superseded by this run.
+   * @param agent Root agent whose session is reviewed now.
+   * @returns Status after the review was admitted.
+   */
+  async reviewNow(agent: Agent): Promise<ShadowMindStatus> {
+    this.assertRoot(agent)
+    const state = this.owner(agent)
+    if (state.totalRuns > 0) {
+      throw new Error(`this session has already admitted ${state.totalRuns} Shadow run(s); use /shadow retry to rerun a failed review`)
+    }
+    const definition = await this.registry.defaultDefinition()
+    const events = agent.session.events
+    const capturedThroughSeq = events[events.length - 1]?.seq
+    if (capturedThroughSeq === undefined) {
+      throw new Error('this session has no events to review yet')
+    }
+    let cycle = state.cycles.get(capturedThroughSeq)
+    if (cycle === undefined) {
+      cycle = { capturedThroughSeq, scheduling: false, runs: [] }
+      state.cycles.set(capturedThroughSeq, cycle)
+    }
+    for (let index = state.pendingTurns.length - 1; index >= 0; index--) {
+      const pending = state.pendingTurns[index]
+      if (pending !== undefined && pending.capturedThroughSeq === capturedThroughSeq) {
+        pending.cycle.scheduling = false
+        state.pendingTurns.splice(index, 1)
+      }
+    }
+    this.launch(agent, state, cycle, state.epoch, capturedThroughSeq, definition, true)
+    if (!state.active.has(definition.id)) {
+      throw new Error('the Shadow review could not be admitted for this session')
+    }
+    return this.status(agent)
+  }
+
   /** Handle turn closure and user-cancellation boundaries from the durable log. */
   private onSessionEvent(session: Session, event: SessionEvent): void {
     if (this.stopped) return
@@ -784,6 +867,15 @@ export class ShadowMindRuntime extends TypertRemoteService {
     )
     if (!shouldRunShadow(probability, this.random)) {
       cycle.scheduling = false
+      return
+    }
+    // The slot check in scheduleTurn can race another in-flight schedule that
+    // finished loading first: both saw an empty slot, one launched, and a
+    // silent launch no-op here would strand this turn in scheduling forever.
+    // Re-check synchronously before launch (launch itself is synchronous), so
+    // the loser defers to the FIFO queue instead of being dropped.
+    if (state.active.size > 0) {
+      state.pendingTurns.push({ cycle, epoch, capturedThroughSeq })
       return
     }
     this.launch(agent, state, cycle, epoch, capturedThroughSeq, definition)

@@ -4,6 +4,8 @@ English | [中文](installation-runtime-validation.zh.md)
 
 This document provides an executable workflow for installing `dsh-shadow-mind` into a DeepSeek Harness source host, starting the Web profile, completing a real-model acceptance run, and verifying restart semantics. Verified behavior and target behavior are identified separately; remediation items are not delivered until their implementation and automated acceptance checks pass.
 
+> **Superseded command surface.** This document was written against a historical build whose `/shadow` command supported `status|pause|resume|toggle`. The shipped command surface is now limited to `/shadow retry` (re-run the latest failed or aborted review) and `/shadow new` (force a review before any run was admitted). Every `/shadow status` step below is therefore historical: current run state is observed through the Settings page status line, the per-turn conversation cards, and the two commands above.
+
 ## 1. Goals and scope
 
 An operator must be able to pin host and plugin versions in an isolated Harness home, prove that the profile loads the GitHub build artifact, observe a complete real DeepSeek root tool turn, Shadow review, report relay, and root follow-up, then inspect persistent data and process state after restarting the same Session.
