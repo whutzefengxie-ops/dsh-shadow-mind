@@ -3,6 +3,7 @@
 import type { ContentBlock } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
 import type {} from '@deepseek-ai/dsh-compaction'
+import { estimateTextTokens } from './model-context.ts'
 import type { ShadowDefinition, ShadowMindSettings } from './types.ts'
 
 /** One projected transcript plus the exact durable anchors visible in it. */
@@ -183,40 +184,64 @@ const TRAJECTORY_TRIM_MARKER = '[earlier trajectory events trimmed to fit the pr
 
 /**
  * Keep the newest trajectory events so the remainder (plus the trim marker)
- * fits the character budget. Availability first: this never throws, and an
- * absurdly small budget degrades to the marker alone.
+ * satisfies both the character budget and the estimated-token budget.
+ * Availability first: this never throws, and an absurdly small budget degrades
+ * to the marker alone.
  * @param trajectory Projected trajectory text.
- * @param budget Total characters available for the trimmed body plus marker.
+ * @param charBudget Characters available for the trimmed body plus marker; `Infinity` disables the bound.
+ * @param tokenBudget Estimated tokens available for the trimmed body plus marker; `Infinity` disables the bound.
  * @returns The trimmed trajectory.
  */
-function trimTrajectoryToBudget(trajectory: string, budget: number): string {
-  const contentBudget = budget - TRAJECTORY_TRIM_MARKER.length - 2
-  if (contentBudget <= 0) return TRAJECTORY_TRIM_MARKER.slice(0, budget)
+function trimTrajectoryToBudget(trajectory: string, charBudget: number, tokenBudget: number): string {
+  const markerTokens = estimateTextTokens(TRAJECTORY_TRIM_MARKER) + estimateTextTokens('\n\n')
+  const contentCharBudget = charBudget - TRAJECTORY_TRIM_MARKER.length - 2
+  const contentTokenBudget = tokenBudget - markerTokens
+  if (contentCharBudget <= 0 || contentTokenBudget <= 0) {
+    return TRAJECTORY_TRIM_MARKER.slice(0, Math.max(0, Math.min(charBudget, Number.MAX_SAFE_INTEGER)))
+  }
   const parts = trajectory.split('\n\n')
+  // Suffix character and token totals per start index, so the trimmer drops
+  // whole oldest events without rebuilding the string on every step.
+  const suffixChars = new Array<number>(parts.length)
+  const suffixTokens = new Array<number>(parts.length)
+  let chars = 0
+  let tokens = 0
+  for (let index = parts.length - 1; index >= 0; index--) {
+    // The loop fills every index in range; the assertions are the invariant.
+    chars += parts[index]!.length
+    tokens += estimateTextTokens(parts[index]!)
+    const joiners = parts.length - 1 - index
+    suffixChars[index] = chars + joiners * 2
+    suffixTokens[index] = tokens + joiners * estimateTextTokens('\n\n')
+  }
   let start = 0
-  let suffixChars = 0
-  for (const part of parts) suffixChars += part.length
-  suffixChars += Math.max(0, (parts.length - 1) * 2)
-  while (start < parts.length - 1 && suffixChars > contentBudget) {
-    // The loop condition proves an element exists at `start`.
-    suffixChars -= parts[start]!.length + 2
+  while (start < parts.length - 1
+    && (suffixChars[start]! > contentCharBudget || suffixTokens[start]! > contentTokenBudget)) {
     start += 1
   }
   let kept = parts.slice(start).join('\n\n')
-  if (kept.length > contentBudget) kept = kept.slice(0, contentBudget)
+  if (kept.length > contentCharBudget) kept = kept.slice(0, contentCharBudget)
+  if (estimateTextTokens(kept) > contentTokenBudget) {
+    // A single event can still dominate the token budget; cutting it to the
+    // budget in characters always keeps the estimate within the budget,
+    // because the estimate never exceeds the character count.
+    kept = kept.slice(0, contentTokenBudget)
+  }
   return `${TRAJECTORY_TRIM_MARKER}\n\n${kept}`
 }
 
 /**
- * Build the complete fresh-child prompt. When the prompt exceeds the configured
- * bound, the oldest trajectory events are trimmed away so the prompt always
- * fits; a bound of zero (or less) disables the limit. This builder never
- * throws: an over-budget prompt degrades to a trimmed (or omitted) trajectory
- * instead of failing the Shadow run.
+ * Build the complete fresh-child prompt. When the prompt exceeds either the
+ * configured character bound or the model-derived token budget, the oldest
+ * trajectory events are trimmed away so the prompt fits the configured bounds;
+ * a bound of zero (or less) disables that limit. This builder never throws: an
+ * over-budget prompt degrades to a trimmed (or omitted) trajectory instead of
+ * failing the Shadow run.
  * @param definition Selected Shadow definition.
  * @param trajectory Projected root trajectory.
  * @param capturedThroughSeq Inclusive root sequence watermark.
- * @param maxPromptChars Complete prompt soft bound; 0 = unlimited.
+ * @param maxPromptChars Complete prompt soft character bound; 0 = unlimited.
+ * @param maxPromptTokens Complete prompt soft estimated-token bound (model context window minus headroom); 0 = unlimited.
  * @returns Framed Shadow task.
  */
 export function buildShadowPrompt(
@@ -224,6 +249,7 @@ export function buildShadowPrompt(
   trajectory: string,
   capturedThroughSeq: number,
   maxPromptChars: number,
+  maxPromptTokens = 0,
 ): string {
   const header = [
     `You are the independent Shadow \"${definition.name}\" (${definition.id}).`,
@@ -241,14 +267,14 @@ export function buildShadowPrompt(
     '',
     `## Root trajectory (captured through session seq ${String(capturedThroughSeq)})`,
   ].join('\n')
+  const headerTokens = estimateTextTokens(header)
   let body = trajectory === '' ? '[no model-visible trajectory content]' : trajectory
-  if (maxPromptChars > 0) {
-    const budget = maxPromptChars - header.length - 1
-    if (body.length > budget) {
-      body = budget > 0
-        ? trimTrajectoryToBudget(body, budget)
-        : '[no model-visible trajectory content]'
-    }
+  const charBudget = maxPromptChars > 0 ? maxPromptChars - header.length - 1 : Number.POSITIVE_INFINITY
+  const tokenBudget = maxPromptTokens > 0 ? maxPromptTokens - headerTokens : Number.POSITIVE_INFINITY
+  if (body.length > charBudget || estimateTextTokens(body) > tokenBudget) {
+    body = charBudget <= 0 || tokenBudget <= 0
+      ? '[no model-visible trajectory content]'
+      : trimTrajectoryToBudget(body, charBudget, tokenBudget)
   }
   return `${header}\n${body}`
 }

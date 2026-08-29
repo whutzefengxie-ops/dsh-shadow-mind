@@ -27,7 +27,7 @@ import { installShadowMindProvider, SHADOW_MIND_SUBAGENT_PROVIDER } from './suba
 import { resolveIndependence } from './vendor.ts'
 import { containsHoldoutLiteral, redactHoldoutLiterals } from './holdout.ts'
 import { buildShadowModelCatalog } from './model-catalog.ts'
-import { effectivePromptCapChars, resolveModelPromptCapChars } from './model-context.ts'
+import { resolveModelPromptTokenBudget } from './model-context.ts'
 import { narrowShadowOutput, type ShadowOutput } from './shadow-output.ts'
 import {
   classifyChallenge,
@@ -91,10 +91,10 @@ export type {
 export { ReportBatcher } from './report-batcher.ts'
 export { buildShadowModelCatalog } from './model-catalog.ts'
 export {
-  effectivePromptCapChars,
-  resolveModelPromptCapChars,
-  SHADOW_PROMPT_CHARS_PER_TOKEN,
-  SHADOW_PROMPT_RESERVE_CHARS,
+  estimateTextTokens,
+  resolveModelPromptTokenBudget,
+  SHADOW_PROMPT_NON_CJK_CHARS_PER_TOKEN,
+  SHADOW_PROMPT_RESERVE_TOKENS,
 } from './model-context.ts'
 export type {
   ShadowCatalogModel,
@@ -1028,9 +1028,10 @@ export class ShadowMindRuntime extends TypertRemoteService {
         minimalContext: definition.context === 'minimal',
         thinkFirst: definition.thinkFirst,
       })
-      // An unset prompt bound derives from the selected model's context window,
-      // and an over-budget prompt is trimmed to fit instead of failing the run.
-      const modelCap = await resolveModelPromptCapChars(
+      // An unset prompt bound derives a token budget from the selected model's
+      // context window, and an over-budget prompt is trimmed to fit instead of
+      // failing the run.
+      const modelTokenBudget = await resolveModelPromptTokenBudget(
         this.ctx,
         shadowModelRoute(definition, agent, entry.frugalRoute),
       )
@@ -1039,7 +1040,8 @@ export class ShadowMindRuntime extends TypertRemoteService {
           definition,
           projection.text,
           entry.capturedThroughSeq,
-          effectivePromptCapChars(settings.maxPromptChars, modelCap),
+          settings.maxPromptChars,
+          modelTokenBudget,
         ),
         holdoutKeys,
       )

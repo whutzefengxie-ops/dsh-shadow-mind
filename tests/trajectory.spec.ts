@@ -4,6 +4,7 @@ import { CompactionId } from '@deepseek-ai/dsh-compaction'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
 import {
   buildShadowPrompt,
+  estimateTextTokens,
   projectTrajectory,
   projectTrajectoryWithAnchors,
   summarizeToolResult,
@@ -233,6 +234,32 @@ describe('trajectory projection', () => {
     const prompt = buildShadowPrompt(definition(), 'trajectory', 7, 10)
     expect(prompt).toContain('Find risks.')
     expect(prompt).toContain('[no model-visible trajectory content]')
+  })
+
+  it('trims a CJK-heavy trajectory by the model token budget, not by a permissive char heuristic', () => {
+    const empty = buildShadowPrompt(definition(), '', 7, 0)
+    const headerTokens = estimateTextTokens(empty)
+      - estimateTextTokens('[no model-visible trajectory content]')
+      - estimateTextTokens('\n')
+    const bound = headerTokens + 60
+    const cjkTrajectory = `最早的事件行\n\n${'汉'.repeat(200)}\n\n最新的事件行`
+    const trimmed = buildShadowPrompt(definition(), cjkTrajectory, 7, 0, bound)
+    expect(trimmed).toContain('trimmed to fit the prompt bound')
+    expect(trimmed).toContain('最新的事件行')
+    expect(trimmed).not.toContain('最早的事件行')
+    expect(trimmed).not.toContain('汉'.repeat(200))
+    expect(estimateTextTokens(trimmed)).toBeLessThanOrEqual(bound)
+  })
+
+  it('hard-cuts a single dominating event to the token budget', () => {
+    const empty = buildShadowPrompt(definition(), '', 7, 0)
+    const headerTokens = estimateTextTokens(empty)
+      - estimateTextTokens('[no model-visible trajectory content]')
+      - estimateTextTokens('\n')
+    const bound = headerTokens + 50
+    const trimmed = buildShadowPrompt(definition(), `最新的事件行${'汉'.repeat(50)}`, 7, 0, bound)
+    expect(estimateTextTokens(trimmed)).toBeLessThanOrEqual(bound)
+    expect(trimmed).toContain('trimmed to fit the prompt bound')
   })
 
   it('treats a non-positive bound as unlimited', () => {

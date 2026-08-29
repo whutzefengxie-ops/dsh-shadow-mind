@@ -37,15 +37,17 @@ export declare function projectTrajectoryWithAnchors(events: readonly SessionEve
  */
 export declare function projectTrajectory(events: readonly SessionEvent[], capturedThroughSeq: number, argumentDisclosure: ShadowMindSettings['argumentDisclosure'], capture?: ShadowDefinition['capture']): string;
 /**
- * Build the complete fresh-child prompt. When the prompt exceeds the configured
- * bound, the oldest trajectory events are trimmed away so the prompt always
- * fits; a bound of zero (or less) disables the limit. This builder never
- * throws: an over-budget prompt degrades to a trimmed (or omitted) trajectory
- * instead of failing the Shadow run.
+ * Build the complete fresh-child prompt. When the prompt exceeds either the
+ * configured character bound or the model-derived token budget, the oldest
+ * trajectory events are trimmed away so the prompt fits the configured bounds;
+ * a bound of zero (or less) disables that limit. This builder never throws: an
+ * over-budget prompt degrades to a trimmed (or omitted) trajectory instead of
+ * failing the Shadow run.
  * @param definition Selected Shadow definition.
  * @param trajectory Projected root trajectory.
  * @param capturedThroughSeq Inclusive root sequence watermark.
- * @param maxPromptChars Complete prompt soft bound; 0 = unlimited.
+ * @param maxPromptChars Complete prompt soft character bound; 0 = unlimited.
+ * @param maxPromptTokens Complete prompt soft estimated-token bound (model context window minus headroom); 0 = unlimited.
  * @returns Framed Shadow task.
  */
-export declare function buildShadowPrompt(definition: ShadowDefinition, trajectory: string, capturedThroughSeq: number, maxPromptChars: number): string;
+export declare function buildShadowPrompt(definition: ShadowDefinition, trajectory: string, capturedThroughSeq: number, maxPromptChars: number, maxPromptTokens?: number): string;
