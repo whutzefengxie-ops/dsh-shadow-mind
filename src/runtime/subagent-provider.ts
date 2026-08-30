@@ -37,6 +37,7 @@ import {
 } from './structured-output.ts'
 import {
   DegenerateOutputGuard,
+  resolveReasoningBudget,
   type DegenerateOutputReason,
 } from './degenerate-output.ts'
 
@@ -91,7 +92,7 @@ export const STRUCTURED_OUTPUT_MISSING_DIAGNOSTIC
 /** Provider-authored diagnostics for children cancelled by the degenerate-output watchdog. */
 export const DEGENERATE_OUTPUT_DIAGNOSTICS: Readonly<Record<DegenerateOutputReason, string>> = {
   repetition: 'Shadow subagent entered a degenerate output loop (the same short token repeated continuously) and was cancelled; no report was captured or relayed.',
-  'output-budget': 'Shadow subagent streamed an excessive amount of output without calling any tool and was cancelled; no report was captured or relayed.',
+  'output-budget': 'Shadow subagent streamed an excessive amount of output without any tool call or step/turn progress and was cancelled; no report was captured or relayed.',
 }
 
 /** Mutable degenerate-output state shared between the child scope and the settled run reader. */
@@ -172,28 +173,36 @@ function attachThinkFirst(childCtx: Context, activationBoundary: number, skipSte
 
 /**
  * Watch one child's streamed output and cancel it the moment it degenerates
- * into a repeated-token loop or a tool-free output flood. The child-side
+ * into a repeated-token loop or an unbounded output flood. The child-side
  * `session/event` bus carries every committed chunk, so the guard fires within
  * a few tokens of the collapse instead of waiting out the run timeout.
+ * @param reasoningBudget - the child's reasoning-channel budget, resolved from
+ *   its reasoning effort.
  */
 function attachDegenerateOutputGuard(
   childCtx: Context,
   childId: SessionId,
   state: DegenerateOutputState,
+  reasoningBudget: number,
 ): void {
   const child = childCtx.agent as Agent
-  const guard = new DegenerateOutputGuard()
+  const guard = new DegenerateOutputGuard(reasoningBudget)
   childCtx.on('session/event', (session: Session, event: SessionEvent) => {
     if (session.id !== childId || state.reason !== undefined) return
     if (event.type === 'tool/call') {
       guard.observeToolCall()
       return
     }
+    if (event.type === 'step/end' || event.type === 'turn/end') {
+      // A fresh step gets a fresh budget: a long but healthy tool-free
+      // planning step must not bleed its text into the investigation step.
+      guard.observeBoundary()
+      return
+    }
     if (event.type !== 'assistant/chunk') return
     const chunk = event.data.chunk
-    const text = chunk.type === 'text-delta' || chunk.type === 'reasoning-delta' ? chunk.text : ''
-    if (text === '') return
-    const detection = guard.observeChunk(text)
+    if (chunk.type !== 'text-delta' && chunk.type !== 'reasoning-delta') return
+    const detection = guard.observeChunk(chunk.text, chunk.type === 'text-delta' ? 'text' : 'reasoning')
     if (detection === undefined) return
     state.reason = detection.reason
     // Defer the cancel out of the event dispatch: the guard fires inside the
@@ -247,7 +256,12 @@ async function startInProcessRun(request: ResolvedSubagentStartRequest): Promise
     if (request.thinkFirst === true) {
       attachThinkFirst(childCtx, activationBoundary, () => degenerateState.reason !== undefined)
     }
-    attachDegenerateOutputGuard(childCtx, childId, degenerateState)
+    attachDegenerateOutputGuard(
+      childCtx,
+      childId,
+      degenerateState,
+      resolveReasoningBudget(request.modelSelection?.reasoningEffort),
+    )
     attachDescriptorAppend(childCtx, request.descriptor)
   }
 

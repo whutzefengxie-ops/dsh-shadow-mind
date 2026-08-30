@@ -88,8 +88,8 @@ export type {
   ReviewWindowOptions,
   StagnationDetection,
 } from './review-window.ts'
-export { DegenerateOutputGuard, hasRepeatedSuffix, MAX_CHARS_WITHOUT_TOOL_CALL } from './degenerate-output.ts'
-export type { DegenerateOutputDetection, DegenerateOutputReason } from './degenerate-output.ts'
+export { DegenerateOutputGuard, hasRepeatedSuffix, MAX_CHARS_WITHOUT_TOOL_CALL, MAX_REASONING_CHARS_BASE, resolveReasoningBudget } from './degenerate-output.ts'
+export type { DegenerateChunkKind, DegenerateOutputDetection, DegenerateOutputReason } from './degenerate-output.ts'
 export { ReportBatcher } from './report-batcher.ts'
 export { buildShadowModelCatalog } from './model-catalog.ts'
 export {
