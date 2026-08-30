@@ -294,7 +294,7 @@ export const TYPERT_REMOTE = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":635,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":637,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/cycles',

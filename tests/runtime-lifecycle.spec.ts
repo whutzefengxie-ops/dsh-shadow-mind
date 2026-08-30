@@ -927,68 +927,6 @@ Review the completed turn.
     expect(harness.deliveries).toHaveLength(1)
   })
 
-  it('retries the most recent failed run without a run id and rejects when none exists', async () => {
-    let attempt = 0
-    const harness = await setup(() => {
-      attempt += 1
-      return {
-        id: SessionId(`child-latest-retry-${String(attempt)}`),
-        localAgent: undefined,
-        result: Promise.resolve({ output: [], stopReason: 'error' }),
-        dispose: () => Promise.resolve(),
-      }
-    })
-    emitToolTurn(harness, 1)
-    emitToolTurn(harness, 2)
-
-    await vi.waitFor(() => {
-      const runs = harness.runtime.reviewCycles(harness.agent).flatMap(cycle => cycle.runs)
-      expect(runs).toHaveLength(2)
-      expect(runs.every(run => run.phase === 'failed')).toBe(true)
-    })
-    expect(harness.runtime.latestFailedRun(harness.agent)?.runId)
-      .toBe(harness.runtime.reviewCycles(harness.agent)[1]?.runs[0]?.runId)
-
-    const status = await harness.runtime.retryLatest(harness.agent)
-    expect(status.totalRuns).toBe(3)
-
-    // The retried run joins the later cycle that owned the latest failure.
-    await vi.waitFor(() => {
-      const cycles = harness.runtime.reviewCycles(harness.agent)
-      expect(cycles[0]?.runs).toHaveLength(1)
-      expect(cycles[1]?.runs).toHaveLength(2)
-      expect(cycles[1]?.runs.every(run => run.phase === 'failed')).toBe(true)
-    })
-
-    // Every run is still failed, so the newest retry remains the latest failure.
-    const cycles = harness.runtime.reviewCycles(harness.agent)
-    const latest = cycles[1]?.runs[1]
-    if (latest === undefined) throw new Error('retried run was not recorded')
-    expect(harness.runtime.latestFailedRun(harness.agent)?.runId).toBe(latest.runId)
-  })
-
-  it('rejects retryLatest while no failed or aborted run exists', async () => {
-    const harness = await setup(() => ({
-      id: SessionId('child-no-failure'),
-      localAgent: undefined,
-      result: Promise.resolve({
-        output: [],
-        stopReason: 'completed',
-        structured: { status: 'silent', content: '' },
-      }),
-      dispose: () => Promise.resolve(),
-    }))
-    emitToolTurn(harness)
-
-    await vi.waitFor(() => {
-      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({ phase: 'silent' })
-    })
-    await expect(harness.runtime.retryLatest(harness.agent)).rejects.toThrow(
-      'this session has no failed or aborted Shadow run to retry',
-    )
-    expect(harness.runtime.status(harness.agent).totalRuns).toBe(1)
-  })
-
   it('forces a fresh review with reviewNow and gates sessions that already admitted runs', async () => {
     const harness = await setup(() => ({
       id: SessionId('child-manual-review'),
@@ -1023,7 +961,7 @@ Review the completed turn.
     expect(harness.deliveries).toHaveLength(1)
 
     await expect(harness.runtime.reviewNow(harness.agent)).rejects.toThrow(
-      'this session has already admitted 1 Shadow run(s); use /shadow retry to rerun a failed review',
+      'this session has already admitted 1 Shadow run(s); use the Retry button on the Shadow conversation card to rerun a failed review',
     )
     expect(harness.runtime.status(harness.agent).totalRuns).toBe(1)
   })

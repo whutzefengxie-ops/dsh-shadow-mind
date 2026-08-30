@@ -8,7 +8,7 @@ import { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 import { ShadowRegistry } from './registry.ts';
-import type { ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowModelCatalog, ShadowReviewCycle, ShadowRunView, UpdateShadowMindSettings } from './types.ts';
+import type { ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowModelCatalog, ShadowReviewCycle, UpdateShadowMindSettings } from './types.ts';
 export { Config } from './config.ts';
 export * from './types.ts';
 export * from './protocol.ts';
@@ -127,29 +127,14 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
      * Manually re-run one failed or aborted Shadow against its original
      * captured trajectory window. The retried run joins the same review cycle,
      * bypasses pause and the exhausted budget tier, and is admission-gated by
-     * the same liveness rules as scheduled runs.
+     * the same liveness rules as scheduled runs. This is the conversation-card
+     * Retry surface: the browser supplies the run id of the exact failed or
+     * aborted subagent it is attached to.
      * @param agent Root agent whose run is retried.
      * @param runId Terminal run to rerun.
      * @returns Status after the retry was admitted.
      */
     retry(agent: Agent, runId: string): Promise<ShadowMindStatus>;
-    /**
-     * Find the most recently admitted failed or aborted run for a root.
-     * Runs are ordered by their captured trajectory watermark; equal
-     * watermarks fall back to admission time.
-     * @param agent Root agent whose session owns the runs.
-     * @returns The latest retryable run, or undefined when none exists.
-     */
-    latestFailedRun(agent: Agent): ShadowRunView | undefined;
-    /**
-     * Retry the most recently failed or aborted Shadow run of a root session.
-     * This is the `/shadow retry` command surface: the caller never supplies a
-     * run id, and every admission guard of {@link ShadowMindRuntime.retry}
-     * still applies.
-     * @param agent Root agent whose latest failure is retried.
-     * @returns Status after the retry was admitted.
-     */
-    retryLatest(agent: Agent): Promise<ShadowMindStatus>;
     /**
      * Forcibly admit one fresh Shadow review of the current session trajectory.
      * This is the `/shadow new` command surface for sessions whose automatic

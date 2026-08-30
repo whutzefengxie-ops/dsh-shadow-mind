@@ -627,7 +627,9 @@ export class ShadowMindRuntime extends TypertRemoteService {
    * Manually re-run one failed or aborted Shadow against its original
    * captured trajectory window. The retried run joins the same review cycle,
    * bypasses pause and the exhausted budget tier, and is admission-gated by
-   * the same liveness rules as scheduled runs.
+   * the same liveness rules as scheduled runs. This is the conversation-card
+   * Retry surface: the browser supplies the run id of the exact failed or
+   * aborted subagent it is attached to.
    * @param agent Root agent whose run is retried.
    * @param runId Terminal run to rerun.
    * @returns Status after the retry was admitted.
@@ -661,48 +663,6 @@ export class ShadowMindRuntime extends TypertRemoteService {
   }
 
   /**
-   * Find the most recently admitted failed or aborted run for a root.
-   * Runs are ordered by their captured trajectory watermark; equal
-   * watermarks fall back to admission time.
-   * @param agent Root agent whose session owns the runs.
-   * @returns The latest retryable run, or undefined when none exists.
-   */
-  latestFailedRun(agent: Agent): ShadowRunView | undefined {
-    this.assertRoot(agent)
-    const state = this.owners.get(agent)
-    if (state === undefined) return undefined
-    let latest: ShadowRunView | undefined
-    for (const cycle of state.cycles.values()) {
-      for (const entry of cycle.runs) {
-        if (entry.view.phase !== 'failed' && entry.view.phase !== 'aborted') continue
-        if (latest === undefined
-          || entry.view.capturedThroughSeq > latest.capturedThroughSeq
-          || (entry.view.capturedThroughSeq === latest.capturedThroughSeq
-            && entry.view.startedAt > latest.startedAt)) {
-          latest = entry.view
-        }
-      }
-    }
-    return latest
-  }
-
-  /**
-   * Retry the most recently failed or aborted Shadow run of a root session.
-   * This is the `/shadow retry` command surface: the caller never supplies a
-   * run id, and every admission guard of {@link ShadowMindRuntime.retry}
-   * still applies.
-   * @param agent Root agent whose latest failure is retried.
-   * @returns Status after the retry was admitted.
-   */
-  async retryLatest(agent: Agent): Promise<ShadowMindStatus> {
-    const failed = this.latestFailedRun(agent)
-    if (failed === undefined) {
-      throw new Error('this session has no failed or aborted Shadow run to retry')
-    }
-    return this.retry(agent, failed.runId)
-  }
-
-  /**
    * Forcibly admit one fresh Shadow review of the current session trajectory.
    * This is the `/shadow new` command surface for sessions whose automatic
    * scheduling has not admitted a run yet. Explicit user intent bypasses
@@ -716,7 +676,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
     this.assertRoot(agent)
     const state = this.owner(agent)
     if (state.totalRuns > 0) {
-      throw new Error(`this session has already admitted ${state.totalRuns} Shadow run(s); use /shadow retry to rerun a failed review`)
+      throw new Error(`this session has already admitted ${state.totalRuns} Shadow run(s); use the Retry button on the Shadow conversation card to rerun a failed review`)
     }
     const definition = await this.registry.defaultDefinition()
     const events = agent.session.events
