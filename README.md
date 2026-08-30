@@ -81,6 +81,19 @@ An accepted report becomes a durable root user message and triggers a follow-up,
 
 Set `debug: true` on a definition when diagnosing production behavior. `$DSH_HOME/shadow-minds/logs/<shadow-id>.jsonl` records admission, child start, cancellation request, terminal outcome, and report delivery with lifecycle stage, stable reason code, cancellation source, and provider stop reason. It excludes prompts, report bodies, tool arguments, credentials, absolute paths, and stacks; a discarded non-report body is represented only by its length and SHA-256 hash. For example, new user input is `USER_MESSAGE_RECEIVED`, a Shadow deadline is `SHADOW_TIMEOUT`, and an abort not attributed to the plugin is `PROVIDER_ABORTED`.
 
+### Debugging a failure
+
+A failure report usually arrives as only a subagent error message or a child subagent session id. The zero-dependency [`tools/shadow-debug.mjs`](tools/shadow-debug.mjs) reconstructs the full run context from either fragment:
+
+```sh
+node tools/shadow-debug.mjs trace <childSessionId|runId|rootSessionId>   # one run: timeline + inputs + child-session evidence
+node tools/shadow-debug.mjs find <error text|reason code>                 # locate runs by error content
+node tools/shadow-debug.mjs runs [--failed] [--shadow <id>]               # list recent runs
+node tools/shadow-debug.mjs health                                        # definition debug flags and log health
+```
+
+It resolves `$DSH_HOME/shadow-minds/logs/*.jsonl` (run timeline and input metadata), `$DSH_HOME/shadow-minds/<id>.md` (definition and review prompt), and `$DSH_HOME/sessions/*/<childSessionId>/session.jsonl.zstd` (the full child event stream: prompt, LLM request headers, tool errors, turn termination). When run inside a DSH session it infers paths from environment variables. The [Chinese debugging guide](docs/debugging.zh.md) documents the workflow, reason-code/stage tables, and a symptom-to-evidence map; an equivalent agent skill ships at [`.agents/skills/shadow-debug/SKILL.md`](.agents/skills/shadow-debug/SKILL.md).
+
 ## Security and limitations
 
 The default trajectory projection omits reasoning, raw tool-result text, and tool arguments. Prompt injection remains possible in projected user and assistant text, so tool allowlists, inherited sandbox policy, fixed child approval policy, and disclosure limits remain security controls.

@@ -81,6 +81,19 @@ Shadow 进入调度后，被审查的 root 回复下方会立即出现运行占�
 
 需要分析生产问题时，在对应定义中设置 `debug: true`。`$DSH_HOME/shadow-minds/logs/<shadow-id>.jsonl` 会按 run 记录准入、child 启动、取消请求、终态和报告投递，包含阶段、稳定原因码、取消来源与 provider stop reason。日志不记录 prompt、报告正文、工具参数、凭据、绝对路径或 stack；例如用户新消息取消为 `USER_MESSAGE_RECEIVED`，Shadow 超时为 `SHADOW_TIMEOUT`，无法归因给插件的 provider 中断为 `PROVIDER_ABORTED`。
 
+### 问题快速定位
+
+出现问题时通常只有两块碎片：**子代理报错文本**或**子代理会话 id**（childSessionId）。仓库自带零依赖定位工具，能把碎片还原成该次运行的完整现场（调试时间线、入参、子代理会话里的 LLM/工具失败证据）：
+
+```sh
+node tools/shadow-debug.mjs trace <childSessionId|runId|rootSessionId>   # 追查单次运行
+node tools/shadow-debug.mjs find <报错文本|原因码>                         # 按错误内容反查运行
+node tools/shadow-debug.mjs runs [--failed] [--shadow <id>]               # 列出运行
+node tools/shadow-debug.mjs health                                        # 体检 debug 开关与日志健康度
+```
+
+它自动定位 `$DSH_HOME/shadow-minds/logs/*.jsonl`（运行时间线与入参元数据）、`$DSH_HOME/shadow-minds/<id>.md`（定义与审查提示词）以及 `$DSH_HOME/sessions/*/<childSessionId>/session.jsonl.zstd`（子代理完整事件流，含 prompt、LLM 请求头、工具错误、turn 终止原因）。在 DSH 会话内运行时会从环境变量推断路径，无需传参。完整的定位流程、原因码/阶段速查表与“症状 → 证据位置”对照见[问题快速定位指南](docs/debugging.zh.md)；给 DSH 会话内 agent 使用的同名 skill 见 [`.agents/skills/shadow-debug/SKILL.md`](.agents/skills/shadow-debug/SKILL.md)。
+
 ## 安全与限制
 
 默认轨迹投影会移除推理、原始工具结果文本和工具参数。用户及 assistant 文本中的 prompt injection 仍然可能进入投影，因此工具 allowlist、继承的 sandbox、固定的 child approval 策略和披露上限仍是必要的安全控制。

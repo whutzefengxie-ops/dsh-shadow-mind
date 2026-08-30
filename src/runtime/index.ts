@@ -1010,7 +1010,9 @@ export class ShadowMindRuntime extends TypertRemoteService {
     let nextFailureCode: ShadowRunReasonCode = 'TRAJECTORY_BUILD_FAILED'
     let deliberationChars = 0
     let childTools: ChildToolTelemetry | undefined
-    const timeoutMs = (definition.timeoutSeconds ?? settings.defaultShadowTimeoutSeconds) * 1_000
+    const timeoutSeconds = definition.timeoutSeconds ?? settings.defaultShadowTimeoutSeconds
+    const timeoutMs = timeoutSeconds * 1_000
+    const effectiveToolNames = [...new Set([...DEFAULT_SHADOW_TOOLS, ...definition.tools])]
     const timeout = setTimeout(() => {
       this.requestCancellation(state, entry, { reasonCode: 'SHADOW_TIMEOUT', source: 'timeout' })
     }, timeoutMs)
@@ -1060,7 +1062,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
         prompt: [{ type: 'text', text: prompt }],
         signal: entry.controller.signal,
         maxDepth: 1,
-        toolFilter: { allow: [...new Set([...DEFAULT_SHADOW_TOOLS, ...definition.tools])] },
+        toolFilter: { allow: effectiveToolNames },
         outputSchema: OUTPUT_SCHEMA,
         structuredAnchorSeqs: projection.seqs,
         ...definition.context === 'minimal' ? { contextInheritance: 'none' as const } : {},
@@ -1103,6 +1105,13 @@ export class ShadowMindRuntime extends TypertRemoteService {
       rootSessionId: agent.id,
       childSessionId: entry.childSessionId,
       capturedThroughSeq: entry.capturedThroughSeq,
+      // 请求期有效入参（元数据，不含轨迹/提示词内容）
+      promptChars: prompt.length,
+      timeoutSeconds,
+      capture: definition.capture,
+      context: definition.context,
+      thinkFirst: definition.thinkFirst,
+      toolNames: effectiveToolNames,
       stopReason: result?.stopReason,
       error: failure?.error.message,
       deliberationChars,
