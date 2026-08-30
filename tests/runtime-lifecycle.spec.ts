@@ -695,6 +695,98 @@ Review the completed turn.
     expect(harness.deliveries).toHaveLength(0)
   })
 
+  it('records child tool calls and INVALID_ARGS counts in the debug quality-metadata', async () => {
+    const readCall = ToolCallId('read-1')
+    const structuredCall = ToolCallId('structured-1')
+    const orphanCall = ToolCallId('orphan-1')
+    const events = [
+      {
+        type: 'tool/call', seq: 1, time: 1,
+        data: { turn: 1, step: 1, callId: readCall, name: 'read', arguments: '{}' },
+      },
+      {
+        type: 'tool/result', seq: 2, time: 2,
+        data: {
+          turn: 1, step: 1,
+          message: createToolResultMessage({
+            callId: readCall,
+            content: [{ type: 'text', text: 'file contents' }],
+            isError: false,
+          }),
+        },
+      },
+      {
+        type: 'tool/call', seq: 3, time: 3,
+        data: {
+          turn: 1, step: 2,
+          callId: structuredCall,
+          name: 'structured_output',
+          arguments: '{"status":"report"}',
+        },
+      },
+      {
+        type: 'tool/result', seq: 4, time: 4,
+        data: {
+          turn: 1, step: 2,
+          message: createToolResultMessage({
+            callId: structuredCall,
+            content: [{ type: 'text', text: 'Error: invalid arguments: refs out of window' }],
+            isError: true,
+          }),
+          error: { name: 'ToolArgsError', code: 'INVALID_ARGS' },
+        },
+      },
+      {
+        type: 'tool/result', seq: 5, time: 5,
+        data: {
+          turn: 1, step: 3,
+          message: createToolResultMessage({
+            callId: orphanCall,
+            content: [{ type: 'text', text: 'Error: invalid arguments: orphaned retry' }],
+            isError: true,
+          }),
+          error: { name: 'ToolArgsError', code: 'INVALID_ARGS' },
+        },
+      },
+    ]
+    const harness = await setup(() => ({
+      id: SessionId('child-tool-telemetry'),
+      localAgent: { session: { events } } as unknown as Agent,
+      result: Promise.resolve({
+        output: [],
+        diagnostic: 'Shadow subagent completed its turn without calling the mandatory structured_output tool; no report was captured or relayed.',
+        stopReason: 'no-structured-output',
+      }),
+      dispose: () => Promise.resolve(),
+    }))
+    emitToolTurn(harness)
+
+    await vi.waitFor(() => {
+      expect(harness.runtime.reviewCycles(harness.agent)[0]?.runs[0]).toMatchObject({
+        phase: 'failed',
+        reasonCode: 'STRUCTURED_OUTPUT_MISSING',
+      })
+    })
+
+    const debug = await readFile(join(harness.dshHome, 'shadow-minds', 'logs', 'default.jsonl'), 'utf8')
+    const metadata = debug
+      .split('\n')
+      .filter(line => line.trim() !== '')
+      .map(line => JSON.parse(line) as Record<string, unknown>)
+      .find(record => record.event === 'quality-metadata')
+    expect(metadata).toBeDefined()
+    expect(metadata?.tools).toEqual({
+      calls: 2,
+      byName: { read: 1, structured_output: 1 },
+      invalidArgs: 2,
+      invalidArgsByTool: { structured_output: 1, '(unpaired)': 1 },
+    })
+    // Arguments and result text never reach the debug log.
+    expect(debug).not.toContain('refs out of window')
+    expect(debug).not.toContain('orphaned retry')
+    expect(debug).not.toContain('"arguments"')
+  })
+
   it('attributes a user-message cancellation and records its diagnostic timeline', async () => {
     const harness = await setup(request => ({
       id: SessionId('child-aborted'),
