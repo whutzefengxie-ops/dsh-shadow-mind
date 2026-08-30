@@ -781,6 +781,13 @@ Review the completed turn.
       invalidArgs: 2,
       invalidArgsByTool: { structured_output: 1, '(unpaired)': 1 },
     })
+    // Request-effective input parameters are recorded as metadata.
+    expect(metadata?.promptChars).toBeTypeOf('number')
+    expect(metadata?.timeoutSeconds).toBeTypeOf('number')
+    expect(metadata?.capture).toBeTypeOf('string')
+    expect(metadata?.context).toBeTypeOf('string')
+    expect(metadata?.thinkFirst).toBeTypeOf('boolean')
+    expect(metadata?.toolNames).toEqual(expect.arrayContaining(['read', 'grep', 'glob']))
     // Arguments and result text never reach the debug log.
     expect(debug).not.toContain('refs out of window')
     expect(debug).not.toContain('orphaned retry')

@@ -44,6 +44,8 @@
     "cordis.patch.yml",
     "docs/",
     "examples/",
+    "tools/",
+    ".agents/skills/shadow-debug/",
     "README.md",
     "README.zh.md",
     "SECURITY.md",
@@ -74,6 +76,7 @@
     "typecheck": "tsc -p tsconfig.host.json && tsc -p tsconfig.client.json",
     "test": "vitest run",
     "check:typert": "node scripts/patch-typert.mjs --check",
+    "debug:shadow": "node tools/shadow-debug.mjs",
     "check": "pnpm run check:typert && pnpm run typecheck && pnpm run test && pnpm run build && pnpm run build:smoke"
   },
   "dependencies": {
