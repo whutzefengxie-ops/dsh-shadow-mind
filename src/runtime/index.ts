@@ -303,6 +303,47 @@ function deliberationLength(events: readonly SessionEvent[]): number {
   return chars
 }
 
+/** Tool-activity summary for one settled child, safe for the debug log. */
+interface ChildToolTelemetry {
+  /** Total `tool/call` events recorded in the child's session. */
+  readonly calls: number
+  /** Calls per tool name. */
+  readonly byName: Record<string, number>
+  /** `tool/result` events carrying the INVALID_ARGS error code. */
+  readonly invalidArgs: number
+  /** INVALID_ARGS results per tool name. */
+  readonly invalidArgsByTool: Record<string, number>
+}
+
+/**
+ * Summarize one child session's tool activity: call counts per tool and
+ * INVALID_ARGS results per tool. Names and counts only — arguments, result
+ * content, and error text stay out of the debug log.
+ */
+function toolTelemetry(events: readonly SessionEvent[]): ChildToolTelemetry {
+  const callNames = new Map<string, string>()
+  const byName: Record<string, number> = {}
+  const invalidArgsByTool: Record<string, number> = {}
+  let calls = 0
+  let invalidArgs = 0
+  for (const event of events) {
+    if (event.type === 'tool/call') {
+      calls += 1
+      callNames.set(event.data.callId, event.data.name)
+      byName[event.data.name] = (byName[event.data.name] ?? 0) + 1
+      continue
+    }
+    // The pipeline records a thrown ToolArgsError as `error: { name: 'ToolArgsError',
+    // code: 'INVALID_ARGS' }`, so the code — not the message text — identifies the
+    // in-turn schema rejection the model was asked to retry.
+    if (event.type !== 'tool/result' || event.data.error?.code !== 'INVALID_ARGS') continue
+    invalidArgs += 1
+    const name = callNames.get(event.data.message.source.callId) ?? '(unpaired)'
+    invalidArgsByTool[name] = (invalidArgsByTool[name] ?? 0) + 1
+  }
+  return { calls, byName, invalidArgs, invalidArgsByTool }
+}
+
 /**
  * Fit an oversized report to the accepted bound. Truncation preserves run
  * availability: the relayed finding keeps its verdict and refs while the body
@@ -1005,6 +1046,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
     let stage: ShadowRunStage = 'prepare'
     let nextFailureCode: ShadowRunReasonCode = 'TRAJECTORY_BUILD_FAILED'
     let deliberationChars = 0
+    let childTools: ChildToolTelemetry | undefined
     const timeoutMs = (definition.timeoutSeconds ?? settings.defaultShadowTimeoutSeconds) * 1_000
     const timeout = setTimeout(() => {
       this.requestCancellation(state, entry, { reasonCode: 'SHADOW_TIMEOUT', source: 'timeout' })
@@ -1069,6 +1111,8 @@ export class ShadowMindRuntime extends TypertRemoteService {
       await this.debug(state, entry, 'child-started')
       result = await run.result
       deliberationChars = run.localAgent === undefined ? 0 : deliberationLength(run.localAgent.session.events)
+      // Computed before dispose so the settled child's events remain readable.
+      childTools = run.localAgent === undefined ? undefined : toolTelemetry(run.localAgent.session.events)
     } catch (error: unknown) {
       rawFailure = error instanceof Error ? error : new Error('Shadow subagent failed with a non-Error value')
       failure = { stage, reasonCode: nextFailureCode, error: safeError(error) }
@@ -1099,6 +1143,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
       stopReason: result?.stopReason,
       error: failure?.error.message,
       deliberationChars,
+      ...childTools === undefined ? {} : { tools: childTools },
       independence: entry.independence,
       route: entry.route,
       budgetTier: entry.frugalRoute === undefined ? 'standard' : 'frugal',
