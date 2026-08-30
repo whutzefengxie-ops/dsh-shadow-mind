@@ -16,6 +16,12 @@ describe('hasRepeatedSuffix', () => {
     expect(hasRepeatedSuffix('ab1 '.repeat(4))).toBe(true)
   })
 
+  it('detects two-token alternation once the combined period is covered', () => {
+    const withNewline = '<tool_calls>\n'
+    const bare = '<tool_calls>'
+    expect(hasRepeatedSuffix((withNewline + bare).repeat(4))).toBe(true)
+  })
+
   it('ignores punctuation-only and single-character repetition', () => {
     expect(hasRepeatedSuffix('======'.repeat(4))).toBe(false)
     expect(hasRepeatedSuffix('aaaaa'.repeat(4))).toBe(false)

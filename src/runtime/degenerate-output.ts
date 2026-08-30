@@ -32,8 +32,14 @@ export interface DegenerateOutputDetection {
 
 /** Smallest repeated block length considered a signal (shorter blocks are noise-prone). */
 const REPETITION_MIN_PERIOD = 4
-/** Largest repeated block length checked (covers the 12-char `<tool_calls>` marker with room). */
-const REPETITION_MAX_PERIOD = 24
+/**
+ * Largest repeated block length checked. Covers the 12-char `<tool_calls>`
+ * marker with room, and also two-token alternations (e.g. `<tool_calls>\n`
+ * alternating with `<tool_calls>`, whose combined period is 25): the combined
+ * pair repeats as one longer block. Longer rotations and single-character
+ * floods stay with the output-budget backstop.
+ */
+const REPETITION_MAX_PERIOD = 32
 /** Consecutive identical blocks required before the guard fires. */
 const REPETITION_REPEATS = 4
 /** Rolling suffix kept for the repetition check. */

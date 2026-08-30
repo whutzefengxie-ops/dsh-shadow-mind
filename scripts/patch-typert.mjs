@@ -3,8 +3,11 @@
  * The standalone repository diverged from the DSH workspace generator (see
  * docs/subagent-binding-and-command-gate-design.zh.md), so the hand-added
  * schema surface is re-applied here against structural anchors, never stale
- * line numbers. `--check` applies every patch in memory and fails on drift,
- * which CI runs through `pnpm run check:typert`.
+ * line numbers. The ShadowRunReasonCode wire enum is additionally reconciled
+ * against its canonical declaration in src/runtime/types.ts, so a reason code
+ * added to the runtime types can never drift from the strict wire codec.
+ * `--check` applies every patch in memory and fails on drift, which CI runs
+ * through `pnpm run check:typert`.
  *
  * Usage: node scripts/patch-typert.mjs [--check]
  */
@@ -20,6 +23,7 @@ const files = [
 ]
 const dtsFile = resolve(root, 'src/generated/typert.remote-client.d.ts')
 const runtimeSource = resolve(root, 'src/runtime/index.ts')
+const typesSource = resolve(root, 'src/runtime/types.ts')
 const checkMode = process.argv.includes('--check')
 
 /** Line number (1-based) of the first occurrence of a marker in the runtime source. */
@@ -28,6 +32,36 @@ function sourceLine(marker) {
   const index = text.indexOf(marker)
   if (index < 0) throw new Error(`runtime source marker not found: ${marker}`)
   return text.slice(0, index).split('\n').length
+}
+
+/**
+ * Parse the ShadowRunReasonCode union members from the canonical runtime type.
+ * Members are the trailing `| 'VALUE'` lines of the union; the parse stops at
+ * the first line that does not continue that shape, so unrelated unions in the
+ * same file can never leak in.
+ */
+function reasonCodeMembers() {
+  const lines = readFileSync(typesSource, 'utf8').split('\n')
+  const startIndex = lines.findIndex(line => line.startsWith('export type ShadowRunReasonCode ='))
+  if (startIndex < 0) throw new Error('ShadowRunReasonCode declaration not found in src/runtime/types.ts')
+  const members = []
+  for (let index = startIndex + 1; index < lines.length; index++) {
+    const match = lines[index].match(/^\s*\| '([A-Z_]+)'$/)
+    if (match === null) break
+    members.push(match[1])
+  }
+  if (members.length === 0) throw new Error('ShadowRunReasonCode has no union members')
+  return members
+}
+
+/** Canonical `_shadowMindReason$schema` enum block for the current reason members. */
+function reasonEnum(members) {
+  return `const _shadowMindReason$schema = z.enum([\n${members.map(member => `  '${member}',`).join('\n')}\n])`
+}
+
+/** Canonical reflected `ShadowRunReasonCode` declaration string for the current members. */
+function reasonDeclaration(members) {
+  return `"declaration": "export type ShadowRunReasonCode = ${members.map(member => `'${member}'`).join(' | ')};"`
 }
 
 const MODEL_CATALOG_CONST = `const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema = z.object({
@@ -180,7 +214,21 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_1$schema =
     throw new Error('retry descriptor missing after patch')
   }
 
-  // 8. Align every descriptor's sourceLocation with the live runtime source.
+  // 8. Reconcile the ShadowRunReasonCode wire enum (and the host-side reflected
+  // declaration) with the canonical runtime type. This is the strict codec the
+  // gateway must accept for every reasonCode a failing run can surface.
+  {
+    const members = reasonCodeMembers()
+    const enumPattern = /const _shadowMindReason\$schema = z\.enum\(\[[\s\S]*?\n\]\)/u
+    if (!enumPattern.test(text)) throw new Error('_shadowMindReason$schema anchor not found')
+    text = text.replace(enumPattern, () => reasonEnum(members))
+    const declarationPattern = /"declaration": "export type ShadowRunReasonCode = [^"]*";/u
+    if (declarationPattern.test(text)) {
+      text = text.replace(declarationPattern, () => reasonDeclaration(members))
+    }
+  }
+
+  // 9. Align every descriptor's sourceLocation with the live runtime source.
   const methods = ['catalog', 'modelCatalog', 'saveDefault', 'status', 'cycles', 'pause', 'resume', 'toggle', 'retry']
   for (const method of methods) {
     const line = sourceLine(`@Remote('${method}')`)
