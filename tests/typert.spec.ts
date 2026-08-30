@@ -86,6 +86,33 @@ describe('Shadow Remote descriptors', () => {
     }])).toThrow()
   })
 
+  it('accepts the degenerate-output watchdog reason at the wire boundary', () => {
+    // The watchdog failure the runtime must be able to surface: a strict
+    // consumer may not reject it (check:typert reconciles this enum with the
+    // ShadowRunReasonCode type, and this assertion pins the acceptance).
+    const cycle = {
+      capturedThroughSeq: 20,
+      scheduling: false,
+      runs: [{
+        runId: 'run-1',
+        shadowId: 'reviewer',
+        shadowName: 'Reviewer',
+        capturedThroughSeq: 20,
+        phase: 'failed',
+        stage: 'run',
+        startedAt: '2026-08-24T00:00:00.000Z',
+        finishedAt: '2026-08-24T00:00:01.000Z',
+        reasonCode: 'DEGENERATE_OUTPUT',
+        providerStopReason: 'degenerate-output',
+      }],
+    }
+    for (const descriptors of descriptorSets) {
+      const descriptor = descriptors.find(candidate => candidate.method === 'cycles')
+      if (descriptor?.result.mode !== 'strict') throw new Error('cycles must use a strict result codec')
+      expect(descriptor.result.schema.parse([cycle])).toHaveLength(1)
+    }
+  })
+
   it('preserves conditioning and quality telemetry across both status codecs', () => {
     const status = {
       paused: false,

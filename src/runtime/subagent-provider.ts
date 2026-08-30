@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 import type { Context } from '@deepseek-ai/cordis'
 import { foldConsumedWork, installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, AgentHandle, ModelSelection } from '@deepseek-ai/dsh-agent'
-import { SessionId, type TurnEndReason } from '@deepseek-ai/dsh-session'
+import { SessionId, type Session, type SessionEvent, type TurnEndReason } from '@deepseek-ai/dsh-session'
 import { createUserMessage, type ContentBlock } from '@deepseek-ai/dsh-llm'
 import {
   appendDelegatedPolicyOverrides,
@@ -35,6 +35,10 @@ import {
   attachStructuredRuntime,
   type StructuredAttachment,
 } from './structured-output.ts'
+import {
+  DegenerateOutputGuard,
+  type DegenerateOutputReason,
+} from './degenerate-output.ts'
 
 export {
   STRUCTURED_OUTPUT_TOOL,
@@ -68,6 +72,8 @@ declare module '@deepseek-ai/dsh-subagent' {
   interface SubagentStopReasonMap {
     /** The child's turn completed normally but never satisfied the structured-output contract. */
     'no-structured-output': 'no-structured-output'
+    /** The child's stream collapsed into a degenerate repetition or a tool-free output flood and was cancelled. */
+    'degenerate-output': 'degenerate-output'
   }
 }
 
@@ -81,6 +87,17 @@ export const THINK_FIRST_CONTINUATION
 /** Provider-authored reason for a turn that completed without the structured-output contract. */
 export const STRUCTURED_OUTPUT_MISSING_DIAGNOSTIC
   = 'Shadow subagent completed its turn without calling the mandatory structured_output tool; no report was captured or relayed.'
+
+/** Provider-authored diagnostics for children cancelled by the degenerate-output watchdog. */
+export const DEGENERATE_OUTPUT_DIAGNOSTICS: Readonly<Record<DegenerateOutputReason, string>> = {
+  repetition: 'Shadow subagent entered a degenerate output loop (the same short token repeated continuously) and was cancelled; no report was captured or relayed.',
+  'output-budget': 'Shadow subagent streamed an excessive amount of output without calling any tool and was cancelled; no report was captured or relayed.',
+}
+
+/** Mutable degenerate-output state shared between the child scope and the settled run reader. */
+export interface DegenerateOutputState {
+  reason: DegenerateOutputReason | undefined
+}
 
 /** Map a session turn outcome to the subagent seam's terminal vocabulary. */
 function toStopReason(reason: TurnEndReason | undefined): SubagentStopReason {
@@ -129,8 +146,12 @@ function attachMinimalContext(childCtx: Context): void {
   })
 }
 
-/** Keep the first live request tool-free, then steer exactly one investigation step. */
-function attachThinkFirst(childCtx: Context, activationBoundary: number): void {
+/**
+ * Keep the first live request tool-free, then steer exactly one investigation step.
+ * A child cancelled by the degenerate-output watchdog must not be steered again:
+ * the skip predicate keeps a cancelled run from restarting its own loop.
+ */
+function attachThinkFirst(childCtx: Context, activationBoundary: number, skipSteer: () => boolean): void {
   const child = childCtx.agent as Agent
   childCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const transformed = await next()
@@ -140,12 +161,44 @@ function attachThinkFirst(childCtx: Context, activationBoundary: number): void {
   })
   let continued = false
   childCtx.on('agent/turn-stopping', ({ agent }) => {
-    if (continued) return
+    if (continued || skipSteer()) return
     continued = true
     agent.steer(createUserMessage({
       content: [{ type: 'text', text: THINK_FIRST_CONTINUATION }],
       source: { kind: 'plugin', plugin: '@whutzefengxie-ops/dsh-shadow-mind' },
     }))
+  })
+}
+
+/**
+ * Watch one child's streamed output and cancel it the moment it degenerates
+ * into a repeated-token loop or a tool-free output flood. The child-side
+ * `session/event` bus carries every committed chunk, so the guard fires within
+ * a few tokens of the collapse instead of waiting out the run timeout.
+ */
+function attachDegenerateOutputGuard(
+  childCtx: Context,
+  childId: SessionId,
+  state: DegenerateOutputState,
+): void {
+  const child = childCtx.agent as Agent
+  const guard = new DegenerateOutputGuard()
+  childCtx.on('session/event', (session: Session, event: SessionEvent) => {
+    if (session.id !== childId || state.reason !== undefined) return
+    if (event.type === 'tool/call') {
+      guard.observeToolCall()
+      return
+    }
+    if (event.type !== 'assistant/chunk') return
+    const chunk = event.data.chunk
+    const text = chunk.type === 'text-delta' || chunk.type === 'reasoning-delta' ? chunk.text : ''
+    if (text === '') return
+    const detection = guard.observeChunk(text)
+    if (detection === undefined) return
+    state.reason = detection.reason
+    // Defer the cancel out of the event dispatch: the guard fires inside the
+    // chunk commit path, and the child's cancel walks its own teardown.
+    queueMicrotask(() => { child.cancel({ kind: 'parent' }) })
   })
 }
 
@@ -174,6 +227,7 @@ async function startInProcessRun(request: ResolvedSubagentStartRequest): Promise
   const inherited = captureDelegatedPolicyOverrides(parent)
 
   let structured: StructuredAttachment | undefined
+  const degenerateState: DegenerateOutputState = { reason: undefined }
   const setup = (childCtx: Context): void => {
     appendDelegatedPolicyOverrides((childCtx.agent as Agent).session, inherited)
     applyChildComposition(childCtx, parent, {
@@ -190,7 +244,10 @@ async function startInProcessRun(request: ResolvedSubagentStartRequest): Promise
       structured = attachStructuredRuntime(childCtx, request.outputSchema, request.structuredAnchorSeqs)
     }
     if (request.contextInheritance === 'none') attachMinimalContext(childCtx)
-    if (request.thinkFirst === true) attachThinkFirst(childCtx, activationBoundary)
+    if (request.thinkFirst === true) {
+      attachThinkFirst(childCtx, activationBoundary, () => degenerateState.reason !== undefined)
+    }
+    attachDegenerateOutputGuard(childCtx, childId, degenerateState)
     attachDescriptorAppend(childCtx, request.descriptor)
   }
 
@@ -213,6 +270,7 @@ async function startInProcessRun(request: ResolvedSubagentStartRequest): Promise
     childId,
     activationBoundary,
     structured,
+    degenerateState,
   )
 }
 
@@ -227,6 +285,7 @@ function drivePublishedRun(
   childId: SessionId,
   boundary: number,
   structured: StructuredAttachment | undefined,
+  degenerateState: DegenerateOutputState,
 ): SubagentRun {
   const child = handle.agent
   const flags = { cancelled: false }
@@ -251,6 +310,7 @@ function drivePublishedRun(
         boundary,
         flags.cancelled,
         structured ? { captured: structured.captured() } : undefined,
+        degenerateState.reason,
       )
     } finally {
       signal.removeEventListener('abort', onAbort)
@@ -279,6 +339,7 @@ function readResult(
   boundary: number,
   cancelled: boolean,
   structured?: { captured?: { value: unknown } | undefined },
+  degenerateReason?: DegenerateOutputReason,
 ): SubagentResult {
   const own = child.session.events.slice(boundary)
   // `droppedUnrun` is deliberately unread: a one-shot prompt is claimed by its
@@ -292,6 +353,16 @@ function readResult(
   // Disposal can tear the owner down before the loop records its ordinary
   // `aborted` end, yielding `disposed` instead.
   const stopReason: SubagentStopReason = cancelled && recorded !== 'completed' ? 'aborted' : recorded
+  // The degenerate-output watchdog wins over every other terminal reading: a
+  // child whose stream collapsed was cancelled mid-generation, and the runtime
+  // must fail the run with the watchdog's actionable diagnostic.
+  if (degenerateReason !== undefined) {
+    return {
+      output,
+      diagnostic: DEGENERATE_OUTPUT_DIAGNOSTICS[degenerateReason],
+      stopReason: 'degenerate-output',
+    }
+  }
   if (structured !== undefined) {
     if (structured.captured !== undefined) {
       return { output, structured: structured.captured.value, stopReason }

@@ -88,6 +88,8 @@ export type {
   ReviewWindowOptions,
   StagnationDetection,
 } from './review-window.ts'
+export { DegenerateOutputGuard, hasRepeatedSuffix, MAX_CHARS_WITHOUT_TOOL_CALL } from './degenerate-output.ts'
+export type { DegenerateOutputDetection, DegenerateOutputReason } from './degenerate-output.ts'
 export { ReportBatcher } from './report-batcher.ts'
 export { buildShadowModelCatalog } from './model-catalog.ts'
 export {
@@ -215,6 +217,7 @@ function providerFailureReason(stopReason: string): ShadowRunReasonCode {
     case 'max-tokens': return 'PROVIDER_MAX_TOKENS'
     case 'refusal': return 'PROVIDER_REFUSAL'
     case 'no-structured-output': return 'STRUCTURED_OUTPUT_MISSING'
+    case 'degenerate-output': return 'DEGENERATE_OUTPUT'
     default: return 'PROVIDER_STOPPED'
   }
 }
@@ -1160,6 +1163,21 @@ export class ShadowMindRuntime extends TypertRemoteService {
     }
     if (result.stopReason !== 'completed') {
       const detail = result.diagnostic ?? `Subagent stopped with ${String(result.stopReason)}`
+      // A degenerate reviewer child is likely to collapse again against the
+      // same trajectory: cool the definition down so pending turns skip it
+      // instead of re-spinning through the same loop back to back.
+      if (result.stopReason === 'degenerate-output') {
+        const until = Date.now() + settings.stagnationCooldownSeconds * 1_000
+        state.cooldowns.set(definition.id, { until, patterns: ['spinning'] })
+        void this.debugMetadata(definition, {
+          time: new Date().toISOString(),
+          status: 'stagnation',
+          patterns: ['spinning'],
+          action: 'cooldown',
+          cooldownUntil: new Date(until).toISOString(),
+          trigger: 'degenerate-output',
+        })
+      }
       await this.finishRun(state, entry, 'failed', {
         stage: 'run',
         reasonCode: providerFailureReason(String(result.stopReason)),
