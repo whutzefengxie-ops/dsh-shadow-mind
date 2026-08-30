@@ -112,7 +112,7 @@ function modelCatalogDescriptor(line) {
 }
 
 /** Patch one generated JavaScript artifact in memory. */
-function patchJs(text) {
+function patchJs(text, requireDeclaration) {
   // 1. Canonical modelCatalog schema const (replace any drifted copy, or insert).
   const constPattern = /const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result\$schema = z\.object\(\{[\s\S]*?\n\}\)\.readonly\(\)/
   if (constPattern.test(text)) text = text.replace(constPattern, () => MODEL_CATALOG_CONST)
@@ -222,7 +222,12 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_1$schema =
     const enumPattern = /const _shadowMindReason\$schema = z\.enum\(\[[\s\S]*?\n\]\)/u
     if (!enumPattern.test(text)) throw new Error('_shadowMindReason$schema anchor not found')
     text = text.replace(enumPattern, () => reasonEnum(members))
-    const declarationPattern = /"declaration": "export type ShadowRunReasonCode = [^"]*";/u
+    // The declaration snapshot is a single JSON line whose value ends at the
+    // closing quote (the semicolon lives inside the reflected declaration).
+    const declarationPattern = /"declaration": "export type ShadowRunReasonCode = [^"]*"/u
+    if (requireDeclaration && !declarationPattern.test(text)) {
+      throw new Error('ShadowRunReasonCode declaration snapshot not found in typert.host.js')
+    }
     if (declarationPattern.test(text)) {
       text = text.replace(declarationPattern, () => reasonDeclaration(members))
     }
@@ -274,7 +279,7 @@ function patchDts(text) {
 const drifted = []
 for (const file of files) {
   const current = readFileSync(file, 'utf8')
-  const patched = patchJs(current)
+  const patched = patchJs(current, file.endsWith('typert.host.js'))
   if (checkMode) {
     if (patched !== current) drifted.push(file)
   } else if (patched !== current) {
