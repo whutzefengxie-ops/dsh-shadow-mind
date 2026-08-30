@@ -22,10 +22,11 @@
   border-bottom: 1px solid color-mix(in srgb, #7c3aed 18%, var(--dsw-alias-border-l3, #d1d5db));
 }
 
-.header > div {
+.headerTitle {
   display: flex;
   align-items: baseline;
   gap: 8px;
+  min-width: 0;
 }
 
 .header strong {
@@ -36,6 +37,37 @@
 .header span:not(.mark) {
   color: var(--dsw-alias-label-tertiary, #6b7280);
   font-size: 12px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  flex: none;
+}
+
+.headerActions button {
+  padding: 4px 10px;
+  border: 1px solid color-mix(in srgb, #7c3aed 32%, var(--dsw-alias-border-l3, #d1d5db));
+  border-radius: 8px;
+  background: transparent;
+  color: #6d28d9;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.headerActions button:hover:not(:disabled) {
+  background: color-mix(in srgb, #7c3aed 10%, transparent);
+}
+
+.headerActions button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.headerActions button:focus-visible {
+  outline: 2px solid #7c3aed;
+  outline-offset: 2px;
 }
 
 .mark {

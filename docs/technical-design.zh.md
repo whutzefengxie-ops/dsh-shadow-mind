@@ -84,7 +84,7 @@ scheduling -> running -> report | silent | not_relevant | aborted | failed
 
 `report` 是唯一可以进入 batcher 并 relay 给主 agent 的终态。`silent`、`not_relevant`、`aborted` 和 `failed` 只更新卡片、状态和调试日志，不调用 `steer()` 或 `followup()`；Shadow relay 的来源类型也不匹配“真实用户输入”取消监听。两项约束共同保证状态卡片不会再次触发主 agent 或 Shadow 调度。
 
-`/shadow retry|new` 只作用于当前 root：`retry` 重试本会话最近一次失败或中断的运行，`new` 在会话尚未准入任何运行前强制立即审查。运行与最近终态继续由设置页和对话卡片展示；活动数恢复为零后，最近结果仍可证明本进程内发生过运行。
+`/shadow new` 只作用于当前 root：在会话尚未准入任何运行前强制立即审查。失败或中断的运行不再由命令重试，而是由对应对话卡片上该运行自身的「重试」按钮按 run id 精确重跑；卡片头部的「暂停审查/继续审查」按钮通过 `pause`/`resume` Remote 暂停或恢复本会话调度，暂停同时取消已准入的运行（原因码 `SHADOW_PAUSED`）。运行与最近终态继续由设置页和对话卡片展示；活动数恢复为零后，最近结果仍可证明本进程内发生过运行。
 
 ## 3. 与 Pi 的有意差异
 
@@ -104,6 +104,6 @@ DSH 默认不公开工具参数和结果预览；Pi 会保留工具参数并为�
 
 安装层验收要求 `dsh --profile web --dump-config` 同时出现 `shadow-mind-runtime` 和 `tool-shadow-mind`，客户端启动清单出现根包，Web 启动无 Typert、Remote 或客户端注入错误。
 
-功能验收使用新 Session，把 heartbeat 与定义激活概率都设为 `1`，启用匹配全部模型的审查定义，再让 root 明确使用至少一个工具。运行开始后，被审查回复下方应立即出现占位卡片和新消息取消提示，并在完成后保持锚点不变；未触发调度的会话可用 `/shadow new` 强制准入，失败运行可用 `/shadow retry` 重试。
+功能验收使用新 Session，把 heartbeat 与定义激活概率都设为 `1`，启用匹配全部模型的审查定义，再让 root 明确使用至少一个工具。运行开始后，被审查回复下方应立即出现占位卡片和新消息取消提示，并在完成后保持锚点不变；未触发调度的会话可用 `/shadow new` 强制准入，失败运行可用卡片上对应运行的「重试」按钮重试，卡片头部的「暂停审查/继续审查」按钮应能暂停调度并取消活动运行、再恢复调度。
 
 `report` 验收要求 Session 日志包含带 verdict 与 refs 的持久化 relay，root 自动完成 follow-up，卡片正文正确渲染标题、列表、表格和代码块，并可跳转 child Session。`silent` 必须显示明确终态卡片且 Session 中没有 Shadow relay；`not_relevant`、取消和失败同样不得生成伪报告。新用户消息取消用例必须显示 `USER_MESSAGE_RECEIVED`，包括已验证但仍待 relay 的报告；Shadow 超时必须显示 `SHADOW_TIMEOUT`，调试 JSONL 能从 `run-admitted` 还原到 `run-finished` 且不包含提示词、报告、绝对路径、stack 或凭据。

@@ -296,7 +296,7 @@ export const TYPERT = {
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
         schema: _shadowMindStatusV2$schema,
       },
-      sourceLocation: {"file":"src/runtime/index.ts","line":632,"column":3},
+      sourceLocation: {"file":"src/runtime/index.ts","line":634,"column":3},
     },
     {
       id: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/cycles',

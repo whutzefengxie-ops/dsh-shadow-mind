@@ -4,7 +4,7 @@ English | [中文](installation-runtime-validation.zh.md)
 
 This document provides an executable workflow for installing `dsh-shadow-mind` into a DeepSeek Harness source host, starting the Web profile, completing a real-model acceptance run, and verifying restart semantics. Verified behavior and target behavior are identified separately; remediation items are not delivered until their implementation and automated acceptance checks pass.
 
-> **Superseded command surface.** This document was written against a historical build whose `/shadow` command supported `status|pause|resume|toggle`. The shipped command surface is now limited to `/shadow retry` (re-run the latest failed or aborted review) and `/shadow new` (force a review before any run was admitted). Every `/shadow status` step below is therefore historical: current run state is observed through the Settings page status line, the per-turn conversation cards, and the two commands above.
+> **Superseded command surface.** This document was written against a historical build whose `/shadow` command supported `status|pause|resume|toggle`. The shipped command surface is now limited to `/shadow new` (force a review before any run was admitted); run controls live on the per-turn conversation cards, where each failed or aborted run has its own Retry button and the card header offers Pause/Resume for the session's scheduling. Every `/shadow status` step below is therefore historical: current run state is observed through the Settings page status line and the per-turn conversation cards.
 
 ## 1. Goals and scope
 

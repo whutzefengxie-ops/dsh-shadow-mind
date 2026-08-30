@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { ShadowReportCard, type ShadowReportCardProps } from '../src/client/ShadowReportCard.tsx'
-import type { ShadowReviewCycle, ShadowRunView } from '../src/runtime/types.ts'
+import type { ShadowMindStatus, ShadowReviewCycle, ShadowRunView } from '../src/runtime/types.ts'
 
 // The real primitive bundle ships node_modules CSS modules that vitest does not
 // process; the card only renders plain text through it in these tests.
@@ -32,9 +32,30 @@ function cycle(runs: readonly ShadowRunView[]): ShadowReviewCycle {
   return { capturedThroughSeq: 20, scheduling: false, runs }
 }
 
+function status(paused: boolean): ShadowMindStatus {
+  return {
+    paused,
+    active: [],
+    pendingSchedules: 0,
+    epoch: 0,
+    totalRuns: 1,
+    valueLoop: [],
+    spentChars: 0,
+    budgetTier: 'standard',
+    cooldowns: [],
+    pendingEscalations: [],
+    recentReviews: [],
+  }
+}
+
 function mount(
   reviewCycle: ShadowReviewCycle,
   retry: ShadowReportCardProps['retry'],
+  options: {
+    paused?: boolean
+    pause?: ShadowReportCardProps['pause']
+    resume?: ShadowReportCardProps['resume']
+  } = {},
 ) {
   const poke = vi.fn()
   const props = {
@@ -42,7 +63,10 @@ function mount(
     sessionId: 'session-1' as unknown as SessionId,
     openSession: vi.fn(),
     useCycle: () => reviewCycle,
+    useStatus: () => status(options.paused ?? false),
     retry,
+    pause: options.pause ?? vi.fn().mockResolvedValue(undefined),
+    resume: options.resume ?? vi.fn().mockResolvedValue(undefined),
     poke,
     t: (key: string) => key,
   } as unknown as ShadowReportCardProps
@@ -91,5 +115,45 @@ describe('ShadowReportCard retry', () => {
     })
     expect(retry).toHaveBeenCalledTimes(1)
     expect((screen.getByText('retryRun') as HTMLButtonElement).disabled).toBe(false)
+  })
+})
+
+describe('ShadowReportCard pause', () => {
+  it('offers pause while running and pauses the session on click', async () => {
+    const pause = vi.fn().mockResolvedValue(undefined)
+    const { poke } = mount(cycle([FAILED_RUN]), vi.fn(), { pause })
+
+    const button = screen.getByText('pauseReview')
+    expect(button).toBeInstanceOf(HTMLButtonElement)
+    fireEvent.click(button)
+
+    expect(pause).toHaveBeenCalledWith('session-1')
+    await waitFor(() => {
+      expect(poke).toHaveBeenCalledWith('session-1')
+    })
+  })
+
+  it('offers resume with a paused notice while paused and resumes on click', async () => {
+    const resume = vi.fn().mockResolvedValue(undefined)
+    const { poke } = mount(cycle([FAILED_RUN]), vi.fn(), { paused: true, resume })
+
+    expect(screen.getByText('reviewPaused')).toBeDefined()
+    fireEvent.click(screen.getByText('resumeReview'))
+
+    expect(resume).toHaveBeenCalledWith('session-1')
+    await waitFor(() => {
+      expect(poke).toHaveBeenCalledWith('session-1')
+    })
+  })
+
+  it('surfaces the pause rejection reason and re-enables the toggle afterwards', async () => {
+    const pause = vi.fn().mockRejectedValue(new Error('the session is gone'))
+    mount(cycle([FAILED_RUN]), vi.fn(), { pause })
+
+    fireEvent.click(screen.getByText('pauseReview'))
+    await waitFor(() => {
+      expect(screen.getByText('pauseError: the session is gone')).toBeDefined()
+    })
+    expect((screen.getByText('pauseReview') as HTMLButtonElement).disabled).toBe(false)
   })
 })

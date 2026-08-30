@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { MarkdownText, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { ShadowReviewCycle, ShadowRunPhase, ShadowRunView } from '../runtime/types.ts'
+import type { ShadowMindStatus, ShadowReviewCycle, ShadowRunPhase, ShadowRunView } from '../runtime/types.ts'
 import type { NS } from './index.ts'
 import { projectReviewRuns } from './shadow-report-projection.ts'
 import css from './ShadowReportCard.module.css'
@@ -18,9 +18,15 @@ export type ShadowRelayMarkerProps = PropsRuntime<'conversation.chat.node', 'sha
 export interface ShadowReportCardInjected {
   readonly openSession: (sessionId: SessionId) => void
   readonly useCycle: (sessionId: SessionId, capturedThroughSeq: number) => ShadowReviewCycle | undefined
-  /** Manually re-run one failed or aborted run. */
+  /** Manually re-run one failed or aborted run of a specific Shadow subagent. */
   readonly retry: (sessionId: SessionId, runId: string) => Promise<unknown>
-  /** Refresh the review cycle immediately after a retry is admitted. */
+  /** Read the pause/resume-aware orchestration status for the session. */
+  readonly useStatus: (sessionId: SessionId) => ShadowMindStatus | undefined
+  /** Pause scheduling and cancel admitted Shadow work for the session. */
+  readonly pause: (sessionId: SessionId) => Promise<unknown>
+  /** Resume scheduling for a paused session. */
+  readonly resume: (sessionId: SessionId) => Promise<unknown>
+  /** Refresh the review cycle immediately after a retry or pause is admitted. */
   readonly poke: (sessionId: SessionId) => void
 }
 
@@ -56,16 +62,22 @@ function RunBody({ run, t }: { run: ShadowRunView; t: ShadowReportCardProps['t']
 }
 
 /** Display a running placeholder and update the same row to every terminal phase. */
-export function ShadowReportCard({ node, sessionId, openSession, useCycle, retry, poke, t }: ShadowReportCardProps) {
+export function ShadowReportCard({
+  node, sessionId, openSession, useCycle, useStatus, retry, pause, resume, poke, t,
+}: ShadowReportCardProps) {
   const capturedThroughSeq = node.data.capturedThroughSeq
   const cycle = useCycle(sessionId, capturedThroughSeq)
+  const status = useStatus(sessionId)
   const runs = projectReviewRuns(cycle, node.data.reports)
   const [retryingRun, setRetryingRun] = useState<string | null>(null)
   const [retryError, setRetryError] = useState<string | null>(null)
+  const [pausing, setPausing] = useState(false)
+  const [pauseError, setPauseError] = useState<string | null>(null)
   if (runs.length === 0 && cycle?.failure === undefined && cycle?.scheduling !== true) {
     return <span hidden data-shadow-review-empty />
   }
   const running = cycle?.scheduling === true || runs.some(run => run.phase === 'running')
+  const paused = status?.paused === true
   const runRetry = (runId: string): void => {
     setRetryingRun(runId)
     setRetryError(null)
@@ -76,13 +88,34 @@ export function ShadowReportCard({ node, sessionId, openSession, useCycle, retry
       },
     ).finally(() => { setRetryingRun(null) })
   }
+  const runPauseToggle = (): void => {
+    setPausing(true)
+    setPauseError(null)
+    void (paused ? resume(sessionId) : pause(sessionId)).then(
+      () => { poke(sessionId) },
+      (error: unknown) => {
+        setPauseError(error instanceof Error ? error.message : String(error))
+      },
+    ).finally(() => { setPausing(false) })
+  }
   return (
     <section className={css.card} data-shadow-review-card aria-live={running ? 'polite' : undefined}>
       <header className={css.header}>
         <span className={css.mark} aria-hidden>S</span>
-        <div>
+        <div className={css.headerTitle}>
           <strong>{t('reviewCardTitle')}</strong>
           <span>{t('reviewRunCount', { count: runs.length })}</span>
+        </div>
+        <div className={css.headerActions}>
+          <button
+            type="button"
+            disabled={pausing}
+            aria-label={paused ? t('resumeReview') : t('pauseReview')}
+            data-shadow-pause-toggle
+            onClick={runPauseToggle}
+          >
+            {pausing ? t('pausePending') : t(paused ? 'resumeReview' : 'pauseReview')}
+          </button>
         </div>
       </header>
       {running ? (
@@ -91,6 +124,12 @@ export function ShadowReportCard({ node, sessionId, openSession, useCycle, retry
           <span>{t('reviewInputWarning')}</span>
         </div>
       ) : null}
+      {paused ? (
+        <div className={css.warning} role="status" data-shadow-review-paused>
+          <span>{t('reviewPaused')}</span>
+        </div>
+      ) : null}
+      {pauseError === null ? null : <p className={css.error}>{t('pauseError')}: {pauseError}</p>}
       {cycle?.failure === undefined ? null : (
         <article className={css.run} data-shadow-run-phase="failed">
           <div className={css.runHeader}>

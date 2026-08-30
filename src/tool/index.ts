@@ -146,30 +146,28 @@ const DEFAULT_SHADOW_PARAMETERS = {
   prompt: { type: 'string' as const, description: 'Non-empty Shadow instructions.' },
 } as const
 
-/** Compact acknowledgment for one admitted manual Shadow run. */
-function admittedConfirmation(operation: 'retry' | 'new', status: ShadowMindStatus): string {
+/** Compact acknowledgment for one admitted manual Shadow review. */
+function admittedConfirmation(status: ShadowMindStatus): string {
   const runs = status.active.map(entry => `${entry.shadowId}/${entry.runId}`)
   return runs.length === 0
-    ? `Shadow ${operation} acknowledged; no run is active.`
-    : `Shadow ${operation} admitted; ${String(runs.length)} running: ${runs.join(', ')}.`
+    ? 'Shadow review acknowledged; no run is active.'
+    : `Shadow review admitted; ${String(runs.length)} running: ${runs.join(', ')}.`
 }
 
 /** Register all Shadow management tools and the human command. */
 export function apply(ctx: Context): void {
   ctx.commands.register({
     name: 'shadow',
-    description: 'Retry the latest failed Shadow review or force a fresh review',
-    input: { hint: '[retry|new]', images: false },
+    description: 'Force an immediate Shadow review of the current session',
+    input: { hint: '[new]', images: false },
     handler: async ({ agent, rawInput }) => {
       const operation = rawInput.trim()
-      if (operation !== 'retry' && operation !== 'new') {
-        return { kind: 'error', text: 'Usage: /shadow [retry|new]' }
+      if (operation !== 'new') {
+        return { kind: 'error', text: 'Usage: /shadow new' }
       }
       try {
-        const status = operation === 'retry'
-          ? await ctx.shadowMind.retryLatest(agent)
-          : await ctx.shadowMind.reviewNow(agent)
-        return { kind: 'success', text: admittedConfirmation(operation, status) }
+        const status = await ctx.shadowMind.reviewNow(agent)
+        return { kind: 'success', text: admittedConfirmation(status) }
       } catch (error: unknown) {
         return { kind: 'error', text: error instanceof Error ? error.message : String(error) }
       }
