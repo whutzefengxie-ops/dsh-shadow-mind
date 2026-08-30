@@ -42,42 +42,68 @@ describe('hasRepeatedSuffix', () => {
 describe('DegenerateOutputGuard', () => {
   it('fires repetition once and then ignores later chunks', () => {
     const guard = new DegenerateOutputGuard()
-    guard.observeChunk('I will now investigate the trajectory.\n')
-    expect(guard.observeChunk('<tool_calls>\n'.repeat(3))).toBeUndefined()
-    expect(guard.observeChunk('<tool_calls>\n')).toEqual({ reason: 'repetition' })
-    expect(guard.observeChunk('<tool_calls>\n')).toBeUndefined()
+    guard.observeChunk('I will now investigate the trajectory.\n', 'text')
+    expect(guard.observeChunk('<tool_calls>\n'.repeat(3), 'text')).toBeUndefined()
+    expect(guard.observeChunk('<tool_calls>\n', 'text')).toEqual({ reason: 'repetition' })
+    expect(guard.observeChunk('<tool_calls>\n', 'text')).toBeUndefined()
+  })
+
+  it('cuts reasoning loops through the repetition rule, not the budget', () => {
+    const guard = new DegenerateOutputGuard()
+    expect(guard.observeChunk('<tool_calls>\n'.repeat(3), 'reasoning')).toBeUndefined()
+    expect(guard.observeChunk('<tool_calls>\n', 'reasoning')).toEqual({ reason: 'repetition' })
   })
 
   it('keeps the repetition window bounded to the stream tail', () => {
     const guard = new DegenerateOutputGuard()
     // A long non-repetitive preamble: printable ASCII cycling with period 61,
-    // which no block of at most 24 characters can repeat inside the 96-char tail.
+    // which no block of at most 32 characters can repeat inside the 128-char tail.
     const preamble = Array.from({ length: 200 }, (_, index) => String.fromCharCode(33 + (index % 61))).join('')
-    guard.observeChunk(preamble)
-    guard.observeChunk('ab1 '.repeat(3))
-    expect(guard.observeChunk('ab1 ')).toEqual({ reason: 'repetition' })
+    guard.observeChunk(preamble, 'text')
+    guard.observeChunk('ab1 '.repeat(3), 'text')
+    expect(guard.observeChunk('ab1 ', 'text')).toEqual({ reason: 'repetition' })
   })
 
-  it('fires output-budget when too many characters stream without a tool call', () => {
+  it('fires output-budget when too much visible text streams without progress', () => {
     const guard = new DegenerateOutputGuard()
     const half = 'x'.repeat(Math.floor(MAX_CHARS_WITHOUT_TOOL_CALL / 2))
-    guard.observeChunk(half)
-    expect(guard.observeChunk(half)).toBeUndefined()
-    expect(guard.observeChunk('y')).toEqual({ reason: 'output-budget' })
+    guard.observeChunk(half, 'text')
+    expect(guard.observeChunk(half, 'text')).toBeUndefined()
+    expect(guard.observeChunk('y', 'text')).toEqual({ reason: 'output-budget' })
+  })
+
+  it('never feeds reasoning into the output budget', () => {
+    const guard = new DegenerateOutputGuard()
+    const huge = 'r'.repeat(MAX_CHARS_WITHOUT_TOOL_CALL * 4)
+    expect(guard.observeChunk(huge, 'reasoning')).toBeUndefined()
+    // Visible text still counts after the reasoning storm.
+    expect(guard.observeChunk('x'.repeat(MAX_CHARS_WITHOUT_TOOL_CALL), 'text')).toBeUndefined()
+    expect(guard.observeChunk('y', 'text')).toEqual({ reason: 'output-budget' })
   })
 
   it('restarts the output budget on each tool call', () => {
     const guard = new DegenerateOutputGuard()
     const chunk = 'x'.repeat(Math.floor(MAX_CHARS_WITHOUT_TOOL_CALL / 2))
-    guard.observeChunk(chunk)
+    guard.observeChunk(chunk, 'text')
     guard.observeToolCall()
-    guard.observeChunk(chunk)
+    guard.observeChunk(chunk, 'text')
     guard.observeToolCall()
-    expect(guard.observeChunk(chunk)).toBeUndefined()
+    expect(guard.observeChunk(chunk, 'text')).toBeUndefined()
+  })
+
+  it('restarts the output budget on each step or turn boundary', () => {
+    const guard = new DegenerateOutputGuard()
+    const chunk = 'x'.repeat(Math.floor(MAX_CHARS_WITHOUT_TOOL_CALL / 2))
+    guard.observeChunk(chunk, 'text')
+    guard.observeBoundary()
+    guard.observeChunk(chunk, 'text')
+    guard.observeBoundary()
+    expect(guard.observeChunk(chunk, 'text')).toBeUndefined()
   })
 
   it('does not fire the budget for empty chunks', () => {
     const guard = new DegenerateOutputGuard()
-    expect(guard.observeChunk('')).toBeUndefined()
+    expect(guard.observeChunk('', 'text')).toBeUndefined()
+    expect(guard.observeChunk('', 'reasoning')).toBeUndefined()
   })
 })

@@ -189,11 +189,16 @@ function attachDegenerateOutputGuard(
       guard.observeToolCall()
       return
     }
+    if (event.type === 'step/end' || event.type === 'turn/end') {
+      // A fresh step gets a fresh budget: a long but healthy tool-free
+      // planning step must not bleed its text into the investigation step.
+      guard.observeBoundary()
+      return
+    }
     if (event.type !== 'assistant/chunk') return
     const chunk = event.data.chunk
-    const text = chunk.type === 'text-delta' || chunk.type === 'reasoning-delta' ? chunk.text : ''
-    if (text === '') return
-    const detection = guard.observeChunk(text)
+    if (chunk.type !== 'text-delta' && chunk.type !== 'reasoning-delta') return
+    const detection = guard.observeChunk(chunk.text, chunk.type === 'text-delta' ? 'text' : 'reasoning')
     if (detection === undefined) return
     state.reason = detection.reason
     // Defer the cancel out of the event dispatch: the guard fires inside the
