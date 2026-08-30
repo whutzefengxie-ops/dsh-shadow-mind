@@ -30,7 +30,7 @@ import {
   shadowRelayMarkerDefinition,
   shadowReviewDefinition,
 } from './shadow-report-conversation.ts'
-import { ShadowReviewStore, useShadowReviewCycle } from './shadow-review-store.ts'
+import { ShadowReviewStore, useShadowMindStatus, useShadowReviewCycle } from './shadow-review-store.ts'
 import { en, zh } from './locales.ts'
 
 export type { ShadowMindSettingsTabInjected, ShadowMindSettingsTabProps } from './ShadowMindSettingsTab.tsx'
@@ -77,10 +77,16 @@ export async function apply(ctx: ClientContext): Promise<void> {
 
   ctx.inject(['slots', 'remote.shadowMind'], (scope: ClientContext) => {
     const remote = scope.remote.shadowMind
-    const reviewStore = new ShadowReviewStore(sessionId => remoteValue<readonly ShadowReviewCycle[]>(
-      'shadowMind.cycles',
-      remote.cycles(sessionId),
-    ))
+    const reviewStore = new ShadowReviewStore(
+      sessionId => remoteValue<readonly ShadowReviewCycle[]>(
+        'shadowMind.cycles',
+        remote.cycles(sessionId),
+      ),
+      sessionId => remoteValue<ShadowMindStatus>(
+        'shadowMind.status',
+        remote.status(sessionId),
+      ),
+    )
     scope.effect(() => () => { reviewStore.dispose() }, 'ui-shadow-mind: review lifecycle store')
     scope.uiConversation.events.register(shadowReviewDefinition)
     scope.uiConversation.events.register(shadowRelayMarkerDefinition)
@@ -95,9 +101,18 @@ export async function apply(ctx: ClientContext): Promise<void> {
           sessionId,
           capturedThroughSeq,
         ),
+        useStatus: sessionId => useShadowMindStatus(reviewStore, sessionId),
         retry: (sessionId, runId) => remoteValue<ShadowMindStatus>(
           'shadowMind.retry',
           remote.retry(sessionId, runId),
+        ),
+        pause: sessionId => remoteValue<ShadowMindStatus>(
+          'shadowMind.pause',
+          remote.pause(sessionId),
+        ),
+        resume: sessionId => remoteValue<ShadowMindStatus>(
+          'shadowMind.resume',
+          remote.resume(sessionId),
         ),
         poke: sessionId => { reviewStore.poke(sessionId) },
       }),

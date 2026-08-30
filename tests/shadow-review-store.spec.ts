@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { ShadowReviewCycle } from '../src/runtime/types.ts'
+import type { ShadowMindStatus, ShadowReviewCycle } from '../src/runtime/types.ts'
 import { ShadowReviewStore } from '../src/client/shadow-review-store.ts'
 
 const sessionId = 'root-session' as SessionId
@@ -22,6 +22,24 @@ function cycle(phase: 'running' | 'silent'): ShadowReviewCycle {
   }
 }
 
+function status(paused: boolean): ShadowMindStatus {
+  return {
+    paused,
+    active: [],
+    pendingSchedules: 0,
+    epoch: 0,
+    totalRuns: 1,
+    valueLoop: [],
+    spentChars: 0,
+    budgetTier: 'standard',
+    cooldowns: [],
+    pendingEscalations: [],
+    recentReviews: [],
+  }
+}
+
+const silentStatus = vi.fn().mockResolvedValue(status(false))
+
 afterEach(() => { vi.useRealTimers() })
 
 describe('Shadow review lifecycle store', () => {
@@ -30,7 +48,7 @@ describe('Shadow review lifecycle store', () => {
     const load = vi.fn()
       .mockResolvedValueOnce([cycle('running')])
       .mockResolvedValueOnce([cycle('silent')])
-    const store = new ShadowReviewStore(load)
+    const store = new ShadowReviewStore(load, silentStatus)
     const listener = vi.fn()
     const unsubscribe = store.subscribe(sessionId, listener)
 
@@ -48,13 +66,50 @@ describe('Shadow review lifecycle store', () => {
 
   it('deduplicates concurrent subscribers for one session', async () => {
     const load = vi.fn().mockResolvedValue([cycle('silent')])
-    const store = new ShadowReviewStore(load)
+    const store = new ShadowReviewStore(load, silentStatus)
     const first = store.subscribe(sessionId, () => {})
     const second = store.subscribe(sessionId, () => {})
 
     await vi.waitFor(() => { expect(load).toHaveBeenCalledTimes(1) })
     first()
     second()
+    store.dispose()
+  })
+
+  it('loads the orchestration status beside cycles and refreshes it on poke', async () => {
+    const load = vi.fn().mockResolvedValue([cycle('silent')])
+    const loadStatus = vi.fn()
+      .mockResolvedValueOnce(status(false))
+      .mockResolvedValueOnce(status(true))
+    const store = new ShadowReviewStore(load, loadStatus)
+    const listener = vi.fn()
+    store.subscribe(sessionId, listener)
+
+    await vi.waitFor(() => { expect(loadStatus).toHaveBeenCalledTimes(1) })
+    expect(store.status(sessionId)?.paused).toBe(false)
+
+    store.poke(sessionId)
+    await vi.waitFor(() => { expect(loadStatus).toHaveBeenCalledTimes(2) })
+    expect(store.status(sessionId)?.paused).toBe(true)
+
+    store.dispose()
+  })
+
+  it('keeps the last known status when a status refresh fails', async () => {
+    const load = vi.fn().mockResolvedValue([cycle('silent')])
+    const loadStatus = vi.fn()
+      .mockResolvedValueOnce(status(true))
+      .mockRejectedValueOnce(new Error('status unavailable'))
+    const store = new ShadowReviewStore(load, loadStatus)
+    store.subscribe(sessionId, () => {})
+
+    await vi.waitFor(() => { expect(loadStatus).toHaveBeenCalledTimes(1) })
+    expect(store.status(sessionId)?.paused).toBe(true)
+
+    store.poke(sessionId)
+    await vi.waitFor(() => { expect(loadStatus).toHaveBeenCalledTimes(2) })
+    expect(store.status(sessionId)?.paused).toBe(true)
+
     store.dispose()
   })
 })
