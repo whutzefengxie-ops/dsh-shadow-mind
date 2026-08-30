@@ -61,6 +61,16 @@ export interface HangAfter {
 }
 
 /**
+ * Script entry that streams its preamble chunks, then floods one text token
+ * (e.g. `<tool_calls>\n`) until the request is aborted — the exact runaway
+ * stream the degenerate-output watchdog must cut short.
+ */
+export interface FloodAfter {
+  floodAfter: StreamChunk[]
+  floodToken: string
+}
+
+/**
  * Mock adapter driven by a script: each model call consumes the next entry.
  * Records every request it receives for assertions. An entry may be a
  * function to compute chunks from the request, a 'hang' marker that
@@ -73,7 +83,7 @@ export class MockAdapter extends LlmAdapter {
   requests: GenerateOptions[] = []
 
   constructor(
-    private script: (StreamChunk[] | ((options: GenerateOptions) => StreamChunk[]) | 'hang' | 'hang-slow' | HangAfter)[],
+    private script: (StreamChunk[] | ((options: GenerateOptions) => StreamChunk[]) | 'hang' | 'hang-slow' | HangAfter | FloodAfter)[],
     private readonly reasoning?: LlmModelReasoningInfo,
     private readonly defaultMaxTokens?: number,
   ) {
@@ -113,6 +123,13 @@ export class MockAdapter extends LlmAdapter {
         options.signal?.addEventListener('abort', () => { reject(new Error('aborted')) }, { once: true })
       })
       return
+    }
+    if (typeof entry === 'object' && !Array.isArray(entry) && 'floodAfter' in entry) {
+      for (const chunk of entry.floodAfter) yield chunk
+      for (;;) {
+        if (options.signal?.aborted) throw new Error('aborted')
+        yield { type: 'text-delta', index: 0, text: entry.floodToken }
+      }
     }
     if (entry === 'hang-slow') {
       yield { type: 'block-start', index: 0, blockType: 'text' }

@@ -161,6 +161,52 @@ describe('Shadow Mind conditioned subagent provider', () => {
     expect(ctx.agents.get(run.id)).toBeUndefined()
   })
 
+  it('cancels a child stuck in a degenerate repetition loop as degenerate-output', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    await mountAgentLoopTestDependencies(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SubagentRuntime)
+    installShadowMindProvider(ctx)
+
+    const adapter = new MockAdapter([
+      textResponse('1. Inspect the rendered sequence anchors.'),
+      // The shipped failure: the child starts its tool-free planning step and
+      // then collapses into streaming the bare <tool_calls> marker forever.
+      {
+        floodAfter: [{ type: 'block-start', index: 0, blockType: 'text' }],
+        floodToken: '<tool_calls>\n',
+      },
+    ])
+    ctx.llm.registerAdapter(['selected'], adapter)
+    const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
+
+    const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+      label: 'shadow:reviewer',
+      parent,
+      prompt: [{ type: 'text', text: 'Plan first, then review the numbered trajectory.' }],
+      signal: new AbortController().signal,
+      maxDepth: 1,
+      outputSchema: OUTPUT_SCHEMA,
+      contextInheritance: 'none',
+      thinkFirst: true,
+      modelSelection: { provider: 'selected', model: 'review-model' },
+    })
+
+    // The watchdog must cut the flood short within milliseconds instead of
+    // letting the run occupy its slot until a wall-clock timeout.
+    const result = await run.result
+    expect(result).toMatchObject({
+      stopReason: 'degenerate-output',
+      diagnostic: expect.stringContaining('degenerate output loop'),
+    })
+    expect(result.structured).toBeUndefined()
+    expect(adapter.requests).toHaveLength(2)
+
+    await run.dispose()
+    expect(ctx.agents.get(run.id)).toBeUndefined()
+  })
+
   it('still resolves error when the child fails mid-turn rather than no-structured-output', async () => {
     const ctx = new Context()
     contexts.push(ctx)
