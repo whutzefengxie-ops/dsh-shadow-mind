@@ -3,7 +3,7 @@
 import z from '@deepseek-ai/schemastery'
 import type Schema from '@deepseek-ai/schemastery'
 import { SHADOW_MODEL_ROUTE_PATTERN } from './model-route.ts'
-import type { ShadowMindConfig, ShadowMindSettings } from './types.ts'
+import { DEFAULT_COLLAPSED_BY_DEFAULT, type ShadowMindConfig, type ShadowMindSettings } from './types.ts'
 
 /** Default per-turn activation probability of the single Shadow reviewer. */
 export const DEFAULT_ACTIVATION_PROBABILITY = 0.7
@@ -60,6 +60,9 @@ const SHADOW_MIND_SETTINGS_OBJECT = z.object({
   // so a half-typed override degrades to unset instead of rejecting the config.
   frugalShadowModel: z.string(),
   staleReportDecay: z.number().min(0).max(1).default(0),
+  // Browser-only presentation preference; the runtime stores and serves it
+  // without consuming it, so the Web card and settings tab share one source.
+  collapsedByDefault: z.boolean().default(DEFAULT_COLLAPSED_BY_DEFAULT),
 })
 
 /** Settings shape whose properties the healing transform may rewrite in place. */

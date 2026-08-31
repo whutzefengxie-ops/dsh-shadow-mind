@@ -82,6 +82,41 @@
   font-weight: 700;
 }
 
+/* Collapse/expand toggle pinned to the top-right corner of the card header,
+   right of the pause/resume actions. The triangle points right when collapsed
+   and rotates down when expanded. */
+.toggle {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary, #6b7280);
+  cursor: pointer;
+}
+
+.toggle svg {
+  transition: transform 0.15s ease;
+}
+
+.toggleExpanded svg {
+  transform: rotate(90deg);
+}
+
+.toggle:hover {
+  background: color-mix(in srgb, #7c3aed 10%, transparent);
+  color: #6d28d9;
+}
+
+.toggle:focus-visible {
+  outline: 2px solid #7c3aed;
+  outline-offset: 2px;
+}
+
 .warning {
   display: flex;
   align-items: center;
