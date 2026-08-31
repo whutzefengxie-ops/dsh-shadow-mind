@@ -18,6 +18,9 @@ export type ShadowVerdict = 'challenge' | 'gap' | 'confirm' | 'uncertain'
 /** Stable id of the single scheduled Shadow definition. */
 export const DEFAULT_SHADOW_ID = 'default'
 
+/** Default initial collapse state for new Shadow report cards (collapsed). */
+export const DEFAULT_COLLAPSED_BY_DEFAULT = true
+
 /** Honest relationship between the root and reviewer model vendors. */
 export type ShadowIndependence = 'independent' | 'unverified' | 'unavailable' | 'same_vendor'
 
@@ -163,6 +166,8 @@ export interface ShadowMindSettings {
   readonly frugalShadowModel?: string
   /** Multiplicative probability decay for repeated report envelopes. */
   readonly staleReportDecay: number
+  /** Whether new Shadow report cards start with their report content collapsed. */
+  readonly collapsedByDefault: boolean
 }
 
 /** Partial live-settings write; null removes one optional user override. */

@@ -1,6 +1,6 @@
 /** Shadow Mind deployment and user-settings schemas. @module @whutzefengxie-ops/dsh-shadow-mind/config */
 import type Schema from '@deepseek-ai/schemastery';
-import type { ShadowMindConfig, ShadowMindSettings } from './types.ts';
+import { type ShadowMindConfig, type ShadowMindSettings } from './types.ts';
 /** Default per-turn activation probability of the single Shadow reviewer. */
 export declare const DEFAULT_ACTIVATION_PROBABILITY = 0.7;
 /** Default per-Shadow deadline in seconds (10 minutes: deep reviews frequently exceed the old 5-minute budget). */

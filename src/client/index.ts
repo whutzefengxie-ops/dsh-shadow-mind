@@ -31,6 +31,12 @@ import {
   shadowReviewDefinition,
 } from './shadow-report-conversation.ts'
 import { ShadowReviewStore, useShadowMindStatus, useShadowReviewCycle } from './shadow-review-store.ts'
+import {
+  COLLAPSED_BY_DEFAULT_FIELD,
+  SHADOW_MIND_CARD_SETTINGS_NAMESPACE,
+  useCardCollapsedByDefault,
+  type ShadowCardSettings,
+} from './card-preferences.ts'
 import { en, zh } from './locales.ts'
 
 export type { ShadowMindSettingsTabInjected, ShadowMindSettingsTabProps } from './ShadowMindSettingsTab.tsx'
@@ -41,6 +47,24 @@ export type { ShadowMindLocaleKey } from './locales.ts'
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'settings.shadowMind'
 
+/**
+ * Session service face the Web shell exposes to client plugins. The Host-typed
+ * `ctx.sessions` (`@deepseek-ai/dsh-session`'s SessionStore) is a different
+ * static shape, so client callers bridge it structurally, exactly like the
+ * harness' own client plugins do through the session-controller contract.
+ */
+interface ClientSessions {
+  /** Resolve one agent-scoped context view for a session id. */
+  scope(sessionId: SessionId): ClientContext | undefined
+  /** Select one session as current. */
+  open(sessionId: SessionId): void
+}
+
+/** Bridge `ctx.sessions` to the client session service face. */
+function clientSessions(ctx: ClientContext): ClientSessions {
+  return ctx.sessions as unknown as ClientSessions
+}
+
 /** Services required by the Settings tab, Remote methods, and slash-command acknowledgment. */
 export const inject = [
   'slots',
@@ -48,6 +72,7 @@ export const inject = [
   'sessions',
   'remote',
   'uiConversation',
+  'settingsScope',
 ]
 
 /** Unwrap one generated Remote business result. */
@@ -67,15 +92,26 @@ export async function apply(ctx: ClientContext): Promise<void> {
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'ui-shadow-mind: dictionaries')
   const t = ctx.locale.bind(NS)
 
+  // One bound Host settings namespace feeds both the review card and the
+  // Settings tab. The scope answers the collapsed default while the Host
+  // mirror is still loading, and stays unavailable without a settings provider.
+  const cardSettings = ctx.settingsScope.bind<ShadowCardSettings>({
+    namespace: SHADOW_MIND_CARD_SETTINGS_NAMESPACE,
+  })
+  const collapsedByDefault = (): boolean => useCardCollapsedByDefault(cardSettings)
+
+  const sessions = clientSessions(ctx)
+
   ctx.on('command/executed', (sessionId, name, result) => {
     if (name !== 'shadow' || result.text === undefined) return
-    const sessionContext = ctx.sessions.scope(sessionId)
+    const sessionContext = sessions.scope(sessionId)
     const conversation = sessionContext?.get('conversation')
     if (sessionContext === undefined || conversation === undefined) return
     conversation.input.for(sessionContext).notify(result.kind === 'error' ? 'error' : 'info', result.text)
   })
 
   ctx.inject(['slots', 'remote.shadowMind'], (scope: ClientContext) => {
+    const sessions = clientSessions(scope)
     const remote = scope.remote.shadowMind
     const reviewStore = new ShadowReviewStore(
       sessionId => remoteValue<readonly ShadowReviewCycle[]>(
@@ -95,7 +131,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       key: 'shadow-mind-review',
       locale: NS,
       inject: (): ShadowReportCardInjected => ({
-        openSession: sessionId => { scope.sessions.open(sessionId) },
+        openSession: sessionId => { sessions.open(sessionId) },
         useCycle: (sessionId, capturedThroughSeq) => useShadowReviewCycle(
           reviewStore,
           sessionId,
@@ -115,6 +151,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
           remote.resume(sessionId),
         ),
         poke: sessionId => { reviewStore.poke(sessionId) },
+        useCollapsedByDefault: collapsedByDefault,
       }),
     }, ShadowReportCard))
     scope.slots.inject('conversation.chat.node', () => scope.slots.register({
@@ -125,6 +162,8 @@ export async function apply(ctx: ClientContext): Promise<void> {
       saveDefault: input => remoteValue<ShadowDefinition>('shadowMind.saveDefault', remote.saveDefault(input)),
       catalog: () => remoteValue<ShadowAdministrationSnapshot>('shadowMind.catalog', remote.catalog()),
       status: sessionId => remoteValue<ShadowMindStatus>('shadowMind.status', remote.status(sessionId)),
+      useCollapsedByDefault: collapsedByDefault,
+      setCollapsedByDefault: collapsed => cardSettings.set(COLLAPSED_BY_DEFAULT_FIELD, collapsed),
     })
 
     scope.slots.inject('settings.plugins.tab', () => scope.slots.register({

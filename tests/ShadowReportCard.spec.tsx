@@ -9,6 +9,7 @@ import type { ShadowMindStatus, ShadowReviewCycle, ShadowRunView } from '../src/
 // process; the card only renders plain text through it in these tests.
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
   MarkdownText: ({ text }: { text: string }) => text,
+  IconTriangleRightFill14: () => null,
 }))
 
 afterEach(() => {
@@ -26,6 +27,20 @@ const FAILED_RUN: ShadowRunView = {
   finishedAt: '2026-08-24T00:00:01.000Z',
   reasonCode: 'PROVIDER_ERROR',
   error: { name: 'ProviderError', message: 'boom' },
+}
+
+const REPORT_RUN: ShadowRunView = {
+  runId: 'run-report',
+  shadowId: 'reviewer',
+  shadowName: 'Reviewer',
+  capturedThroughSeq: 20,
+  phase: 'report',
+  stage: 'relay',
+  startedAt: '2026-08-24T00:00:00.000Z',
+  finishedAt: '2026-08-24T00:00:01.000Z',
+  childSessionId: 'child-1' as unknown as SessionId,
+  content: 'The review report body',
+  relayed: true,
 }
 
 function cycle(runs: readonly ShadowRunView[]): ShadowReviewCycle {
@@ -55,6 +70,7 @@ function mount(
     paused?: boolean
     pause?: ShadowReportCardProps['pause']
     resume?: ShadowReportCardProps['resume']
+    collapsedByDefault?: boolean
   } = {},
 ) {
   const poke = vi.fn()
@@ -68,6 +84,7 @@ function mount(
     pause: options.pause ?? vi.fn().mockResolvedValue(undefined),
     resume: options.resume ?? vi.fn().mockResolvedValue(undefined),
     poke,
+    useCollapsedByDefault: () => options.collapsedByDefault ?? true,
     t: (key: string) => key,
   } as unknown as ShadowReportCardProps
   render(<ShadowReportCard {...props} />)
@@ -155,5 +172,94 @@ describe('ShadowReportCard pause', () => {
       expect(screen.getByText('pauseError: the session is gone')).toBeDefined()
     })
     expect((screen.getByText('pauseReview') as HTMLButtonElement).disabled).toBe(false)
+  })
+})
+
+describe('ShadowReportCard collapse', () => {
+  it('starts collapsed by default while the run header, phase, and meta row stay visible', () => {
+    mount(cycle([REPORT_RUN]), vi.fn().mockResolvedValue(undefined))
+
+    const toggle = screen.getByRole('button', { name: 'expandCard' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    // Only the report body is collapsed; the Shadow identity, its status
+    // badge, and the child-session meta row below remain displayed.
+    expect(screen.queryByText('The review report body')).toBeNull()
+    expect(screen.getByText('Reviewer')).toBeDefined()
+    expect(screen.getByText('reviewReport')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'openChildSession' })).toBeDefined()
+  })
+
+  it('expands and collapses the report content through the corner toggle', () => {
+    mount(cycle([REPORT_RUN]), vi.fn().mockResolvedValue(undefined))
+
+    fireEvent.click(screen.getByRole('button', { name: 'expandCard' }))
+    expect(screen.getByText('The review report body')).toBeDefined()
+    const collapse = screen.getByRole('button', { name: 'collapseCard' })
+    expect(collapse.getAttribute('aria-expanded')).toBe('true')
+
+    fireEvent.click(collapse)
+    expect(screen.queryByText('The review report body')).toBeNull()
+    expect(screen.getByRole('button', { name: 'expandCard' }).getAttribute('aria-expanded')).toBe('false')
+  })
+
+  it('starts expanded when the settings preference asks for expanded cards', () => {
+    mount(cycle([REPORT_RUN]), vi.fn().mockResolvedValue(undefined), { collapsedByDefault: false })
+
+    expect(screen.getByText('The review report body')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'collapseCard' }).getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('follows the settings preference live until a manual toggle pins the card', () => {
+    // Simulates the Host settings mirror arriving after the card mounts: the
+    // preference starts as the collapsed fallback and later resolves to
+    // "expanded by default" on a re-render.
+    let preference = true
+    const retry = vi.fn().mockResolvedValue(undefined)
+    const poke = vi.fn()
+    const props = () => ({
+      node: { data: { capturedThroughSeq: 20, reports: [] } },
+      sessionId: 'session-1' as unknown as SessionId,
+      openSession: vi.fn(),
+      useCycle: () => cycle([REPORT_RUN]),
+      useStatus: () => status(false),
+      retry,
+      pause: vi.fn().mockResolvedValue(undefined),
+      resume: vi.fn().mockResolvedValue(undefined),
+      poke,
+      useCollapsedByDefault: () => preference,
+      t: (key: string) => key,
+    }) as unknown as ShadowReportCardProps
+    const { rerender } = render(<ShadowReportCard {...props()} />)
+
+    // Collapsed while only the fallback preference stands.
+    expect(screen.queryByText('The review report body')).toBeNull()
+
+    // The mirror arrives with "expanded by default": the untouched card follows.
+    preference = false
+    rerender(<ShadowReportCard {...props()} />)
+    expect(screen.getByText('The review report body')).toBeDefined()
+
+    // A manual toggle away from the default pins the card; later preference
+    // changes stop applying while it stays pinned.
+    fireEvent.click(screen.getByRole('button', { name: 'collapseCard' }))
+    expect(screen.queryByText('The review report body')).toBeNull()
+    rerender(<ShadowReportCard {...props()} />)
+    expect(screen.queryByText('The review report body')).toBeNull()
+    preference = true
+    rerender(<ShadowReportCard {...props()} />)
+    expect(screen.queryByText('The review report body')).toBeNull()
+    expect(screen.getByRole('button', { name: 'expandCard' }).getAttribute('aria-expanded')).toBe('false')
+
+    // Toggling back to the current default clears the override instead of
+    // pinning the opposite value, so the card resumes following the
+    // preference: flipping the default expands it without another click.
+    fireEvent.click(screen.getByRole('button', { name: 'expandCard' }))
+    expect(screen.getByText('The review report body')).toBeDefined()
+    fireEvent.click(screen.getByRole('button', { name: 'collapseCard' }))
+    expect(screen.queryByText('The review report body')).toBeNull()
+    preference = false
+    rerender(<ShadowReportCard {...props()} />)
+    expect(screen.getByText('The review report body')).toBeDefined()
+    expect(screen.getByRole('button', { name: 'collapseCard' }).getAttribute('aria-expanded')).toBe('true')
   })
 })

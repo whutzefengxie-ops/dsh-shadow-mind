@@ -23,6 +23,10 @@ export interface ShadowMindSettingsTabInjected {
   saveDefault: (input: ShadowDefinitionInput) => Promise<ShadowDefinition>
   catalog: () => Promise<ShadowAdministrationSnapshot>
   status: (sessionId: SessionId) => Promise<ShadowMindStatus>
+  /** Current collapsed-by-default preference for new report cards. */
+  useCollapsedByDefault: () => boolean
+  /** Persist the collapsed-by-default preference for new report cards. */
+  setCollapsedByDefault: (collapsed: boolean) => Promise<void>
 }
 
 /** Full component props assembled by the Settings slot renderer. */
@@ -180,6 +184,7 @@ function friendlyError(t: ShadowMindSettingsTabProps['t'], error: unknown): stri
 function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactNode {
   const { t } = props
   const currentSession = props.useSessions(snapshot => snapshot.current)
+  const collapsedByDefault = props.useCollapsedByDefault()
   const [catalog, setCatalog] = useState<ShadowAdministrationSnapshot | null>(null)
   const [status, setStatus] = useState<ShadowMindStatus | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -349,6 +354,16 @@ function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactN
                   onChange={(event) => { setDefinitionEdit({ ...definitionEdit, name: event.currentTarget.value }) }} />
                 <small>{t('shadowNameHint')}</small>
               </label>
+              <Switch
+                id="shadow-collapsed-by-default"
+                label={t('collapsedByDefault')}
+                checked={collapsedByDefault}
+                disabled={busy}
+                onChange={(collapsed) => {
+                  void run(async () => { await props.setCollapsedByDefault(collapsed) })
+                }}
+              />
+              <small className={css.switchHint}>{t('collapsedByDefaultHint')}</small>
               <label className={`${css.field} ${css.fullSpan} ${css.promptField}`} htmlFor="shadow-prompt">
                 <span>{t('shadowPrompt')}</span>
                 <textarea id="shadow-prompt" value={definitionEdit.prompt} disabled={busy}

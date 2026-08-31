@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { MarkdownText, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconTriangleRightFill14, MarkdownText, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ShadowMindStatus, ShadowReviewCycle, ShadowRunPhase, ShadowRunView } from '../runtime/types.ts'
@@ -28,6 +28,8 @@ export interface ShadowReportCardInjected {
   readonly resume: (sessionId: SessionId) => Promise<unknown>
   /** Refresh the review cycle immediately after a retry or pause is admitted. */
   readonly poke: (sessionId: SessionId) => void
+  /** Current collapsed-by-default preference for new cards. */
+  readonly useCollapsedByDefault: () => boolean
 }
 
 function phaseLabel(phase: ShadowRunPhase, t: ShadowReportCardProps['t']): string {
@@ -63,12 +65,27 @@ function RunBody({ run, t }: { run: ShadowRunView; t: ShadowReportCardProps['t']
 
 /** Display a running placeholder and update the same row to every terminal phase. */
 export function ShadowReportCard({
-  node, sessionId, openSession, useCycle, useStatus, retry, pause, resume, poke, t,
+  node, sessionId, openSession, useCycle, useStatus, retry, pause, resume, poke, useCollapsedByDefault, t,
 }: ShadowReportCardProps) {
   const capturedThroughSeq = node.data.capturedThroughSeq
   const cycle = useCycle(sessionId, capturedThroughSeq)
   const status = useStatus(sessionId)
   const runs = projectReviewRuns(cycle, node.data.reports)
+  const collapsedByDefault = useCollapsedByDefault()
+  // Manual override separated from the live preference: until the user toggles
+  // this card, it follows `collapsedByDefault` in real time, so a card mounted
+  // while the Host settings mirror is still loading settles into the saved
+  // preference once the mirror arrives instead of freezing at the collapsed
+  // fallback. Toggling away from the current default pins the card; toggling
+  // back to the default state clears the override and resumes live following.
+  const [manualCollapsed, setManualCollapsed] = useState<boolean | null>(null)
+  const collapsed = manualCollapsed ?? collapsedByDefault
+  const toggleCollapsed = (): void => {
+    setManualCollapsed(current => {
+      const next = current === null ? !collapsedByDefault : !current
+      return next === collapsedByDefault ? null : next
+    })
+  }
   const [retryingRun, setRetryingRun] = useState<string | null>(null)
   const [retryError, setRetryError] = useState<string | null>(null)
   const [pausing, setPausing] = useState(false)
@@ -99,7 +116,12 @@ export function ShadowReportCard({
     ).finally(() => { setPausing(false) })
   }
   return (
-    <section className={css.card} data-shadow-review-card aria-live={running ? 'polite' : undefined}>
+    <section
+      className={css.card}
+      data-shadow-review-card
+      data-shadow-card-collapsed={collapsed || undefined}
+      aria-live={running ? 'polite' : undefined}
+    >
       <header className={css.header}>
         <span className={css.mark} aria-hidden>S</span>
         <div className={css.headerTitle}>
@@ -117,6 +139,17 @@ export function ShadowReportCard({
             {pausing ? t('pausePending') : t(paused ? 'resumeReview' : 'pauseReview')}
           </button>
         </div>
+        <button
+          type="button"
+          className={`${css.toggle} ${collapsed ? '' : css.toggleExpanded}`}
+          aria-expanded={!collapsed}
+          aria-label={t(collapsed ? 'expandCard' : 'collapseCard')}
+          title={t(collapsed ? 'expandCard' : 'collapseCard')}
+          data-shadow-card-toggle
+          onClick={toggleCollapsed}
+        >
+          <IconTriangleRightFill14 />
+        </button>
       </header>
       {running ? (
         <div className={css.warning} role="status" data-shadow-running-warning>
@@ -154,12 +187,19 @@ export function ShadowReportCard({
       )}
       <div className={css.runs}>
         {runs.map(run => (
-          <article className={css.run} key={run.runId} data-shadow-run-phase={run.phase}>
+          <article
+            className={css.run}
+            key={run.runId}
+            data-shadow-run-phase={run.phase}
+            data-shadow-run-collapsed={collapsed || undefined}
+          >
             <div className={css.runHeader}>
               <div><strong>{run.shadowName}</strong><code>{run.shadowId}</code></div>
               <span className={css.phase}>{phaseLabel(run.phase, t)}</span>
             </div>
-            <RunBody run={run} t={t} />
+            {/* Collapsing hides only the report body; the run header above and
+                the subagent id / run status rows below stay visible. */}
+            {collapsed ? null : <RunBody run={run} t={t} />}
             <div className={css.meta}>
               {run.childSessionId === undefined ? null : (
                 <button

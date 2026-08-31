@@ -112,6 +112,12 @@ describe('Shadow settings', () => {
     expect(Config({}).defaultShadowTimeoutSeconds).toBe(600)
   })
 
+  it('defaults new report cards to collapsed and accepts the expanded preference', () => {
+    expect(Config({}).collapsedByDefault).toBe(true)
+    expect(resolveSettings().collapsedByDefault).toBe(true)
+    expect(resolveSettings({ collapsedByDefault: false }).collapsedByDefault).toBe(false)
+  })
+
   it('keeps a complete frugal model route before the runtime starts', () => {
     expect(Config({
       sessionShadowSoftBudgetChars: 100,

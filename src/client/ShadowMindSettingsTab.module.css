@@ -119,6 +119,14 @@
   font-size: 12px;
 }
 
+/* Hint below the collapsed-by-default switch, spanning the full grid row. */
+.switchHint {
+  grid-column: 1 / -1;
+  margin-top: -6px;
+  color: var(--dsw-color-text-secondary, #57606a);
+  font-size: 12px;
+}
+
 .fieldset {
   border: 1px solid var(--dsw-color-border, #d8dee4);
   border-radius: 8px;
