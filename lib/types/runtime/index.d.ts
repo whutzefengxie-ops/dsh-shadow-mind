@@ -6,6 +6,7 @@
  */
 import { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
+import type { SettingsNamespace } from '@deepseek-ai/dsh-settings';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
 import { ShadowRegistry } from './registry.ts';
 import type { ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowModelCatalog, ShadowReviewCycle, UpdateShadowMindSettings } from './types.ts';
@@ -35,8 +36,14 @@ declare module '@deepseek-ai/cordis' {
         shadowMind: ShadowMindRuntime;
     }
 }
-/** User-settings namespace for live Shadow orchestration controls. */
-export declare const SHADOW_MIND_SETTINGS_NAMESPACE: import("@deepseek-ai/dsh-settings").SettingsNamespace;
+/**
+ * User-settings namespace for live Shadow orchestration controls.
+ * DSH 0.1.2-alpha.2 removed the `settingsNamespace` factory from
+ * `@deepseek-ai/dsh-settings`; namespaces are plain strings now (validated
+ * against `^[a-z][a-z0-9-]*$` by the provider at registration). The cast
+ * keeps the constant's public type stable for consumers on either API.
+ */
+export declare const SHADOW_MIND_SETTINGS_NAMESPACE: SettingsNamespace;
 /** Tools visible to every Shadow before definition-specific additions. */
 export declare const DEFAULT_SHADOW_TOOLS: readonly ["read", "grep", "glob"];
 /** Root-only Shadow orchestration service. */
