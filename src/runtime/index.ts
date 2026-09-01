@@ -11,8 +11,7 @@ import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import { settingsNamespace } from '@deepseek-ai/dsh-settings'
-import type { SettingsPathOp, SettingsScope } from '@deepseek-ai/dsh-settings'
+import type { SettingsNamespace, SettingsPathOp, SettingsScope } from '@deepseek-ai/dsh-settings'
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
 import type { SubagentRun, SubagentResult } from '@deepseek-ai/dsh-subagent'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -113,8 +112,14 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/** User-settings namespace for live Shadow orchestration controls. */
-export const SHADOW_MIND_SETTINGS_NAMESPACE = settingsNamespace('shadow-mind')
+/**
+ * User-settings namespace for live Shadow orchestration controls.
+ * DSH 0.1.2-alpha.2 removed the `settingsNamespace` factory from
+ * `@deepseek-ai/dsh-settings`; namespaces are plain strings now (validated
+ * against `^[a-z][a-z0-9-]*$` by the provider at registration). The cast
+ * keeps the constant's public type stable for consumers on either API.
+ */
+export const SHADOW_MIND_SETTINGS_NAMESPACE = 'shadow-mind' as SettingsNamespace
 /** Tools visible to every Shadow before definition-specific additions. */
 export const DEFAULT_SHADOW_TOOLS = Object.freeze(['read', 'grep', 'glob'] as const)
 
