@@ -87,6 +87,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../deepseek-harness/packages/core/session
         version: link:../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../deepseek-harness/packages/session/session-projection
+        version: link:../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/dsh-settings':
         specifier: link:../deepseek-harness/packages/settings/settings
         version: link:../deepseek-harness/packages/settings/settings
