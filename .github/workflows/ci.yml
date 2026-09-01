@@ -16,12 +16,12 @@ jobs:
 
       # The dsh-0.1.2 client surface is not published to npm yet, so devDeps
       # link against the harness source. Check out the pinned release commit
-      # (fork tag dsh-v0.1.2-alpha.1) and expose it at the sibling path the
+      # (upstream tag dsh-v0.1.2-alpha.3) and expose it at the sibling path the
       # `link:../deepseek-harness/...` entries resolve from.
       - uses: actions/checkout@v4
         with:
           repository: whutzefengxie-ops/deepseek-harness
-          ref: cd5ef8148158c3a752a658978873241fdf8e2bbc
+          ref: dd6322d604e00eec1ba5e0c8541159906a21094a
           fetch-depth: 1
           path: harness-source
       - name: Link the harness checkout where the devDeps expect it

@@ -10,7 +10,7 @@
 
 ## 安装
 
-插件要求 DeepSeek Harness `0.1.2-alpha.1` 或兼容的 master 构建。从 GitHub 安装时应固定已经审查的 commit：
+插件要求 DeepSeek Harness `0.1.2-alpha.1` 或更高版本；本版本基于 `0.1.2-alpha.3` 构建并验证。从 GitHub 安装时应固定已经审查的 commit：
 
 ```sh
 dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#<commit-sha>
@@ -111,7 +111,7 @@ devDependencies 通过 `link:` 指向本仓库同级的 DeepSeek Harness 源码�
 ```sh
 corepack enable
 git clone https://github.com/whutzefengxie-ops/deepseek-harness.git ../deepseek-harness
-git -C ../deepseek-harness checkout cd5ef8148158c3a752a658978873241fdf8e2bbc
+git -C ../deepseek-harness checkout dd6322d604e00eec1ba5e0c8541159906a21094a
 pnpm --dir ../deepseek-harness install --frozen-lockfile
 pnpm --dir ../deepseek-harness run build:lib
 ```

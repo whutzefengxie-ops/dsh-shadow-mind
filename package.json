@@ -1,6 +1,6 @@
 {
   "name": "@whutzefengxie-ops/dsh-shadow-mind",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Probabilistic background Shadow agent reviews for DeepSeek Harness",
   "keywords": [
     "deepseek-harness",
