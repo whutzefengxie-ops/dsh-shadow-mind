@@ -153,10 +153,12 @@ function attachMinimalContext(childCtx: Context): void {
  * the skip predicate keeps a cancelled run from restarting its own loop.
  */
 function attachThinkFirst(childCtx: Context, activationBoundary: number, skipSteer: () => boolean): void {
-  const child = childCtx.agent as Agent
   childCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const transformed = await next()
-    const planned = child.session.events.some(event =>
+    // Check if any agent in this context has planned already
+    const childAgent = _context.agent
+    if (!childAgent) return transformed
+    const planned = childAgent.session.snapshotEvents().some(event =>
       event.seq >= activationBoundary && event.type === 'assistant/message')
     return planned ? transformed : { ...transformed, tools: [] }
   })
@@ -185,7 +187,8 @@ function attachDegenerateOutputGuard(
   state: DegenerateOutputState,
   reasoningBudget: number,
 ): void {
-  const child = childCtx.agent as Agent
+  const child = childCtx.agents.get(childId)
+  if (!child) throw new Error(`Shadow child agent ${childId} not found`)
   const guard = new DegenerateOutputGuard(reasoningBudget)
   childCtx.on('session/event', (session: Session, event: SessionEvent) => {
     if (session.id !== childId || state.reason !== undefined) return
@@ -199,15 +202,39 @@ function attachDegenerateOutputGuard(
       guard.observeBoundary()
       return
     }
-    if (event.type !== 'assistant/chunk') return
-    const chunk = event.data.chunk
-    if (chunk.type !== 'text-delta' && chunk.type !== 'reasoning-delta') return
-    const detection = guard.observeChunk(chunk.text, chunk.type === 'text-delta' ? 'text' : 'reasoning')
-    if (detection === undefined) return
-    state.reason = detection.reason
-    // Defer the cancel out of the event dispatch: the guard fires inside the
-    // chunk commit path, and the child's cancel walks its own teardown.
-    queueMicrotask(() => { child.cancel({ kind: 'parent' }) })
+    if (event.type === 'assistant/attempt') {
+      for (const record of event.data.stream) {
+        if (record.type === 'text-chunks') {
+          for (const text of record.texts) {
+            const detection = guard.observeChunk(text, 'text')
+            if (detection !== undefined) {
+              state.reason = detection.reason
+              queueMicrotask(() => { child.cancel({ kind: 'parent' }) })
+              return
+            }
+          }
+        } else if (record.type === 'reasoning-chunks') {
+          for (const text of record.texts) {
+            const detection = guard.observeChunk(text, 'reasoning')
+            if (detection !== undefined) {
+              state.reason = detection.reason
+              queueMicrotask(() => { child.cancel({ kind: 'parent' }) })
+              return
+            }
+          }
+        } else if (record.type === 'chunk') {
+          const chunk = record.chunk
+          if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
+            const detection = guard.observeChunk(chunk.text, chunk.type === 'text-delta' ? 'text' : 'reasoning')
+            if (detection !== undefined) {
+              state.reason = detection.reason
+              queueMicrotask(() => { child.cancel({ kind: 'parent' }) })
+              return
+            }
+          }
+        }
+      }
+    }
   })
 }
 
@@ -237,8 +264,8 @@ async function startInProcessRun(request: ResolvedSubagentStartRequest): Promise
 
   let structured: StructuredAttachment | undefined
   const degenerateState: DegenerateOutputState = { reason: undefined }
-  const setup = (childCtx: Context): void => {
-    appendDelegatedPolicyOverrides((childCtx.agent as Agent).session, inherited)
+  const setup = (childCtx: Context, child: Agent): void => {
+    appendDelegatedPolicyOverrides(child.session, inherited)
     applyChildComposition(childCtx, parent, {
       persona: request.persona,
       toolFilter: request.toolFilter,
@@ -267,7 +294,7 @@ async function startInProcessRun(request: ResolvedSubagentStartRequest): Promise
 
   const handle = await parent.ctx.agents.create({
     sessionId: childId,
-    meta: childSessionMeta(parent, childDepth, activationBoundary),
+    meta: childSessionMeta(parent, childDepth, false),
     agentOptions: resolveChildAgentOptions(parent, {
       ...request.agentOptions,
       ...request.modelSelection === undefined
@@ -355,7 +382,7 @@ function readResult(
   structured?: { captured?: { value: unknown } | undefined },
   degenerateReason?: DegenerateOutputReason,
 ): SubagentResult {
-  const own = child.session.events.slice(boundary)
+  const own = child.session.snapshotEvents().slice(boundary)
   // `droppedUnrun` is deliberately unread: a one-shot prompt is claimed by its
   // awaited first turn almost immediately, and the owner's own teardown is the
   // `cancelled` flag below. A cancellation with no accounting turn resolves

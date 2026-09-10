@@ -159,7 +159,7 @@ export function apply(ctx: Context): void {
   ctx.commands.register({
     name: 'shadow',
     description: 'Force an immediate Shadow review of the current session',
-    input: { hint: '[new]', images: false },
+    input: { hint: '[new]', attachments: false },
     handler: async ({ agent, rawInput }) => {
       const operation = rawInput.trim()
       if (operation !== 'new') {
