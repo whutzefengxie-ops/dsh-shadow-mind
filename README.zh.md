@@ -8,10 +8,11 @@
 
 | dsh-shadow-mind | 所需 DSH 版本 | 说明 |
 |----------------|--------------|------|
+| v0.1.2         | `>=0.1.5-rc.1 <0.2.0` | 修复 subagent setup 绑定与实时退化输出看门狗 |
 | v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API 兼容性更新 |
 | v0.1.0         | `0.1.4` 及更早版本 | 旧版 Session API |
 
-**当前版本**: v0.1.1
+**当前版本**: v0.1.2
 
 如果你使用的是 DSH `0.1.4` 或更早版本，请安装 `dsh-shadow-mind@0.1.0`：
 ```sh
@@ -27,7 +28,7 @@ dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.0
 插件要求 DeepSeek Harness `0.1.5-rc.1` 或更新版本。从 GitHub release tag 安装：
 
 ```sh
-dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.1
+dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.2
 ```
 
 或者从 GitHub 安装时固定已经审查的 commit：

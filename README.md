@@ -8,10 +8,11 @@ An independently versioned DeepSeek Harness bundle that starts fresh background 
 
 | dsh-shadow-mind | DSH Version Required | Notes |
 |----------------|---------------------|-------|
+| v0.1.2         | `>=0.1.5-rc.1 <0.2.0` | Subagent setup binding + live degenerate-output watchdog |
 | v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API compatibility update |
 | v0.1.0         | `0.1.4` and earlier | Legacy session API |
 
-**Current Version**: v0.1.1
+**Current Version**: v0.1.2
 
 If you're using DSH `0.1.4` or earlier, please install `dsh-shadow-mind@0.1.0`:
 ```sh
@@ -27,7 +28,7 @@ The core design idea for this project comes from [pi-shadow-mind](https://github
 The plugin requires DeepSeek Harness `0.1.5-rc.1` or newer. Install from GitHub release tag:
 
 ```sh
-dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.1
+dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.2
 ```
 
 Or pin a reviewed commit when installing from GitHub:

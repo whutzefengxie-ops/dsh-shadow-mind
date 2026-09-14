@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-09-14
+
+### Fixed
+- **Subagent startup never failed on unpublished setup again**: the degenerate-output
+  watchdog no longer resolves the child through `ctx.agents` while setup runs. The agent
+  factory awaits setup BEFORE inserting or announcing the session or agent, so that lookup
+  always returned `undefined` and every Shadow run died at the `start` stage with
+  `SUBAGENT_START_FAILED` / `Shadow child agent <id> not found`. The watchdog now receives
+  the Agent that setup itself is handed, which is the only correct binding before
+  publication. (Introduced by the v0.1.1 session-API compatibility change.)
+- **Live degenerate-output detection restored**: the watchdog consumes the process-local
+  `agent/assistant-stream` chunk frames instead of the durable `assistant/attempt` event.
+  The durable attempt event only lands after the whole attempt has streamed, so a runaway
+  repetition loop or output flood was never cancelled in flight.
+- **Client bundle builds against the current Harness**: `@deepseek-ai/dsh-brand`, the
+  stateless branded-primitive layer that `@deepseek-ai/dsh-session` now imports, is inlined
+  by the browser bundle instead of being rejected by the client-bundle purity gate.
+
+### Changed
+- Test fixtures updated for the current Session API: `session.snapshotEvents()`,
+  `SessionSeq`-branded compaction ranges, `assistant/message` fixtures carrying their
+  `stream`, `await ctx.agentLoop.create(...)`, and child stubs exposing `session.header`
+  plus `snapshotEvents()`.
+- Regenerated the committed typert artifacts (descriptor `sourceLocation` lines had
+  drifted from `src/runtime/index.ts`).
+
+### Compatibility
+- Validated against the DeepSeek Harness `master` checkout (`0.1.5-rc.2`).
+- `pnpm run check` is green: 214 tests, host + client typecheck, host and browser bundles,
+  and the bundle smoke check.
+
 ## [0.1.1] - 2026-09-10
 
 ### Fixed
