@@ -4,13 +4,34 @@
 
 An independently versioned DeepSeek Harness bundle that starts fresh background Shadow agents after eligible tool-using root turns, validates their structured findings, relays accepted reports into the root session, and exposes configuration and evidence in the Web UI.
 
+## Version Compatibility
+
+| dsh-shadow-mind | DSH Version Required | Notes |
+|----------------|---------------------|-------|
+| v0.1.2         | `>=0.1.5-rc.1 <0.2.0` | Subagent setup binding + live degenerate-output watchdog |
+| v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API compatibility update |
+| v0.1.0         | `0.1.4` and earlier | Legacy session API |
+
+**Current Version**: v0.1.2
+
+If you're using DSH `0.1.4` or earlier, please install `dsh-shadow-mind@0.1.0`:
+```sh
+dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.0
+```
+
 ## Inspiration
 
 The core design idea for this project comes from [pi-shadow-mind](https://github.com/liuzhengdongfortest/pi-shadow-mind.git). This repository is an independent implementation for the DeepSeek Harness plugin system, not an official fork of that project. Its runtime, Sessions, subagents, permissions, persistence, and Web UI use DeepSeek Harness extension mechanisms.
 
 ## Install
 
-The plugin requires DeepSeek Harness `0.1.2-alpha.3` or newer (peer range `>=0.1.2-alpha.3 <0.2.0`). Pin a reviewed commit when installing from GitHub:
+The plugin requires DeepSeek Harness `0.1.5-rc.1` or newer. Install from GitHub release tag:
+
+```sh
+dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.2
+```
+
+Or pin a reviewed commit when installing from GitHub:
 
 ```sh
 dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#<commit-sha>

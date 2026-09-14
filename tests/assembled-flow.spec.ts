@@ -5,7 +5,6 @@ import { describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
-import SessionProjectionRegistry from '@deepseek-ai/dsh-session-projection'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId, type SessionEvent } from '@deepseek-ai/dsh-session'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
@@ -34,7 +33,6 @@ describe('assembled Shadow Mind flow', () => {
     const ctx = new Context()
     try {
       await mountAgentLoopTestDependencies(ctx)
-      await ctx.plugin(SessionProjectionRegistry)
       await ctx.plugin(MemorySettings)
       await ctx.plugin(AgentLoop, { agents: [] })
       await ctx.plugin(SubagentRuntime)
@@ -199,7 +197,7 @@ describe('assembled Shadow Mind flow', () => {
           ],
         }
       `)
-      expect(root.session.events.some(event => event.type === 'assistant/message'
+      expect(root.session.snapshotEvents().some(event => event.type === 'assistant/message'
         && JSON.stringify(event.data.message.content).includes('ROOT_USED_SHADOW_REPORT'))).toBe(true)
       await handle.dispose()
     } finally {

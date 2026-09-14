@@ -151,12 +151,18 @@ function attachMinimalContext(childCtx: Context): void {
  * Keep the first live request tool-free, then steer exactly one investigation step.
  * A child cancelled by the degenerate-output watchdog must not be steered again:
  * the skip predicate keeps a cancelled run from restarting its own loop.
+ * @param child - the unpublished Agent handed to setup; the composition boundary
+ *   runs before publication, so the registry must never be consulted here.
  */
-function attachThinkFirst(childCtx: Context, activationBoundary: number, skipSteer: () => boolean): void {
-  const child = childCtx.agent as Agent
+function attachThinkFirst(
+  childCtx: Context,
+  child: Agent,
+  activationBoundary: number,
+  skipSteer: () => boolean,
+): void {
   childCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const transformed = await next()
-    const planned = child.session.events.some(event =>
+    const planned = child.session.snapshotEvents().some(event =>
       event.seq >= activationBoundary && event.type === 'assistant/message')
     return planned ? transformed : { ...transformed, tools: [] }
   })
@@ -173,20 +179,46 @@ function attachThinkFirst(childCtx: Context, activationBoundary: number, skipSte
 
 /**
  * Watch one child's streamed output and cancel it the moment it degenerates
- * into a repeated-token loop or an unbounded output flood. The child-side
- * `session/event` bus carries every committed chunk, so the guard fires within
- * a few tokens of the collapse instead of waiting out the run timeout.
+ * into a repeated-token loop or an unbounded output flood.
+ *
+ * The live `agent/assistant-stream` frames are the only pre-settlement view of
+ * the stream: the durable `assistant/attempt` event commits once the whole
+ * attempt has already streamed, which is far too late to cut a runaway loop
+ * short. Frames are agent-scoped, so this listener sees exactly the child's own
+ * chunks; the durable `session/event` bus still supplies the progress signals
+ * (tool calls and step/turn boundaries) that reset the per-stretch budgets.
+ * @param child - the unpublished Agent handed to setup. `ctx.agents` cannot be
+ *   queried during setup: the factory awaits setup BEFORE inserting or announcing
+ *   the session or agent, so a registry lookup here is always empty.
  * @param reasoningBudget - the child's reasoning-channel budget, resolved from
  *   its reasoning effort.
  */
 function attachDegenerateOutputGuard(
   childCtx: Context,
+  child: Agent,
   childId: SessionId,
   state: DegenerateOutputState,
   reasoningBudget: number,
 ): void {
-  const child = childCtx.agent as Agent
   const guard = new DegenerateOutputGuard(reasoningBudget)
+  const fire = (reason: DegenerateOutputReason): void => {
+    state.reason = reason
+    // Defer the cancel out of the event dispatch: the guard fires inside the
+    // chunk publication path, and the child's cancel walks its own teardown.
+    queueMicrotask(() => { child.cancel({ kind: 'parent' }) })
+  }
+  childCtx.on('agent/assistant-stream', ({ agent, frame }) => {
+    if (state.reason !== undefined || agent.id !== childId) return
+    if (frame.type === 'end') {
+      guard.observeBoundary()
+      return
+    }
+    if (frame.type !== 'chunk') return
+    const chunk = frame.chunk
+    if (chunk.type !== 'text-delta' && chunk.type !== 'reasoning-delta') return
+    const detection = guard.observeChunk(chunk.text, chunk.type === 'text-delta' ? 'text' : 'reasoning')
+    if (detection !== undefined) fire(detection.reason)
+  })
   childCtx.on('session/event', (session: Session, event: SessionEvent) => {
     if (session.id !== childId || state.reason !== undefined) return
     if (event.type === 'tool/call') {
@@ -197,17 +229,7 @@ function attachDegenerateOutputGuard(
       // A fresh step gets a fresh budget: a long but healthy tool-free
       // planning step must not bleed its text into the investigation step.
       guard.observeBoundary()
-      return
     }
-    if (event.type !== 'assistant/chunk') return
-    const chunk = event.data.chunk
-    if (chunk.type !== 'text-delta' && chunk.type !== 'reasoning-delta') return
-    const detection = guard.observeChunk(chunk.text, chunk.type === 'text-delta' ? 'text' : 'reasoning')
-    if (detection === undefined) return
-    state.reason = detection.reason
-    // Defer the cancel out of the event dispatch: the guard fires inside the
-    // chunk commit path, and the child's cancel walks its own teardown.
-    queueMicrotask(() => { child.cancel({ kind: 'parent' }) })
   })
 }
 
@@ -237,8 +259,8 @@ async function startInProcessRun(request: ResolvedSubagentStartRequest): Promise
 
   let structured: StructuredAttachment | undefined
   const degenerateState: DegenerateOutputState = { reason: undefined }
-  const setup = (childCtx: Context): void => {
-    appendDelegatedPolicyOverrides((childCtx.agent as Agent).session, inherited)
+  const setup = (childCtx: Context, child: Agent): void => {
+    appendDelegatedPolicyOverrides(child.session, inherited)
     applyChildComposition(childCtx, parent, {
       persona: request.persona,
       toolFilter: request.toolFilter,
@@ -254,10 +276,11 @@ async function startInProcessRun(request: ResolvedSubagentStartRequest): Promise
     }
     if (request.contextInheritance === 'none') attachMinimalContext(childCtx)
     if (request.thinkFirst === true) {
-      attachThinkFirst(childCtx, activationBoundary, () => degenerateState.reason !== undefined)
+      attachThinkFirst(childCtx, child, activationBoundary, () => degenerateState.reason !== undefined)
     }
     attachDegenerateOutputGuard(
       childCtx,
+      child,
       childId,
       degenerateState,
       resolveReasoningBudget(request.modelSelection?.reasoningEffort),
@@ -267,7 +290,7 @@ async function startInProcessRun(request: ResolvedSubagentStartRequest): Promise
 
   const handle = await parent.ctx.agents.create({
     sessionId: childId,
-    meta: childSessionMeta(parent, childDepth, activationBoundary),
+    meta: childSessionMeta(parent, childDepth, false),
     agentOptions: resolveChildAgentOptions(parent, {
       ...request.agentOptions,
       ...request.modelSelection === undefined
@@ -355,7 +378,7 @@ function readResult(
   structured?: { captured?: { value: unknown } | undefined },
   degenerateReason?: DegenerateOutputReason,
 ): SubagentResult {
-  const own = child.session.events.slice(boundary)
+  const own = child.session.snapshotEvents().slice(boundary)
   // `droppedUnrun` is deliberately unread: a one-shot prompt is claimed by its
   // awaited first turn almost immediately, and the owner's own teardown is the
   // `cancelled` flag below. A cancellation with no accounting turn resolves

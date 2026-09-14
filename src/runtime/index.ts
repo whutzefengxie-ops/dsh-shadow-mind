@@ -11,7 +11,7 @@ import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import type { SettingsNamespace, SettingsPathOp, SettingsScope } from '@deepseek-ai/dsh-settings'
+import type { SettingsPathOp, SettingsScope, SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
 import type { SubagentRun, SubagentResult } from '@deepseek-ai/dsh-subagent'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
@@ -112,13 +112,7 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-/**
- * User-settings namespace for live Shadow orchestration controls.
- * DSH 0.1.2-alpha.2 removed the `settingsNamespace` factory from
- * `@deepseek-ai/dsh-settings`; namespaces are plain strings now (validated
- * against `^[a-z][a-z0-9-]*$` by the provider at registration). The cast
- * keeps the constant's public type stable for consumers on either API.
- */
+/** User-settings namespace for live Shadow orchestration controls. */
 export const SHADOW_MIND_SETTINGS_NAMESPACE = 'shadow-mind' as SettingsNamespace
 /** Tools visible to every Shadow before definition-specific additions. */
 export const DEFAULT_SHADOW_TOOLS = Object.freeze(['read', 'grep', 'glob'] as const)
@@ -304,9 +298,20 @@ function deliberationLength(events: readonly SessionEvent[]): number {
   let chars = 0
   for (const event of events) {
     if (captureSeq !== undefined && event.seq >= captureSeq) break
-    if (event.type !== 'assistant/chunk') continue
-    const chunk = event.data.chunk
-    if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') chars += chunk.text.length
+    if (event.type === 'assistant/attempt') {
+      for (const record of event.data.stream) {
+        if (record.type === 'text-chunks') {
+          chars += record.texts.reduce((sum, text) => sum + text.length, 0)
+        } else if (record.type === 'reasoning-chunks') {
+          chars += record.texts.reduce((sum, text) => sum + text.length, 0)
+        } else if (record.type === 'chunk') {
+          const chunk = record.chunk
+          if (chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') {
+            chars += chunk.text.length
+          }
+        }
+      }
+    }
   }
   return chars
 }
@@ -684,7 +689,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
       throw new Error(`this session has already admitted ${state.totalRuns} Shadow run(s); use the Retry button on the Shadow conversation card to rerun a failed review`)
     }
     const definition = await this.registry.defaultDefinition()
-    const events = agent.session.events
+    const events = agent.session.snapshotEvents()
     const capturedThroughSeq = events[events.length - 1]?.seq
     if (capturedThroughSeq === undefined) {
       throw new Error('this session has no events to review yet')
@@ -724,7 +729,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
       this.cancelOwner(state, { reasonCode: 'USER_TURN_ABORTED', source: 'user-input' })
       return
     }
-    if (event.data.reason.kind !== 'completed' || state.paused || !turnUsedTools(session.events, event.data.turn)) return
+    if (event.data.reason.kind !== 'completed' || state.paused || !turnUsedTools(session.snapshotEvents(), event.data.turn)) return
     const epoch = state.epoch
     const cycle: MutableReviewCycle = {
       capturedThroughSeq: event.seq,
@@ -778,7 +783,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
     if (!this.settingsValue.valueLoopEnabled) return
     for (const challenge of state.pendingChallenges.values()) {
       const classification = classifyChallenge(
-        agent.session.events,
+        agent.session.snapshotEvents(),
         challenge,
         this.settingsValue.valueLoopWindowTurns,
       )
@@ -1025,7 +1030,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
     try {
       holdoutKeys = definition.holdout ? await this.registry.holdoutKeys(definition.id) : []
       projection = projectTrajectoryWithAnchors(
-        agent.session.events,
+        agent.session.snapshotEvents(),
         entry.capturedThroughSeq,
         settings.argumentDisclosure,
         definition.capture,
@@ -1080,9 +1085,9 @@ export class ShadowMindRuntime extends TypertRemoteService {
       entry.view = { ...entry.view, childSessionId: run.id, stage }
       await this.debug(state, entry, 'child-started')
       result = await run.result
-      deliberationChars = run.localAgent === undefined ? 0 : deliberationLength(run.localAgent.session.events)
+      deliberationChars = run.localAgent === undefined ? 0 : deliberationLength(run.localAgent.session.snapshotEvents())
       // Computed before dispose so the settled child's events remain readable.
-      childTools = run.localAgent === undefined ? undefined : toolTelemetry(run.localAgent.session.events)
+      childTools = run.localAgent === undefined ? undefined : toolTelemetry(run.localAgent.session.snapshotEvents())
     } catch (error: unknown) {
       rawFailure = error instanceof Error ? error : new Error('Shadow subagent failed with a non-Error value')
       failure = { stage, reasonCode: nextFailureCode, error: safeError(error) }

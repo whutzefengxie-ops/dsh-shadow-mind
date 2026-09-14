@@ -195,7 +195,7 @@ describe('Shadow Mind management tools and command', () => {
     const deniedResult = await execute(denied.ctx, denied.agent, 'update_default_shadow', args)
     expect(deniedResult.isError).toBe(true)
     expect(denied.runtime.definitions.get(DEFAULT_SHADOW_ID)?.name).toBe('Shadow')
-    const decisions = denied.agent.session.events.filter(event => event.type === 'approval/decided')
+    const decisions = denied.agent.session.snapshotEvents().filter(event => event.type === 'approval/decided')
     expect(decisions).toHaveLength(1)
     expect(decisions[0]?.data.outcome).toBe('rejected')
 

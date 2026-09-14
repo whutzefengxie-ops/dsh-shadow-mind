@@ -47,7 +47,7 @@ describe('Shadow value-loop classifier', () => {
       name: 'read',
       arguments: '{"path":"src/runtime.ts"}',
     })
-    const relayedAtSeq = session.events.at(-1)!.seq
+    const relayedAtSeq = session.snapshotEvents().at(-1)!.seq
     session.append('tool/call', {
       turn: 2,
       step: 1,
@@ -58,6 +58,7 @@ describe('Shadow value-loop classifier', () => {
     session.append('assistant/message', {
       turn: 2,
       step: 1,
+      stream: [],
       message: createMessage({
         role: 'assistant',
         content: [
@@ -74,12 +75,12 @@ describe('Shadow value-loop classifier', () => {
       relayedAtSeq,
       refs: [referenced.seq],
     }
-    expect(observeChallenge(session.events, challenge)).toMatchObject({
+    expect(observeChallenge(session.snapshotEvents(), challenge)).toMatchObject({
       responseText: 'Applied the change.',
       challengedArtifacts: ['src/runtime.ts'],
       toolTargets: ['src/runtime.ts'],
       completedTurns: 1,
     })
-    expect(classifyChallenge(session.events, challenge, 2)).toBe('challenge_adopted')
+    expect(classifyChallenge(session.snapshotEvents(), challenge, 2)).toBe('challenge_adopted')
   })
 })

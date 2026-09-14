@@ -92,6 +92,7 @@ Review the completed tool-using turn.
     const callId = ToolCallId('call-1')
     session.append('assistant/message', {
       turn: 1, step: 1,
+      stream: [],
       message: createMessage({
         role: 'assistant',
         content: [{ type: 'tool-call', id: callId, name: 'read', arguments: '{}' }],

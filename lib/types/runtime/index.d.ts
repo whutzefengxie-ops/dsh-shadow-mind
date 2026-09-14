@@ -36,13 +36,7 @@ declare module '@deepseek-ai/cordis' {
         shadowMind: ShadowMindRuntime;
     }
 }
-/**
- * User-settings namespace for live Shadow orchestration controls.
- * DSH 0.1.2-alpha.2 removed the `settingsNamespace` factory from
- * `@deepseek-ai/dsh-settings`; namespaces are plain strings now (validated
- * against `^[a-z][a-z0-9-]*$` by the provider at registration). The cast
- * keeps the constant's public type stable for consumers on either API.
- */
+/** User-settings namespace for live Shadow orchestration controls. */
 export declare const SHADOW_MIND_SETTINGS_NAMESPACE: SettingsNamespace;
 /** Tools visible to every Shadow before definition-specific additions. */
 export declare const DEFAULT_SHADOW_TOOLS: readonly ["read", "grep", "glob"];

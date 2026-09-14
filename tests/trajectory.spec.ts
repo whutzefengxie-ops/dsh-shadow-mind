@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ToolCallId, createMessage, createToolResultMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
 import { CompactionId } from '@deepseek-ai/dsh-compaction'
-import { Session, SessionId } from '@deepseek-ai/dsh-session'
+import { Session, SessionId, SessionSeq } from '@deepseek-ai/dsh-session'
 import {
   buildShadowPrompt,
   estimateTextTokens,
@@ -33,6 +33,7 @@ function trajectorySession(): Session {
   session.append('assistant/message', {
     turn: 1,
     step: 1,
+    stream: [],
     message: createMessage({
       role: 'assistant',
       content: [
@@ -62,7 +63,7 @@ function trajectorySession(): Session {
 describe('trajectory projection', () => {
   it('keeps visible text while removing reasoning, arguments, and raw tool output', () => {
     const session = trajectorySession()
-    const projected = projectTrajectory(session.events, session.events.at(-1)!.seq, 'redacted')
+    const projected = projectTrajectory(session.snapshotEvents(), session.snapshotEvents().at(-1)!.seq, 'redacted')
     expect(projected).toContain('Review this.')
     expect(projected).toContain('I will inspect it.')
     expect(projected).toContain('arguments=[redacted]')
@@ -72,8 +73,8 @@ describe('trajectory projection', () => {
 
   it('discloses raw arguments only under the explicit full policy and obeys the watermark', () => {
     const session = trajectorySession()
-    const call = session.events.find(event => event.type === 'tool/call')!
-    const projected = projectTrajectory(session.events, call.seq, 'full')
+    const call = session.snapshotEvents().find(event => event.type === 'tool/call')!
+    const projected = projectTrajectory(session.snapshotEvents(), call.seq, 'full')
     expect(projected).toContain('{"secret":"ARGUMENT"}')
     expect(projected).not.toContain('tool result]')
   })
@@ -86,13 +87,13 @@ describe('trajectory projection', () => {
         { type: 'text', text: 'COMPACTED DECISIONS' },
         { type: 'reasoning', text: 'COMPACTION SECRET' },
       ],
-      shadowedRange: { start: 1, end: 2 },
-      shadowedSeqs: [1, 2],
+      shadowedRange: { start: SessionSeq(1), end: SessionSeq(2) },
+      shadowedSeqs: [SessionSeq(1), SessionSeq(2)],
       shadowedTokenCount: 20,
       provider: 'mock',
       model: 'compact-model',
     })
-    const projected = projectTrajectory(session.events, session.events.at(-1)!.seq, 'redacted')
+    const projected = projectTrajectory(session.snapshotEvents(), session.snapshotEvents().at(-1)!.seq, 'redacted')
     expect(projected).toMatch(/\[seq=\d+ compaction summary\]\nCOMPACTED DECISIONS/u)
     expect(projected).not.toContain('COMPACTION SECRET')
   })
@@ -104,8 +105,8 @@ describe('trajectory projection', () => {
     const summary = session.append('compaction/summary', {
       compactionId,
       summary: [{ type: 'text', text: 'EARLIER WORK SUMMARY' }],
-      shadowedRange: { start: 1, end: 2 },
-      shadowedSeqs: [1, 2],
+      shadowedRange: { start: SessionSeq(1), end: SessionSeq(2) },
+      shadowedSeqs: [SessionSeq(1), SessionSeq(2)],
       shadowedTokenCount: 20,
       provider: 'mock',
       model: 'compact-model',
@@ -114,9 +115,9 @@ describe('trajectory projection', () => {
     const current = session.append('user/message', createUserMessage({
       content: [{ type: 'text', text: 'Current epoch task.' }], source: { kind: 'user' },
     }), SURFACE)
-    const watermark = session.events.at(-1)!.seq
-    const full = projectTrajectory(session.events, watermark, 'redacted', 'full')
-    const projected = projectTrajectoryWithAnchors(session.events, watermark, 'redacted', 'since-compaction')
+    const watermark = session.snapshotEvents().at(-1)!.seq
+    const full = projectTrajectory(session.snapshotEvents(), watermark, 'redacted', 'full')
+    const projected = projectTrajectoryWithAnchors(session.snapshotEvents(), watermark, 'redacted', 'since-compaction')
 
     expect(full).toContain('Review this.')
     expect(projected.text).not.toContain('Review this.')
@@ -167,6 +168,7 @@ describe('trajectory projection', () => {
     session.append('assistant/message', {
       turn: 1,
       step: 1,
+      stream: [],
       message: createMessage({
         role: 'assistant',
         content: [{ type: 'reasoning', text: 'hidden only' }],
@@ -176,8 +178,8 @@ describe('trajectory projection', () => {
     session.append('compaction/summary', {
       compactionId: CompactionId('empty-summary'),
       summary: [{ type: 'reasoning', text: 'hidden summary' }],
-      shadowedRange: { start: 0, end: 0 },
-      shadowedSeqs: [0],
+      shadowedRange: { start: SessionSeq(0), end: SessionSeq(0) },
+      shadowedSeqs: [SessionSeq(0)],
       shadowedTokenCount: 1,
       provider: 'mock',
       model: 'compact-model',
@@ -200,12 +202,14 @@ describe('trajectory projection', () => {
       message: createToolResultMessage({
         callId: ToolCallId('known'),
         content: [{ type: 'text', text: 'failure path' }],
-        isError: false,
+        // The current session invariant requires a surfaced failure block
+        // whenever the result carries internal error identity.
+        isError: true,
       }),
       error: { name: 'Error', code: 'UNKNOWN' },
     }, { surfaceOp: 'append', sourceEventSeqs: [call.seq] })
 
-    const projected = projectTrajectory(session.events, session.events.at(-1)!.seq, 'redacted')
+    const projected = projectTrajectory(session.snapshotEvents(), session.snapshotEvents().at(-1)!.seq, 'redacted')
     expect(projected).toContain('[seq=0 user:user]\n[image omitted]')
     expect(projected).not.toContain('hidden only')
     expect(projected).toContain('unknown-tool error')
