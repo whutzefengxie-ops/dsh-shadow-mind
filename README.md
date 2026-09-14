@@ -134,7 +134,7 @@ The devDependencies link against the DeepSeek Harness source (`../deepseek-harne
 ```sh
 corepack enable
 git clone https://github.com/whutzefengxie-ops/deepseek-harness.git ../deepseek-harness
-git -C ../deepseek-harness checkout cd5ef8148158c3a752a658978873241fdf8e2bbc
+git -C ../deepseek-harness checkout dd6322d604e00eec1ba5e0c8541159906a21094a
 pnpm --dir ../deepseek-harness install --frozen-lockfile
 pnpm --dir ../deepseek-harness run build:lib
 ```

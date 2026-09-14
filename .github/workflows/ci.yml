@@ -14,14 +14,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The dsh-0.1.2 client surface is not published to npm yet, so devDeps
-      # link against the harness source. Check out the pinned release commit
-      # (fork tag dsh-v0.1.2-alpha.1) and expose it at the sibling path the
-      # `link:../deepseek-harness/...` entries resolve from.
+      # The dsh-0.1.5 client surface is not published to npm yet, so devDeps
+      # link against the harness source. Check out the pinned master commit this
+      # release was validated against (it mounts the session-projection registry
+      # in the agent-loop testkit and exposes the live `agent/assistant-stream`
+      # frames the degenerate-output watchdog needs) and expose it at the
+      # sibling path the `link:../deepseek-harness/...` entries resolve from.
       - uses: actions/checkout@v4
         with:
           repository: whutzefengxie-ops/deepseek-harness
-          ref: cd5ef8148158c3a752a658978873241fdf8e2bbc
+          ref: c291e7961a515f6d7af9304e7fd1d257929aef26
           fetch-depth: 1
           path: harness-source
       - name: Link the harness checkout where the devDeps expect it
