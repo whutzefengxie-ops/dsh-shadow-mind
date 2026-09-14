@@ -175,6 +175,7 @@
     "@deepseek-ai/dsh-agent-loop-testkit": "link:../deepseek-harness/packages/test-support/agent-loop-testkit",
     "@deepseek-ai/dsh-api-remotes": "link:../deepseek-harness/packages/api/remotes",
     "@deepseek-ai/dsh-atomic-write": "link:../deepseek-harness/packages/util/atomic-write",
+    "@deepseek-ai/dsh-brand": "link:../deepseek-harness/packages/util/brand",
     "@deepseek-ai/dsh-client-locale": "link:../deepseek-harness/packages/client/locale",
     "@deepseek-ai/dsh-client-ui-commands": "link:../deepseek-harness/packages/client/ui-commands",
     "@deepseek-ai/dsh-client-ui-conversation": "link:../deepseek-harness/packages/client/ui-conversation",

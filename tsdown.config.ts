@@ -11,6 +11,21 @@ const CLIENT_EXTERNALS = new Set([
   'react/jsx-runtime',
   '@deepseek-ai/dsh-client-ui-primitives',
 ])
+/**
+ * Harness modules the client bundle inlines instead of requiring from the
+ * shell's module table. Both are stateless wire layers: the session surface
+ * predicates the report card reads, plus the branded-primitive helpers that
+ * session wire layer imports. They carry no runtime identity or mutable state,
+ * so an inlined copy is interchangeable with the shell's.
+ */
+const CLIENT_INLINE_LAYERS = [
+  '@deepseek-ai/dsh-session/',
+  '@deepseek-ai/dsh-brand',
+]
+/** Whether one specifier is an inline-safe Harness wire layer. */
+function isClientInlineLayer(source: string): boolean {
+  return CLIENT_INLINE_LAYERS.some(layer => source === layer || source.startsWith(layer))
+}
 const CSS_VIRTUAL_PREFIX = '\0shadow-mind-css:'
 const CSS_VIRTUAL_SUFFIX = '.mjs'
 const cssFiles = new Map<string, string>()
@@ -79,7 +94,7 @@ const client: UserConfig = {
     resolveId(source: string) {
       if (!source.startsWith('@deepseek-ai/')
         || CLIENT_EXTERNALS.has(source)
-        || source.startsWith('@deepseek-ai/dsh-session/')) return null
+        || isClientInlineLayer(source)) return null
       throw new Error(`client bundle cannot import runtime value ${JSON.stringify(source)}`)
     },
   }, {
