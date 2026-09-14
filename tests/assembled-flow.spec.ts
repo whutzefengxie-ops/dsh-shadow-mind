@@ -197,7 +197,7 @@ describe('assembled Shadow Mind flow', () => {
           ],
         }
       `)
-      expect(root.session.events.some(event => event.type === 'assistant/message'
+      expect(root.session.snapshotEvents().some(event => event.type === 'assistant/message'
         && JSON.stringify(event.data.message.content).includes('ROOT_USED_SHADOW_REPORT'))).toBe(true)
       await handle.dispose()
     } finally {

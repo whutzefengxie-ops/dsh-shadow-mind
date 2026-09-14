@@ -144,6 +144,7 @@ function emitToolTurn(harness: RuntimeHarness, turn = 1): number {
   session.append('assistant/message', {
     turn,
     step,
+    stream: [],
     message: createMessage({
       role: 'assistant',
       content: [{ type: 'tool-call', id: callId, name: 'read', arguments: '{}' }],
@@ -751,7 +752,12 @@ Review the completed turn.
     ]
     const harness = await setup(() => ({
       id: SessionId('child-tool-telemetry'),
-      localAgent: { session: { events } } as unknown as Agent,
+      localAgent: {
+        session: {
+          header: { id: SessionId('child-tool-telemetry'), createdAt: 0 },
+          snapshotEvents: () => events,
+        },
+      } as unknown as Agent,
       result: Promise.resolve({
         output: [],
         diagnostic: 'Shadow subagent completed its turn without calling the mandatory structured_output tool; no report was captured or relayed.',

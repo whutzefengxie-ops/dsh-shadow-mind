@@ -49,7 +49,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
       }),
     ])
     ctx.llm.registerAdapter(['selected'], adapter)
-    const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
+    const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
     const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
       label: 'shadow:reviewer',
@@ -78,7 +78,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
     expect(adapter.requests[0]?.tools ?? []).toEqual([])
     expect(adapter.requests[1]?.tools?.map(tool => tool.name)).toContain('structured_output')
     expect(JSON.stringify(adapter.requests[0]?.messages)).not.toMatch(/delegated subagent/iu)
-    expect(run.localAgent?.session.events.filter(event => event.type === 'assistant/message')).toHaveLength(2)
+    expect(run.localAgent?.session.snapshotEvents().filter(event => event.type === 'assistant/message')).toHaveLength(2)
 
     await run.dispose()
     expect(ctx.agents.get(run.id)).toBeUndefined()
@@ -99,7 +99,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
       textResponse('Investigation complete; the finding is recorded here as prose.'),
     ])
     ctx.llm.registerAdapter(['selected'], adapter)
-    const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
+    const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
     const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
       label: 'shadow:reviewer',
@@ -137,7 +137,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
       'hang',
     ])
     ctx.llm.registerAdapter(['selected'], adapter)
-    const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
+    const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
     const controller = new AbortController()
     const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
@@ -179,7 +179,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
       },
     ])
     ctx.llm.registerAdapter(['selected'], adapter)
-    const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
+    const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
     const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
       label: 'shadow:reviewer',
@@ -220,7 +220,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
       () => { throw new Error('provider transport failed') },
     ])
     ctx.llm.registerAdapter(['selected'], adapter)
-    const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
+    const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
     const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
       label: 'shadow:reviewer',
@@ -268,7 +268,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
       }),
     ])
     ctx.llm.registerAdapter(['selected'], adapter)
-    const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
+    const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
     const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
       label: 'shadow:reviewer',
@@ -295,7 +295,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
     })
     // Plan request, failed call, corrected retry: the same turn kept going.
     expect(adapter.requests).toHaveLength(3)
-    const badResult = run.localAgent?.session.events.find(event =>
+    const badResult = run.localAgent?.session.snapshotEvents().find(event =>
       event.type === 'tool/result' && event.data.message.content[0]?.isError === true)
     expect(badResult).toBeDefined()
     expect(JSON.stringify(badResult)).toContain('strictly ascending')
@@ -323,7 +323,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
       textResponse('The window check rejected the anchor; finishing without a valid capture.'),
     ])
     ctx.llm.registerAdapter(['selected'], adapter)
-    const parent = ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
+    const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
     const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
       label: 'shadow:reviewer',
