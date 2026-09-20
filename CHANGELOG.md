@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-09-20
+
+### Release
+- Republish the DSH `0.1.6-alpha.2` compatibility fix under a new immutable tag. Runtime source and committed `lib/` artifacts are identical to v0.1.3.
+- Update package metadata and installation instructions to v0.1.4.
+
 ## [0.1.3] - 2026-09-20
 
 ### Fixed
