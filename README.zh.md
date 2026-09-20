@@ -8,12 +8,12 @@
 
 | dsh-shadow-mind | 所需 DSH 版本 | 说明 |
 |----------------|--------------|------|
-| 当前开发源码 | `0.1.6-alpha.2` | 校验器工厂与 Workspace 管理的 Session 导航 |
+| v0.1.3         | `0.1.6-alpha.2`（已验证基线） | 校验器工厂与 Workspace 管理的 Session 导航 |
 | v0.1.2         | `0.1.5-rc.2`（已验证基线） | 修复 subagent setup 绑定与实时退化输出看门狗 |
 | v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API 兼容性更新 |
 | v0.1.0         | `0.1.4` 及更早版本 | 旧版 Session API |
 
-**最新发布版本**：v0.1.2。当前开发源码适配 DSH `0.1.6-alpha.2`，兼容版本发布前需要在本地构建并安装。已发布的 v0.1.2 使用旧版 RPC 校验器接口，在 DSH 0.1.6 上会导致客户端插件激活失败。
+**最新发布版本**：v0.1.3，已在 DSH `0.1.6-alpha.2` 上验证。本版本不支持早于 `0.1.6-alpha.2` 的 DSH。对于 DSH `0.1.5-rc.2` 基线，请使用 v0.1.2。
 
 如果你使用的是 DSH `0.1.4` 或更早版本，请安装 `dsh-shadow-mind@0.1.0`：
 ```sh
@@ -26,10 +26,10 @@ dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.0
 
 ## 安装
 
-对于已验证的 DSH `0.1.5-rc.2` 基线，可以安装 GitHub 发布标签。对于 DSH `0.1.6-alpha.2`，请先运行 `pnpm run build` 构建当前源码，再按下方本地安装方式操作：
+对于已验证的 DSH `0.1.6-alpha.2` 基线，可以安装 GitHub 发布标签：
 
 ```sh
-dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.2
+dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.3
 ```
 
 或者从 GitHub 安装时固定已经审查的 commit：
