@@ -8,11 +8,12 @@
 
 | dsh-shadow-mind | 所需 DSH 版本 | 说明 |
 |----------------|--------------|------|
-| v0.1.2         | `>=0.1.5-rc.1 <0.2.0` | 修复 subagent setup 绑定与实时退化输出看门狗 |
+| 当前开发源码 | `0.1.6-alpha.2` | 校验器工厂与 Workspace 管理的 Session 导航 |
+| v0.1.2         | `0.1.5-rc.2`（已验证基线） | 修复 subagent setup 绑定与实时退化输出看门狗 |
 | v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API 兼容性更新 |
 | v0.1.0         | `0.1.4` 及更早版本 | 旧版 Session API |
 
-**当前版本**: v0.1.2
+**最新发布版本**：v0.1.2。当前开发源码适配 DSH `0.1.6-alpha.2`，兼容版本发布前需要在本地构建并安装。已发布的 v0.1.2 使用旧版 RPC 校验器接口，在 DSH 0.1.6 上会导致客户端插件激活失败。
 
 如果你使用的是 DSH `0.1.4` 或更早版本，请安装 `dsh-shadow-mind@0.1.0`：
 ```sh
@@ -25,7 +26,7 @@ dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.0
 
 ## 安装
 
-插件要求 DeepSeek Harness `0.1.5-rc.1` 或更新版本。从 GitHub release tag 安装：
+对于已验证的 DSH `0.1.5-rc.2` 基线，可以安装 GitHub 发布标签。对于 DSH `0.1.6-alpha.2`，请先运行 `pnpm run build` 构建当前源码，再按下方本地安装方式操作：
 
 ```sh
 dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.2
@@ -127,12 +128,12 @@ node tools/shadow-debug.mjs health                                        # 体�
 
 ## 开发
 
-devDependencies 通过 `link:` 指向本仓库同级的 DeepSeek Harness 源码（`../deepseek-harness`，dsh-0.1.2 客户端面尚未发布到 npm）。先在固定发布提交上准备好它（见 `.github/workflows/ci.yml`）：
+devDependencies 通过 `link:` 指向本仓库同级的 DeepSeek Harness `0.1.6-alpha.2` 源码（`../deepseek-harness`）。先准备 `.github/workflows/ci.yml` 固定的提交：
 
 ```sh
 corepack enable
-git clone https://github.com/whutzefengxie-ops/deepseek-harness.git ../deepseek-harness
-git -C ../deepseek-harness checkout dd6322d604e00eec1ba5e0c8541159906a21094a
+git clone https://github.com/deepseek-ai/deepseek-harness.git ../deepseek-harness
+git -C ../deepseek-harness checkout ddefc45fbc7f8e46dd73185e68295696d1297887
 pnpm --dir ../deepseek-harness install --frozen-lockfile
 pnpm --dir ../deepseek-harness run build:lib
 ```

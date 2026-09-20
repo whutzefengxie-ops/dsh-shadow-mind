@@ -1,4 +1,5 @@
 import ts from 'typescript'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitest/config'
 
 const decoratorSyntax = /^\s*@[A-Za-z_$][\w$]*/m
@@ -29,6 +30,11 @@ function standardDecoratorPlugin() {
 }
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@deepseek-ai/dsh-api-gateway/client': fileURLToPath(new URL('../deepseek-harness/packages/api/gateway/src/client/index.ts', import.meta.url)),
+    },
+  },
   plugins: [standardDecoratorPlugin()],
   test: {
     // The default include walks every spec file under the repo root, which

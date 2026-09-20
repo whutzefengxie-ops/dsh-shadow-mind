@@ -30,9 +30,15 @@ importers:
       '@deepseek-ai/dsh-agent-loop-testkit':
         specifier: link:../deepseek-harness/packages/test-support/agent-loop-testkit
         version: link:../deepseek-harness/packages/test-support/agent-loop-testkit
+      '@deepseek-ai/dsh-api-gateway':
+        specifier: link:../deepseek-harness/packages/api/gateway
+        version: link:../deepseek-harness/packages/api/gateway
       '@deepseek-ai/dsh-api-remotes':
         specifier: link:../deepseek-harness/packages/api/remotes
         version: link:../deepseek-harness/packages/api/remotes
+      '@deepseek-ai/dsh-api-session-controller':
+        specifier: link:../deepseek-harness/packages/api/session-controller
+        version: link:../deepseek-harness/packages/api/session-controller
       '@deepseek-ai/dsh-atomic-write':
         specifier: link:../deepseek-harness/packages/util/atomic-write
         version: link:../deepseek-harness/packages/util/atomic-write
@@ -69,6 +75,9 @@ importers:
       '@deepseek-ai/dsh-client-ui-slots':
         specifier: link:../deepseek-harness/packages/client/ui-slots
         version: link:../deepseek-harness/packages/client/ui-slots
+      '@deepseek-ai/dsh-client-ui-workspace':
+        specifier: link:../deepseek-harness/packages/client/ui-workspace
+        version: link:../deepseek-harness/packages/client/ui-workspace
       '@deepseek-ai/dsh-commands':
         specifier: link:../deepseek-harness/packages/interaction/commands
         version: link:../deepseek-harness/packages/interaction/commands
@@ -102,9 +111,15 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: link:../deepseek-harness/packages/core/tools
         version: link:../deepseek-harness/packages/core/tools
+      '@deepseek-ai/dsh-typert-loader':
+        specifier: link:../deepseek-harness/packages/typert/loader
+        version: link:../deepseek-harness/packages/typert/loader
       '@deepseek-ai/dsh-typert-protocol':
         specifier: link:../deepseek-harness/packages/typert/protocol
         version: link:../deepseek-harness/packages/typert/protocol
+      '@deepseek-ai/dsh-typert-registry':
+        specifier: link:../deepseek-harness/packages/typert/registry
+        version: link:../deepseek-harness/packages/typert/registry
       '@deepseek-ai/dsh-user-approval':
         specifier: link:../deepseek-harness/packages/interaction/user-approval
         version: link:../deepseek-harness/packages/interaction/user-approval
