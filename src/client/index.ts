@@ -7,6 +7,8 @@ import type {} from '@deepseek-ai/dsh-client-ui-commands/client'
 import type {} from '@deepseek-ai/dsh-client-ui-conversation/client'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
 import type {} from '@deepseek-ai/dsh-client-ui-session/client'
+import type {} from '@deepseek-ai/dsh-client-ui-workspace/client'
+import type { ISessions } from '@deepseek-ai/dsh-api-session-controller/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-settings-plugins/client'
 import shadowMindRemote from '../generated/typert.remote-client.js'
@@ -47,22 +49,9 @@ export type { ShadowMindLocaleKey } from './locales.ts'
 /** Dictionary namespace owned by this plugin. */
 export const NS = 'settings.shadowMind'
 
-/**
- * Session service face the Web shell exposes to client plugins. The Host-typed
- * `ctx.sessions` (`@deepseek-ai/dsh-session`'s SessionStore) is a different
- * static shape, so client callers bridge it structurally, exactly like the
- * harness' own client plugins do through the session-controller contract.
- */
-interface ClientSessions {
-  /** Resolve one agent-scoped context view for a session id. */
-  scope(sessionId: SessionId): ClientContext | undefined
-  /** Select one session as current. */
-  open(sessionId: SessionId): void
-}
-
 /** Bridge `ctx.sessions` to the client session service face. */
-function clientSessions(ctx: ClientContext): ClientSessions {
-  return ctx.sessions as unknown as ClientSessions
+function clientSessions(ctx: ClientContext): ISessions {
+  return ctx.get('sessions') as unknown as ISessions
 }
 
 /** Services required by the Settings tab, Remote methods, and slash-command acknowledgment. */
@@ -72,6 +61,7 @@ export const inject = [
   'sessions',
   'remote',
   'uiConversation',
+  'uiWorkspace',
   'settingsScope',
 ]
 
@@ -111,7 +101,6 @@ export async function apply(ctx: ClientContext): Promise<void> {
   })
 
   ctx.inject(['slots', 'remote.shadowMind'], (scope: ClientContext) => {
-    const sessions = clientSessions(scope)
     const remote = scope.remote.shadowMind
     const reviewStore = new ShadowReviewStore(
       sessionId => remoteValue<readonly ShadowReviewCycle[]>(
@@ -131,7 +120,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       key: 'shadow-mind-review',
       locale: NS,
       inject: (): ShadowReportCardInjected => ({
-        openSession: sessionId => { sessions.open(sessionId) },
+        openSession: sessionId => { scope.uiWorkspace.openSession(sessionId) },
         useCycle: (sessionId, capturedThroughSeq) => useShadowReviewCycle(
           reviewStore,
           sessionId,

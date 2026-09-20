@@ -1,4 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { Context } from '@deepseek-ai/cordis'
+import TypertRegistry from '@deepseek-ai/dsh-typert-registry'
+import { validateTypertManifest } from '@deepseek-ai/dsh-typert-loader'
 // @ts-expect-error The generated host contribution is bundled directly and has no declaration file.
 import { TYPERT } from '../src/generated/typert.host.js'
 import { TYPERT_REMOTE } from '../src/generated/typert.remote-client.js'
@@ -9,6 +12,27 @@ const descriptorSets = [
 ]
 
 describe('Shadow Remote descriptors', () => {
+  it('registers Host and Client contributions with the installed Harness registry', async () => {
+    const host = new Context()
+    const client = new Context()
+    try {
+      await host.plugin(TypertRegistry)
+      await client.plugin(TypertRegistry)
+      const manifest = validateTypertManifest(TYPERT.package, TYPERT)
+      const disposeHost = host.typert.register(manifest)
+      const disposeClient = client.typert.remotes.register(TYPERT_REMOTE)
+      expect(client.typert.remotes.list()).toHaveLength(TYPERT_REMOTE.descriptors.length)
+      expect(host.typert.getPackage(TYPERT.package)).toBeDefined()
+      await disposeClient()
+      await disposeHost()
+      expect(client.typert.remotes.list()).toEqual([])
+      expect(host.typert.getPackage(TYPERT.package)).toBeUndefined()
+    } finally {
+      await client.fiber.dispose()
+      await host.fiber.dispose()
+    }
+  })
+
   it('publishes the modelCatalog remote with a strict directory codec', () => {
     const descriptor = TYPERT_REMOTE.descriptors.find(candidate => candidate.method === 'modelCatalog')
 
@@ -34,7 +58,7 @@ describe('Shadow Remote descriptors', () => {
       }],
       failures: [],
     }
-    expect(descriptor.result.schema.parse(directory)).toEqual(directory)
+    expect(descriptor.result.create().parse(directory)).toEqual(directory)
   })
 
   it('publishes the scoped lifecycle snapshot method', () => {
@@ -47,7 +71,7 @@ describe('Shadow Remote descriptors', () => {
       scope: { context: 'agent', wire: 'agentId' },
     })
     if (descriptor?.result.mode !== 'strict') throw new Error('cycles must use a strict result codec')
-    expect(descriptor.result.schema.parse([{
+    expect(descriptor.result.create().parse([{
       capturedThroughSeq: 20,
       scheduling: false,
       runs: [{
@@ -69,7 +93,7 @@ describe('Shadow Remote descriptors', () => {
   it('rejects an unstated cancellation reason at the wire boundary', () => {
     const descriptor = TYPERT_REMOTE.descriptors.find(candidate => candidate.method === 'cycles')
     if (descriptor?.result.mode !== 'strict') throw new Error('cycles must use a strict result codec')
-    const schema = descriptor.result.schema
+    const schema = descriptor.result.create()
     expect(() => schema?.parse([{
       capturedThroughSeq: 20,
       scheduling: false,
@@ -109,7 +133,7 @@ describe('Shadow Remote descriptors', () => {
     for (const descriptors of descriptorSets) {
       const descriptor = descriptors.find(candidate => candidate.method === 'cycles')
       if (descriptor?.result.mode !== 'strict') throw new Error('cycles must use a strict result codec')
-      expect(descriptor.result.schema.parse([cycle])).toHaveLength(1)
+      expect(descriptor.result.create().parse([cycle])).toHaveLength(1)
     }
   })
 
@@ -157,7 +181,7 @@ describe('Shadow Remote descriptors', () => {
     for (const descriptors of descriptorSets) {
       const descriptor = descriptors.find(candidate => candidate.method === 'status')
       if (descriptor?.result.mode !== 'strict') throw new Error('status must use a strict result codec')
-      expect(descriptor.result.schema.parse(status)).toEqual(status)
+      expect(descriptor.result.create().parse(status)).toEqual(status)
     }
   })
 
@@ -208,15 +232,15 @@ describe('Shadow Remote descriptors', () => {
     for (const descriptors of descriptorSets) {
       const catalogDescriptor = descriptors.find(candidate => candidate.method === 'catalog')
       if (catalogDescriptor?.result.mode !== 'strict') throw new Error('catalog must use a strict result codec')
-      expect(catalogDescriptor.result.schema.parse(catalog)).toEqual(catalog)
+      expect(catalogDescriptor.result.create().parse(catalog)).toEqual(catalog)
 
       const descriptor = descriptors.find(candidate => candidate.method === 'saveDefault')
       if (descriptor === undefined) throw new Error('saveDefault descriptor is required')
       const parameter = descriptor.parameters[0]
       if (parameter?.codec.mode !== 'strict') throw new Error('saveDefault input must use a strict codec')
       if (descriptor.result.mode !== 'strict') throw new Error('saveDefault result must use a strict codec')
-      expect(parameter.codec.schema.parse(input)).toEqual(input)
-      expect(descriptor.result.schema.parse(definition)).toEqual(definition)
+      expect(parameter.codec.create().parse(input)).toEqual(input)
+      expect(descriptor.result.create().parse(definition)).toEqual(definition)
     }
   })
 
@@ -246,7 +270,7 @@ describe('Shadow Remote descriptors', () => {
       if (descriptor === undefined) throw new Error('retry descriptor is required')
       if (descriptor.result.mode !== 'strict') throw new Error('retry must use a strict result codec')
       expect(descriptor.parameters.map(parameter => parameter.name)).toEqual(['agent', 'runId'])
-      expect(descriptor.result.schema.parse(status)).toEqual(status)
+      expect(descriptor.result.create().parse(status)).toEqual(status)
     }
   })
 })

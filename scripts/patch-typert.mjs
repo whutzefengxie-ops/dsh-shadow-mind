@@ -104,7 +104,7 @@ function modelCatalogDescriptor(line) {
       result: {
         mode: 'strict',
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowModelCatalog',
-        schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema,
+        create: () => _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_modelCatalog_result$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":${line},"column":3},
     },
@@ -175,7 +175,7 @@ function patchJs(text, requireDeclaration) {
           codec: {
             mode: 'strict',
             typeSymbol: '@deepseek-ai/dsh-session/types#SessionId',
-            schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_0$schema,
+            create: () => _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_0$schema,
           },
         },
         {
@@ -185,14 +185,14 @@ function patchJs(text, requireDeclaration) {
           codec: {
             mode: 'strict',
             typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind#shadowMind/retry:runId',
-            schema: _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_1$schema,
+            create: () => _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_1$schema,
           },
         },
       ],
       result: {
         mode: 'strict',
         typeSymbol: '@whutzefengxie-ops/dsh-shadow-mind/types#ShadowMindStatus',
-        schema: _shadowMindStatusV2$schema,
+        create: () => _shadowMindStatusV2$schema,
       },
       sourceLocation: {"file":"src/runtime/index.ts","line":${sourceLine(`@Remote('retry')`)},"column":3},
     },
@@ -241,7 +241,7 @@ const _deepseek_ai_dsh_shadow_mind_runtime_shadowMind_retry_parameter_1$schema =
     if (!pattern.test(text)) throw new Error(`descriptor sourceLocation anchor not found: ${method}`)
     text = text.replace(pattern, `$1{"file":"src/runtime/index.ts","line":${line},"column":3},`)
   }
-  return text
+  return text.replace(/^(\s*)schema: ([_\w$]+),$/gmu, '$1create: () => $2,')
 }
 
 /** Patch the remote-client declaration file. */

@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+- Host and Client RPC descriptors provide the `create()` codec factories required by DSH `0.1.6-alpha.2`, allowing the Shadow client to activate.
+- Settings read the Session retained by the main view; report cards open child Sessions through `uiWorkspace.openSession`.
+
+### Compatibility
+- The development baseline is DSH `0.1.6-alpha.2` at `ddefc45fbc7f8e46dd73185e68295696d1297887`. Earlier DSH APIs are unsupported by this checkout.
+- Regression tests register both Typert contributions and activate the shipped browser bundle with the current Client gateway.
+
 ## [0.1.2] - 2026-09-14
 
 ### Fixed

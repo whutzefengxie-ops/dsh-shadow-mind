@@ -183,7 +183,8 @@ function friendlyError(t: ShadowMindSettingsTabProps['t'], error: unknown): stri
 /** Shadow Mind administration tab under Settings → Plugins. */
 function ShadowMindSettingsTabContent(props: ShadowMindSettingsTabProps): ReactNode {
   const { t } = props
-  const currentSession = props.useSessions(snapshot => snapshot.current)
+  const currentSession = props.useSessions(snapshot => Object.values(snapshot.byId)
+    .find(session => (session.retainedBy.mainView ?? 0) > 0)?.id)
   const collapsedByDefault = props.useCollapsedByDefault()
   const [catalog, setCatalog] = useState<ShadowAdministrationSnapshot | null>(null)
   const [status, setStatus] = useState<ShadowMindStatus | null>(null)
