@@ -47,7 +47,6 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     /** Definition and debug-log store. */
     readonly registry: ShadowRegistry;
     private settingsValue;
-    private readonly settingsScope;
     private random;
     private readonly owners;
     private stopped;
@@ -88,6 +87,8 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
      * @returns Live resolved settings snapshot.
      */
     currentSettings(): ShadowMindSettings;
+    /** Read the resolved Shadow settings namespace from the DSH 0.2 settings service. */
+    private readSettings;
     /**
      * Atomically persist selected settings; null removes an optional user override.
      * @param patch Settings fields to set or clear.

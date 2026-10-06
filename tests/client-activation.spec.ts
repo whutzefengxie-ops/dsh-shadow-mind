@@ -24,7 +24,7 @@ function builtPlugin(): ClientPlugin {
     __ModuleLoader__: {
       load(registration: { factory(require: (id: string) => unknown): ClientPlugin }) {
         plugin = registration.factory(id => id === '@deepseek-ai/dsh-client-ui-primitives'
-          ? { MarkdownText: () => null, IconTriangleRightFill14: () => null }
+          ? { MarkdownText: () => null, IconTriangleRightFillRegular: () => null }
           : require(id))
       },
     },
@@ -62,7 +62,11 @@ describe('shipped Shadow client activation', () => {
       ctx.provide('sessions', { scope: () => undefined })
       ctx.provide('uiWorkspace', { openSession })
       ctx.provide('uiConversation', { events: { register: vi.fn() } })
-      ctx.provide('settingsScope', { bind: () => ({}) })
+      ctx.provide('configForms', { get: () => ({
+        subscribe: () => () => {},
+        getSnapshot: () => ({ value: { collapsedByDefault: true } }),
+        set: async () => true,
+      }) })
 
       const fiber = ctx.plugin(builtPlugin())
       await fiber

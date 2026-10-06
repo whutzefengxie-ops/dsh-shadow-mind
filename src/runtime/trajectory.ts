@@ -144,12 +144,18 @@ export function projectTrajectoryWithAnchors(
         lines.push(`[seq=${String(event.seq)} tool call] ${event.data.name} arguments=${argumentDisclosure === 'full' ? event.data.arguments : '[redacted]'}`)
         break
       case 'tool/result': {
-        const block = event.data.message.content[0]
-        const toolName = calls.get(String(block.toolCallId)) ?? 'unknown-tool'
+        const message = event.data.message
+        const legacy = message.content[0]
+        const toolCallId = 'toolCallId' in message ? message.toolCallId : legacy !== undefined && legacy.type === 'tool-result' ? legacy.toolCallId : undefined
+        const content = legacy !== undefined && legacy.type === 'tool-result' ? legacy.content : message.content
+        const failed = ('isError' in message && message.isError === true)
+          || (legacy !== undefined && legacy.type === 'tool-result' && legacy.isError === true)
+          || event.data.error !== undefined
+        const toolName = toolCallId === undefined ? 'unknown-tool' : calls.get(String(toolCallId)) ?? 'unknown-tool'
         lines.push(`[seq=${String(event.seq)} tool result] ${summarizeToolResult(
           toolName,
-          block.content,
-          block.isError === true || event.data.error !== undefined,
+          content,
+          failed,
           event.data.meta,
         )}`)
         break

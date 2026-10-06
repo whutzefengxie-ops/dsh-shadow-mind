@@ -8,12 +8,12 @@ An independently versioned DeepSeek Harness bundle that starts fresh background 
 
 | dsh-shadow-mind | DSH Version Required | Notes |
 |----------------|---------------------|-------|
-| Development checkout | `0.1.6-alpha.2` | Codec factories and Workspace-owned Session navigation |
+| Development checkout | `0.2.1-alpha.1` | Codec factories and Workspace-owned Session navigation |
 | v0.1.2         | `0.1.5-rc.2` (verified baseline) | Subagent setup binding + live degenerate-output watchdog |
 | v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API compatibility update |
 | v0.1.0         | `0.1.4` and earlier | Legacy session API |
 
-**Latest released version**: v0.1.2. This development checkout targets DSH `0.1.6-alpha.2` and must be built and installed locally until a compatible release is published. Released v0.1.2 fails Client plugin activation on DSH 0.1.6 because its RPC descriptors use the previous codec API.
+**Latest released version**: v0.1.2. This development checkout targets DSH `0.2.1-alpha.1` and must be built and installed locally until a compatible release is published. Released v0.1.2 fails Client plugin activation on DSH 0.1.6 because its RPC descriptors use the previous codec API.
 
 If you're using DSH `0.1.4` or earlier, please install `dsh-shadow-mind@0.1.0`:
 ```sh
@@ -26,7 +26,7 @@ The core design idea for this project comes from [pi-shadow-mind](https://github
 
 ## Install
 
-For the verified DSH `0.1.5-rc.2` baseline, install the GitHub release tag. For DSH `0.1.6-alpha.2`, build this checkout with `pnpm run build` and use the local installation below:
+For the verified DSH `0.1.5-rc.2` baseline, install the GitHub release tag. For DSH `0.2.1-alpha.1`, build this checkout with `pnpm run build` and use the local installation below:
 
 ```sh
 dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.2
@@ -130,7 +130,7 @@ Follow the [installation and runtime validation plan](docs/installation-runtime-
 
 ## Development
 
-The devDependencies link against DeepSeek Harness `0.1.6-alpha.2` source (`../deepseek-harness`, a sibling of this checkout). Prepare the commit pinned by `.github/workflows/ci.yml`:
+The devDependencies link against DeepSeek Harness `0.2.1-alpha.1` source (`../deepseek-harness`, a sibling of this checkout). Prepare the commit pinned by `.github/workflows/ci.yml`:
 
 ```sh
 corepack enable
