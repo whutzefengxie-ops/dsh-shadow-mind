@@ -296,7 +296,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
     // Plan request, failed call, corrected retry: the same turn kept going.
     expect(adapter.requests).toHaveLength(3)
     const badResult = run.localAgent?.session.snapshotEvents().find(event =>
-      event.type === 'tool/result' && event.data.message.content[0]?.isError === true)
+      event.type === 'tool/result' && event.data.error !== undefined)
     expect(badResult).toBeDefined()
     expect(JSON.stringify(badResult)).toContain('strictly ascending')
 

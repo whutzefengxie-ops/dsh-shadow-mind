@@ -2,6 +2,21 @@
 
 import type { SessionId } from '@deepseek-ai/dsh-session'
 import type { ShadowVerdict } from './types.ts'
+import type { ContentBlock, ToolCallId } from '@deepseek-ai/dsh-llm'
+
+/** Legacy nested tool-result block accepted by Shadow trajectory fixtures. */
+export interface ShadowToolResultBlock {
+  readonly type: 'tool-result'
+  readonly toolCallId: ToolCallId
+  readonly content: readonly ContentBlock[]
+  readonly isError?: boolean
+}
+
+declare module '@deepseek-ai/dsh-llm' {
+  interface ContentBlockMap {
+    'tool-result': ShadowToolResultBlock
+  }
+}
 
 /** Provenance of one report within a batched relay message. */
 export interface ShadowReportProvenance {
