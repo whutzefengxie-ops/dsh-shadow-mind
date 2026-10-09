@@ -31,6 +31,42 @@ const OUTPUT_SCHEMA: ObjectJsonSchema = {
 }
 
 describe('Shadow Mind conditioned subagent provider', () => {
+  it('restores immediate tools after planning on addition-only model routes', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    await mountAgentLoopTestDependencies(ctx)
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SubagentRuntime)
+    installShadowMindProvider(ctx)
+    class AdditionOnlyAdapter extends MockAdapter {
+      override async resolveModel(provider: string, model: string) {
+        return { ...await super.resolveModel(provider, model), toolUpdate: 'addition-only' as const }
+      }
+    }
+    const adapter = new AdditionOnlyAdapter([
+      textResponse('Plan the review.'),
+      options => {
+        expect(options.tools?.length).toBeGreaterThan(0)
+        expect(options.tools?.every(tool => tool.deferLoading === true)).toBe(false)
+        expect(options.tools?.find(tool => tool.name === 'structured_output')?.deferLoading).toBeUndefined()
+        return toolCallResponse('structured', 'structured_output', {
+          status: 'report', content: 'Verified.', verdict: 'challenge', refs: [],
+        })
+      },
+    ])
+    ctx.llm.registerAdapter(['selected'], adapter)
+    const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root' })
+    const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+      parent, prompt: [{ type: 'text', text: 'Review.' }], signal: new AbortController().signal,
+      maxDepth: 1, outputSchema: OUTPUT_SCHEMA, thinkFirst: true,
+    })
+    await expect(run.result).resolves.toMatchObject({ stopReason: 'completed', structured: { content: 'Verified.' } })
+    expect(adapter.requests[0]?.tools ?? []).toEqual([])
+    expect(run.localAgent?.session.snapshotEvents().filter(event => event.type === 'request/header')
+      .some(event => event.data.startsSeries === true)).toBe(true)
+    await run.dispose()
+  })
+
   it('keeps think-first continuation, minimal context, routing, result, and disposal on one child', async () => {
     const ctx = new Context()
     contexts.push(ctx)

@@ -429,10 +429,13 @@ function findSessionFile(root, id) {
     return undefined
   }
   for (const project of projects) {
-    for (const suffix of ['.jsonl.zstd', '.jsonl']) {
-      const path = join(project, segment, `session${suffix}`)
-      if (existsSync(path)) return path
-    }
+    const directory = join(project, segment)
+    if (!existsSync(directory)) continue
+    const generations = readdirSync(directory)
+      .map(name => ({ name, match: /^session(?:\.v([1-9][0-9]*))?\.jsonl(?:\.zstd)?$/u.exec(name) }))
+      .filter(entry => entry.match !== null)
+      .sort((a, b) => Number(b.match[1] ?? 0) - Number(a.match[1] ?? 0))
+    if (generations.length > 0) return join(directory, generations[0].name)
   }
   return undefined
 }

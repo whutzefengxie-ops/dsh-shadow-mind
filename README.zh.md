@@ -8,13 +8,13 @@
 
 | dsh-shadow-mind | 所需 DSH 版本 | 说明 |
 |----------------|--------------|------|
-| v0.1.5 | `0.2.0-rc.2` | Profile 持久化实时设置与 ConfigForms |
+| v0.1.6 | `0.2.0-rc.2` | ConfigForms、Profile 设置及先思考模式工具声明修复 |
 | v0.1.3–v0.1.4 | `0.1.6-alpha.2` | 校验器工厂与 Workspace 管理的 Session 导航 |
 | v0.1.2         | `0.1.5-rc.2`（已验证基线） | 修复 subagent setup 绑定与实时退化输出看门狗 |
 | v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API 兼容性更新 |
 | v0.1.0         | `0.1.4` 及更早版本 | 旧版 Session API |
 
-**最新版本**：v0.1.5，目标为 npm 发布的 DSH `0.2.0-rc.2`。不支持旧版设置 API；其他 DSH 版本需要单独验证。
+**最新版本**：v0.1.6，目标为 npm 发布的 DSH `0.2.0-rc.2`。不支持旧版设置 API；其他 DSH 版本需要单独验证。
 
 如果你使用的是 DSH `0.1.4` 或更早版本，请安装 `dsh-shadow-mind@0.1.0`：
 ```sh
@@ -30,7 +30,7 @@ dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.0
 使用对应的 npm 发布版 DSH CLI 安装：
 
 ```sh
-npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.5
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.6
 ```
 
 或者从 GitHub 安装时固定已经审查的 commit：

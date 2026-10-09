@@ -160,6 +160,17 @@ function attachThinkFirst(
   activationBoundary: number,
   skipSteer: () => boolean,
 ): void {
+  let investigationStarted = false
+  childCtx.on('agent/pre-step', async (_input, next) => {
+    const decision = await next()
+    if (decision.kind === 'reject' || investigationStarted) return decision
+    const planned = child.session.snapshotEvents().some(event =>
+      event.seq >= activationBoundary && event.type === 'assistant/message')
+    if (!planned) return decision
+    investigationStarted = true
+    // Restored tools must be immediate declarations, not an all-deferred addition.
+    return { ...decision, startsRequestSeries: true }
+  })
   childCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
     const transformed = await next()
     const planned = child.session.snapshotEvents().some(event =>
