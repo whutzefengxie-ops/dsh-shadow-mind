@@ -8,13 +8,13 @@ An independently versioned DeepSeek Harness bundle that starts fresh background 
 
 | dsh-shadow-mind | DSH Version Required | Notes |
 |----------------|---------------------|-------|
-| v0.1.5 | `0.2.0-rc.2` | Profile-backed live settings and ConfigForms |
+| v0.1.6 | `0.2.0-rc.2` | ConfigForms, profile settings, and think-first tool declaration fix |
 | v0.1.3–v0.1.4 | `0.1.6-alpha.2` | Codec factories and Workspace-owned Session navigation |
 | v0.1.2         | `0.1.5-rc.2` (verified baseline) | Subagent setup binding + live degenerate-output watchdog |
 | v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API compatibility update |
 | v0.1.0         | `0.1.4` and earlier | Legacy session API |
 
-**Latest release**: v0.1.5 targets the npm-published DSH `0.2.0-rc.2`. Older settings APIs are unsupported. Other DSH versions require separate validation.
+**Latest release**: v0.1.6 targets the npm-published DSH `0.2.0-rc.2`. Older settings APIs are unsupported. Other DSH versions require separate validation.
 
 If you're using DSH `0.1.4` or earlier, please install `dsh-shadow-mind@0.1.0`:
 ```sh
@@ -30,7 +30,7 @@ The core design idea for this project comes from [pi-shadow-mind](https://github
 Install with the matching npm-published DSH CLI:
 
 ```sh
-npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.5
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.6
 ```
 
 Or pin a reviewed commit when installing from GitHub:

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.6] - 2026-10-09
+
+### Fixed
+- Start a new request series after think-first planning, so DeepSeek does not reject an all-deferred investigation tool set with HTTP 400.
+- Discover versioned Session logs, including DSH rc.2 `session.v4.jsonl.zstd`, in the Shadow debug CLI.
+
+### Compatibility
+- Retains v0.1.5 ConfigForms and profile settings support for npm DSH `0.2.0-rc.2`.
+
 ## [0.1.5] - 2026-10-09
 
 ### Fixed
