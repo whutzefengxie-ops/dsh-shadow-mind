@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-10-09
+
+### Fixed
+- Support npm DSH `0.2.0-rc.2` with profile-backed volatile settings and the Client `configForms` service.
+- Read and persist settings under the actual `shadow-mind-runtime` entry id; retain startup preferences and apply live updates without restarting Shadow.
+- Migrate removed icon and message/content APIs to the DSH `0.2.0-rc.2` contracts.
+
+### Compatibility
+- Exact DSH peers and CI source baseline: `0.2.0-rc.2`, commit `639ed015397290b3745d163aafe02ffee4aa3f84`.
+- Earlier settings APIs are unsupported; other DSH versions require separate validation.
+
 ## [0.1.4] - 2026-09-20
 
 ### Release

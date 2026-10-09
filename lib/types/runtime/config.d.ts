@@ -1,5 +1,7 @@
 /** Shadow Mind deployment and user-settings schemas. @module @whutzefengxie-ops/dsh-shadow-mind/config */
+import z from '@deepseek-ai/schemastery';
 import type Schema from '@deepseek-ai/schemastery';
+import type { Volatile } from '@deepseek-ai/cordis';
 import { type ShadowMindConfig, type ShadowMindSettings } from './types.ts';
 /** Default per-turn activation probability of the single Shadow reviewer. */
 export declare const DEFAULT_ACTIVATION_PROBABILITY = 0.7;
@@ -29,14 +31,72 @@ export declare const DEFAULT_DIMINISHING_WINDOW_SIZE = 5;
 export declare const DEFAULT_DIMINISHING_NOVELTY_THRESHOLD = 0.4;
 /** Default wall-clock stagnation cooldown in seconds. */
 export declare const DEFAULT_STAGNATION_COOLDOWN_SECONDS = 300;
+/** User-editable Shadow Mind settings schema. */
+export declare const SHADOW_MIND_SETTINGS_OBJECT: z<Schemastery.ObjectS<NoInfer<{
+    defaultShadowTimeoutSeconds: z<number, number, "defined">;
+    headlessDrainTimeoutSeconds: z<number, number, "defined">;
+    resultBatchWindowMs: z<number, number, "defined">;
+    argumentDisclosure: z<"full" | "redacted", "full" | "redacted", "defined">;
+    randomSeed: z<number, number, "plain">;
+    maxPromptChars: z<number, number, "defined">;
+    maxReportChars: z<number, number, "defined">;
+    valueLoopEnabled: z<boolean, boolean, "defined">;
+    valueLoopWindowTurns: z<number, number, "defined">;
+    reviewWindowSize: z<number, number, "defined">;
+    spinningRepeatCount: z<number, number, "defined">;
+    oscillationPeriods: z<number, number, "defined">;
+    noDriftRepeatCount: z<number, number, "defined">;
+    diminishingWindowSize: z<number, number, "defined">;
+    diminishingNoveltyThreshold: z<number, number, "defined">;
+    stagnationCooldownSeconds: z<number, number, "defined">;
+    stagnationEscalationEnabled: z<boolean, boolean, "defined">;
+    reasoningEffortLadder: z<string[], string[], "defined">;
+    sessionShadowSoftBudgetChars: z<number, number, "plain">;
+    sessionShadowHardBudgetChars: z<number, number, "plain">;
+    frugalShadowModel: z<string, string, "plain">;
+    staleReportDecay: z<number, number, "defined">;
+    collapsedByDefault: z<boolean, boolean, "defined">;
+}>>, Schemastery.ObjectT<NoInfer<{
+    defaultShadowTimeoutSeconds: z<number, number, "defined">;
+    headlessDrainTimeoutSeconds: z<number, number, "defined">;
+    resultBatchWindowMs: z<number, number, "defined">;
+    argumentDisclosure: z<"full" | "redacted", "full" | "redacted", "defined">;
+    randomSeed: z<number, number, "plain">;
+    maxPromptChars: z<number, number, "defined">;
+    maxReportChars: z<number, number, "defined">;
+    valueLoopEnabled: z<boolean, boolean, "defined">;
+    valueLoopWindowTurns: z<number, number, "defined">;
+    reviewWindowSize: z<number, number, "defined">;
+    spinningRepeatCount: z<number, number, "defined">;
+    oscillationPeriods: z<number, number, "defined">;
+    noDriftRepeatCount: z<number, number, "defined">;
+    diminishingWindowSize: z<number, number, "defined">;
+    diminishingNoveltyThreshold: z<number, number, "defined">;
+    stagnationCooldownSeconds: z<number, number, "defined">;
+    stagnationEscalationEnabled: z<boolean, boolean, "defined">;
+    reasoningEffortLadder: z<string[], string[], "defined">;
+    sessionShadowSoftBudgetChars: z<number, number, "plain">;
+    sessionShadowHardBudgetChars: z<number, number, "plain">;
+    frugalShadowModel: z<string, string, "plain">;
+    staleReportDecay: z<number, number, "defined">;
+    collapsedByDefault: z<boolean, boolean, "defined">;
+}>>, "plain">;
 /**
  * User-editable settings plus cross-field healing. Availability first: an
  * inconsistent advanced combination degrades to a usable default instead of
  * throwing, so leftover or half-edited values can never brick the plugin.
  */
 export declare const SHADOW_MIND_SETTINGS_SCHEMA: Schema<ShadowMindSettings>;
-/** Cordis plugin configuration schema. */
-export declare const Config: Schema<ShadowMindConfig>;
+/** Live settings references supplied by the profile configuration loader. */
+export type ShadowRuntimeConfig = {
+    [K in keyof ShadowMindSettings]-?: Volatile<ShadowMindSettings[K]>;
+} & {
+    dshHome?: string;
+};
+/** Cordis projects volatile fields into profile-backed settings forms. */
+export declare const Config: Schema<ShadowMindConfig, ShadowRuntimeConfig>;
+/** Resolve the current profile references before applying cross-field healing. */
+export declare function runtimeSettings(config: ShadowMindConfig | ShadowRuntimeConfig): ShadowMindSettings;
 /**
  * Resolve and validate settings without retaining caller aliases.
  * @param config Deployment configuration and optional settings base.

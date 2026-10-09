@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { IconTriangleRightFill14, MarkdownText, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconTriangleRightFillRegular, MarkdownText, type MarkdownLabels } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type { ShadowMindStatus, ShadowReviewCycle, ShadowRunPhase, ShadowRunView } from '../runtime/types.ts'
@@ -148,7 +148,7 @@ export function ShadowReportCard({
           data-shadow-card-toggle
           onClick={toggleCollapsed}
         >
-          <IconTriangleRightFill14 />
+          <IconTriangleRightFillRegular />
         </button>
       </header>
       {running ? (

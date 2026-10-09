@@ -1,15 +1,15 @@
 /** Shadow report card presentation preferences mirrored from the Host settings document. */
 
 import { useCallback, useSyncExternalStore } from 'react'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { DEFAULT_COLLAPSED_BY_DEFAULT } from '../runtime/types.ts'
 
 /**
- * Settings namespace owning the card presentation preference. The Host runtime
- * registers this namespace as `SHADOW_MIND_SETTINGS_NAMESPACE`; the client
+ * Profile entry owning the card presentation preference. The Host runtime
+ * uses this id as `SHADOW_MIND_SETTINGS_NAMESPACE`; the client
  * bundle must not import the runtime module, so the string is mirrored here.
  */
-export const SHADOW_MIND_CARD_SETTINGS_NAMESPACE = 'shadow-mind'
+export const SHADOW_MIND_CARD_SETTINGS_NAMESPACE = 'shadow-mind-runtime'
 
 /** Field carrying whether new Shadow report cards start collapsed. */
 export const COLLAPSED_BY_DEFAULT_FIELD = 'collapsedByDefault'
@@ -27,7 +27,7 @@ export interface ShadowCardSettings {
  * @param scope - the bound Shadow Mind settings namespace scope.
  * @returns the current collapsed-by-default preference.
  */
-export function useCardCollapsedByDefault(scope: SettingsScope<ShadowCardSettings>): boolean {
+export function useCardCollapsedByDefault(scope: ConfigForm<ShadowCardSettings>): boolean {
   const subscribe = useCallback((listener: () => void) => scope.subscribe(listener), [scope])
   const getSnapshot = useCallback(
     () => scope.getSnapshot().value?.collapsedByDefault ?? DEFAULT_COLLAPSED_BY_DEFAULT,

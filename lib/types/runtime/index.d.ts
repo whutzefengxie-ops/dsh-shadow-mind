@@ -8,6 +8,7 @@ import { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
+import { type ShadowRuntimeConfig } from './config.ts';
 import { ShadowRegistry } from './registry.ts';
 import type { ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowModelCatalog, ShadowReviewCycle, UpdateShadowMindSettings } from './types.ts';
 export { Config } from './config.ts';
@@ -43,16 +44,15 @@ export declare const DEFAULT_SHADOW_TOOLS: readonly ["read", "grep", "glob"];
 /** Root-only Shadow orchestration service. */
 export declare class ShadowMindRuntime extends TypertRemoteService {
     static inject: string[];
-    static Config: import("@deepseek-ai/schemastery").default<ShadowMindConfig>;
+    static Config: import("@deepseek-ai/schemastery").default<ShadowMindConfig, ShadowRuntimeConfig>;
     /** Definition and debug-log store. */
     readonly registry: ShadowRegistry;
     private settingsValue;
-    private readonly settingsScope;
     private random;
     private readonly owners;
     private stopped;
     /** @param ctx Cordis context carrying agents, subagents, and settings. @param config Deployment base settings. */
-    constructor(ctx: Context, config?: ShadowMindConfig);
+    constructor(ctx: Context, config?: ShadowMindConfig | ShadowRuntimeConfig);
     /**
      * Load the current definition catalog.
      * @returns Current valid definitions and isolated file diagnostics.
@@ -88,6 +88,8 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
      * @returns Live resolved settings snapshot.
      */
     currentSettings(): ShadowMindSettings;
+    /** Read the resolved Shadow settings namespace from the DSH 0.2 settings service. */
+    private readSettings;
     /**
      * Atomically persist selected settings; null removes an optional user override.
      * @param patch Settings fields to set or clear.

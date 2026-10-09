@@ -8,12 +8,13 @@
 
 | dsh-shadow-mind | 所需 DSH 版本 | 说明 |
 |----------------|--------------|------|
-| v0.1.3–v0.1.4  | `0.1.6-alpha.2`（已验证基线） | 校验器工厂与 Workspace 管理的 Session 导航 |
+| v0.1.5 | `0.2.0-rc.2` | Profile 持久化实时设置与 ConfigForms |
+| v0.1.3–v0.1.4 | `0.1.6-alpha.2` | 校验器工厂与 Workspace 管理的 Session 导航 |
 | v0.1.2         | `0.1.5-rc.2`（已验证基线） | 修复 subagent setup 绑定与实时退化输出看门狗 |
 | v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API 兼容性更新 |
 | v0.1.0         | `0.1.4` 及更早版本 | 旧版 Session API |
 
-**最新发布版本**：v0.1.4，已在 DSH `0.1.6-alpha.2` 上验证。本版本不支持早于 `0.1.6-alpha.2` 的 DSH。对于 DSH `0.1.5-rc.2` 基线，请使用 v0.1.2。
+**最新版本**：v0.1.5，目标为 npm 发布的 DSH `0.2.0-rc.2`。不支持旧版设置 API；其他 DSH 版本需要单独验证。
 
 如果你使用的是 DSH `0.1.4` 或更早版本，请安装 `dsh-shadow-mind@0.1.0`：
 ```sh
@@ -26,10 +27,10 @@ dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.0
 
 ## 安装
 
-对于已验证的 DSH `0.1.6-alpha.2` 基线，可以安装 GitHub 发布标签：
+使用对应的 npm 发布版 DSH CLI 安装：
 
 ```sh
-dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.4
+npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.5
 ```
 
 或者从 GitHub 安装时固定已经审查的 commit：
@@ -128,12 +129,12 @@ node tools/shadow-debug.mjs health                                        # 体�
 
 ## 开发
 
-devDependencies 通过 `link:` 指向本仓库同级的 DeepSeek Harness `0.1.6-alpha.2` 源码（`../deepseek-harness`）。先准备 `.github/workflows/ci.yml` 固定的提交：
+devDependencies 通过 `link:` 指向本仓库同级的 DeepSeek Harness `0.2.0-rc.2` 源码（`../deepseek-harness`）。先准备 `.github/workflows/ci.yml` 固定的提交：
 
 ```sh
 corepack enable
 git clone https://github.com/deepseek-ai/deepseek-harness.git ../deepseek-harness
-git -C ../deepseek-harness checkout ddefc45fbc7f8e46dd73185e68295696d1297887
+git -C ../deepseek-harness checkout 639ed015397290b3745d163aafe02ffee4aa3f84
 pnpm --dir ../deepseek-harness install --frozen-lockfile
 pnpm --dir ../deepseek-harness run build:lib
 ```

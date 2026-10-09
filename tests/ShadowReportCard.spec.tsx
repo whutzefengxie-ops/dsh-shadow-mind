@@ -9,7 +9,7 @@ import type { ShadowMindStatus, ShadowReviewCycle, ShadowRunView } from '../src/
 // process; the card only renders plain text through it in these tests.
 vi.mock('@deepseek-ai/dsh-client-ui-primitives', () => ({
   MarkdownText: ({ text }: { text: string }) => text,
-  IconTriangleRightFill14: () => null,
+  IconTriangleRightFillRegular: () => null,
 }))
 
 afterEach(() => {

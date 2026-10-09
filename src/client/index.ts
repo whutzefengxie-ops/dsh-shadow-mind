@@ -62,7 +62,7 @@ export const inject = [
   'remote',
   'uiConversation',
   'uiWorkspace',
-  'settingsScope',
+  'configForms',
 ]
 
 /** Unwrap one generated Remote business result. */
@@ -85,9 +85,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
   // One bound Host settings namespace feeds both the review card and the
   // Settings tab. The scope answers the collapsed default while the Host
   // mirror is still loading, and stays unavailable without a settings provider.
-  const cardSettings = ctx.settingsScope.bind<ShadowCardSettings>({
-    namespace: SHADOW_MIND_CARD_SETTINGS_NAMESPACE,
-  })
+  const cardSettings = ctx.configForms.get<ShadowCardSettings>(SHADOW_MIND_CARD_SETTINGS_NAMESPACE)
   const collapsedByDefault = (): boolean => useCardCollapsedByDefault(cardSettings)
 
   const sessions = clientSessions(ctx)
@@ -152,7 +150,7 @@ export async function apply(ctx: ClientContext): Promise<void> {
       catalog: () => remoteValue<ShadowAdministrationSnapshot>('shadowMind.catalog', remote.catalog()),
       status: sessionId => remoteValue<ShadowMindStatus>('shadowMind.status', remote.status(sessionId)),
       useCollapsedByDefault: collapsedByDefault,
-      setCollapsedByDefault: collapsed => cardSettings.set(COLLAPSED_BY_DEFAULT_FIELD, collapsed),
+      setCollapsedByDefault: async collapsed => { await cardSettings.set(COLLAPSED_BY_DEFAULT_FIELD, collapsed) },
     })
 
     scope.slots.inject('settings.plugins.tab', () => scope.slots.register({

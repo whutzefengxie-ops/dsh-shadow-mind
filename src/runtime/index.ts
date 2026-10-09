@@ -11,11 +11,11 @@ import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { ReasoningEffortId, createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
-import type { SettingsPathOp, SettingsScope, SettingsNamespace } from '@deepseek-ai/dsh-settings'
+import type { SettingsPathOp, SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
 import type { SubagentRun, SubagentResult } from '@deepseek-ai/dsh-subagent'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { Config, resolveSettings, settingsBase, SHADOW_MIND_SETTINGS_SCHEMA } from './config.ts'
+import { Config, resolveSettings, runtimeSettings, type ShadowRuntimeConfig } from './config.ts'
 import { ShadowRegistry } from './registry.ts'
 import { seededRandom, type RandomSource } from './random.ts'
 import { shouldRunShadow } from './scheduler.ts'
@@ -113,7 +113,7 @@ declare module '@deepseek-ai/cordis' {
 }
 
 /** User-settings namespace for live Shadow orchestration controls. */
-export const SHADOW_MIND_SETTINGS_NAMESPACE = 'shadow-mind' as SettingsNamespace
+export const SHADOW_MIND_SETTINGS_NAMESPACE = 'shadow-mind-runtime' as SettingsNamespace
 /** Tools visible to every Shadow before definition-specific additions. */
 export const DEFAULT_SHADOW_TOOLS = Object.freeze(['read', 'grep', 'glob'] as const)
 
@@ -374,36 +374,32 @@ export class ShadowMindRuntime extends TypertRemoteService {
   /** Definition and debug-log store. */
   readonly registry: ShadowRegistry
   private settingsValue: ShadowMindSettings
-  private readonly settingsScope: SettingsScope<ShadowMindSettings>
   private random: RandomSource
   private readonly owners = new Map<Agent, OwnerState>()
   private stopped = false
 
   /** @param ctx Cordis context carrying agents, subagents, and settings. @param config Deployment base settings. */
-  constructor(ctx: Context, config: ShadowMindConfig = {}) {
+  constructor(ctx: Context, config: ShadowMindConfig | ShadowRuntimeConfig = {}) {
     super(ctx, 'shadowMind')
     installShadowMindProvider(ctx)
     this.registry = new ShadowRegistry(resolveDshHome(config.dshHome))
-    this.settingsValue = resolveSettings(config)
+    this.settingsValue = runtimeSettings(config)
     this.random = this.settingsValue.randomSeed === undefined
       ? Math.random
       : seededRandom(this.settingsValue.randomSeed)
-    this.settingsScope = ctx.settings.register(
-      SHADOW_MIND_SETTINGS_NAMESPACE,
-      SHADOW_MIND_SETTINGS_SCHEMA,
-      { base: settingsBase(config), applies: 'live' },
-    )
-    this.settingsValue = this.settingsScope.get()
-    const unwatch = this.settingsScope.watch((next, previous) => {
-      this.settingsValue = next
-      if (next.randomSeed !== previous.randomSeed) {
-        this.random = next.randomSeed === undefined ? Math.random : seededRandom(next.randomSeed)
+    ctx.effect(() => ctx.settings.configure({ auto: false }), 'shadow-mind settings presentation')
+    ctx.on('settings/document-updated', (namespace) => {
+      if (namespace !== SHADOW_MIND_SETTINGS_NAMESPACE) return
+      const previous = this.settingsValue
+      const next = this.readSettings()
+      this.settingsValue = resolveSettings({ ...runtimeSettings(config), ...next })
+      if (this.settingsValue.randomSeed !== previous.randomSeed) {
+        this.random = this.settingsValue.randomSeed === undefined ? Math.random : seededRandom(this.settingsValue.randomSeed)
       }
-      if (!next.valueLoopEnabled && previous.valueLoopEnabled) {
+      if (!this.settingsValue.valueLoopEnabled && previous.valueLoopEnabled) {
         for (const state of this.owners.values()) state.pendingChallenges.clear()
       }
     })
-    ctx.effect(() => unwatch, 'shadow-mind settings watcher')
 
     ctx.on('agent/inbox/inserted', ({ agent, message }) => {
       if (!this.isRoot(agent) || message.source.kind !== 'user') return
@@ -495,6 +491,14 @@ export class ShadowMindRuntime extends TypertRemoteService {
    */
   currentSettings(): ShadowMindSettings {
     return this.settingsValue
+  }
+
+  /** Read the resolved Shadow settings namespace from the DSH 0.2 settings service. */
+  private readSettings(): Partial<ShadowMindSettings> {
+    const row = this.ctx.settings.describe().find(entry => entry.ns === SHADOW_MIND_SETTINGS_NAMESPACE)
+    return row?.value !== null && typeof row?.value === 'object' && !Array.isArray(row?.value)
+      ? row.value as Partial<ShadowMindSettings>
+      : {}
   }
 
   /**

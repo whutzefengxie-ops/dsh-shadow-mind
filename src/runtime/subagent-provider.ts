@@ -172,7 +172,7 @@ function attachThinkFirst(
     continued = true
     agent.steer(createUserMessage({
       content: [{ type: 'text', text: THINK_FIRST_CONTINUATION }],
-      source: { kind: 'plugin', plugin: '@whutzefengxie-ops/dsh-shadow-mind' },
+      source: { kind: 'user' },
     }))
   })
 }
@@ -385,7 +385,7 @@ function readResult(
   // `error` through `toStopReason(undefined)`, which never overstates success.
   const lastEnd = foldConsumedWork(own).end
   // The seam's canonical selection rule; a partial answer survives cancel and truncation.
-  const output: ContentBlock[] = finalAssistantOutput(own) ?? []
+  const output: ContentBlock[] = [...(finalAssistantOutput(own) ?? [])]
   const recorded = toStopReason(lastEnd?.data.reason)
   // Disposal can tear the owner down before the loop records its ordinary
   // `aborted` end, yielding `disposed` instead.

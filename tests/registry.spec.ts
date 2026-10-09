@@ -109,11 +109,11 @@ describe('parseShadowDefinition', () => {
 
 describe('Shadow settings', () => {
   it('defaults the Shadow deadline to 10 minutes so deep reviews stop timing out', () => {
-    expect(Config({}).defaultShadowTimeoutSeconds).toBe(600)
+    expect(Config({}).defaultShadowTimeoutSeconds.get()).toBe(600)
   })
 
   it('defaults new report cards to collapsed and accepts the expanded preference', () => {
-    expect(Config({}).collapsedByDefault).toBe(true)
+    expect(Config({}).collapsedByDefault.get()).toBe(true)
     expect(resolveSettings().collapsedByDefault).toBe(true)
     expect(resolveSettings({ collapsedByDefault: false }).collapsedByDefault).toBe(false)
   })
@@ -123,7 +123,7 @@ describe('Shadow settings', () => {
       sessionShadowSoftBudgetChars: 100,
       sessionShadowHardBudgetChars: 1_000,
       frugalShadowModel: 'provider/org/model',
-    }).frugalShadowModel).toBe('provider/org/model')
+    }).frugalShadowModel.get()).toBe('provider/org/model')
   })
 
   it('heals advanced misconfigurations instead of rejecting the runtime', () => {

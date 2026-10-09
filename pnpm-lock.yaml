@@ -21,6 +21,9 @@ importers:
       '@deepseek-ai/cordis-plugin-loader':
         specifier: link:../deepseek-harness/vendor/loader
         version: link:../deepseek-harness/vendor/loader
+      '@deepseek-ai/cordis-plugin-timer':
+        specifier: link:../deepseek-harness/vendor/timer
+        version: link:../deepseek-harness/vendor/timer
       '@deepseek-ai/dsh-agent':
         specifier: link:../deepseek-harness/packages/core/agent
         version: link:../deepseek-harness/packages/core/agent
@@ -39,6 +42,9 @@ importers:
       '@deepseek-ai/dsh-api-session-controller':
         specifier: link:../deepseek-harness/packages/api/session-controller
         version: link:../deepseek-harness/packages/api/session-controller
+      '@deepseek-ai/dsh-app-boot':
+        specifier: link:../deepseek-harness/packages/boot/app-boot
+        version: link:../deepseek-harness/packages/boot/app-boot
       '@deepseek-ai/dsh-atomic-write':
         specifier: link:../deepseek-harness/packages/util/atomic-write
         version: link:../deepseek-harness/packages/util/atomic-write
@@ -84,6 +90,12 @@ importers:
       '@deepseek-ai/dsh-compaction':
         specifier: link:../deepseek-harness/packages/compaction/compaction
         version: link:../deepseek-harness/packages/compaction/compaction
+      '@deepseek-ai/dsh-config-editor':
+        specifier: link:../deepseek-harness/packages/boot/config-editor
+        version: link:../deepseek-harness/packages/boot/config-editor
+      '@deepseek-ai/dsh-hmr':
+        specifier: link:../deepseek-harness/packages/boot/hmr
+        version: link:../deepseek-harness/packages/boot/hmr
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../deepseek-harness/packages/util/home-paths
         version: link:../deepseek-harness/packages/util/home-paths
