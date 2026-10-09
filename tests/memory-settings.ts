@@ -10,6 +10,8 @@ export class MemorySettings extends Service {
 
   constructor(ctx: Context) { super(ctx, 'settings') }
 
+  configure(): () => void { return () => {} }
+
   describe(): Array<{ ns: SettingsNamespace; value: Record<string, unknown>; revision: number; schema: object; autoGenerate: boolean; applies: 'live' }> {
     return [...this.values].map(([ns, value]) => ({ ns: ns as SettingsNamespace, value, revision: this.revisions.get(ns) ?? 0, schema: {}, autoGenerate: true, applies: 'live' as const }))
   }

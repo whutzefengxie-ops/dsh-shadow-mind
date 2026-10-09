@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest'
 import { act, cleanup, renderHook } from '@testing-library/react'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import {
   useCardCollapsedByDefault,
   type ShadowCardSettings,
@@ -31,13 +31,13 @@ function stubScope(initial: ShadowCardSettings | undefined) {
 describe('useCardCollapsedByDefault', () => {
   it('falls back to collapsed while the Host settings mirror is loading', () => {
     const scope = stubScope(undefined)
-    const { result } = renderHook(() => useCardCollapsedByDefault(scope as unknown as SettingsScope<ShadowCardSettings>))
+    const { result } = renderHook(() => useCardCollapsedByDefault(scope as unknown as ConfigForm<ShadowCardSettings>))
     expect(result.current).toBe(true)
   })
 
   it('reflects the persisted preference and live changes', () => {
     const scope = stubScope({ collapsedByDefault: false })
-    const { result } = renderHook(() => useCardCollapsedByDefault(scope as unknown as SettingsScope<ShadowCardSettings>))
+    const { result } = renderHook(() => useCardCollapsedByDefault(scope as unknown as ConfigForm<ShadowCardSettings>))
     expect(result.current).toBe(false)
 
     act(() => { scope.set({ collapsedByDefault: true }) })

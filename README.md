@@ -131,12 +131,12 @@ Follow the [installation and runtime validation plan](docs/installation-runtime-
 
 ## Development
 
-The devDependencies link against DeepSeek Harness `0.2.1-alpha.1` source (`../deepseek-harness`, a sibling of this checkout). Prepare the commit pinned by `.github/workflows/ci.yml`:
+The devDependencies link against DeepSeek Harness `0.2.0-rc.2` source (`../deepseek-harness`, a sibling of this checkout). Prepare the commit pinned by `.github/workflows/ci.yml`:
 
 ```sh
 corepack enable
 git clone https://github.com/deepseek-ai/deepseek-harness.git ../deepseek-harness
-git -C ../deepseek-harness checkout ddefc45fbc7f8e46dd73185e68295696d1297887
+git -C ../deepseek-harness checkout 639ed015397290b3745d163aafe02ffee4aa3f84
 pnpm --dir ../deepseek-harness install --frozen-lockfile
 pnpm --dir ../deepseek-harness run build:lib
 ```

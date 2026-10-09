@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-10-09
+
+### Fixed
+- Support npm DSH `0.2.0-rc.2` with profile-backed volatile settings and the Client `configForms` service.
+- Read and persist settings under the actual `shadow-mind-runtime` entry id; retain startup preferences and apply live updates without restarting Shadow.
+- Migrate removed icon and message/content APIs to the DSH `0.2.0-rc.2` contracts.
+
+### Compatibility
+- Exact DSH peers and CI source baseline: `0.2.0-rc.2`, commit `639ed015397290b3745d163aafe02ffee4aa3f84`.
+- Earlier settings APIs are unsupported; other DSH versions require separate validation.
+
 ## [0.1.4] - 2026-09-20
 
 ### Release
@@ -14,12 +25,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.3] - 2026-09-20
 
 ### Fixed
-- Updated Host and Client settings integration for DSH `0.2.1-alpha.1`: the runtime now reads and writes the new `SettingsForms` service, while the Web client uses `ConfigForms`.
-- Migrated removed client symbols and content shapes (`SettingsScope`, legacy triangle icon, plugin message source, and nested tool results) to the DSH `0.2.1-alpha.1` APIs.
+- Host and Client RPC descriptors provide the `create()` codec factories required by DSH `0.1.6-alpha.2`, allowing the Shadow client to activate.
 - Settings read the Session retained by the main view; report cards open child Sessions through `uiWorkspace.openSession`.
 
 ### Compatibility
-- The development baseline is DSH `0.2.1-alpha.1`. Earlier DSH APIs are unsupported by this checkout.
+- The development baseline is DSH `0.1.6-alpha.2` at `ddefc45fbc7f8e46dd73185e68295696d1297887`. Earlier DSH APIs are unsupported by this checkout.
 - Regression tests register both Typert contributions and activate the shipped browser bundle with the current Client gateway.
 
 ## [0.1.2] - 2026-09-14

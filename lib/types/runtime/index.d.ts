@@ -8,6 +8,7 @@ import { Context } from '@deepseek-ai/cordis';
 import type { Agent } from '@deepseek-ai/dsh-agent';
 import type { SettingsNamespace } from '@deepseek-ai/dsh-settings';
 import { TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol';
+import { type ShadowRuntimeConfig } from './config.ts';
 import { ShadowRegistry } from './registry.ts';
 import type { ShadowAdministrationSnapshot, ShadowCatalog, ShadowDefinition, ShadowDefinitionInput, ShadowMindConfig, ShadowMindSettings, ShadowMindStatus, ShadowModelCatalog, ShadowReviewCycle, UpdateShadowMindSettings } from './types.ts';
 export { Config } from './config.ts';
@@ -43,7 +44,7 @@ export declare const DEFAULT_SHADOW_TOOLS: readonly ["read", "grep", "glob"];
 /** Root-only Shadow orchestration service. */
 export declare class ShadowMindRuntime extends TypertRemoteService {
     static inject: string[];
-    static Config: import("@deepseek-ai/schemastery").default<ShadowMindConfig>;
+    static Config: import("@deepseek-ai/schemastery").default<ShadowMindConfig, ShadowRuntimeConfig>;
     /** Definition and debug-log store. */
     readonly registry: ShadowRegistry;
     private settingsValue;
@@ -51,7 +52,7 @@ export declare class ShadowMindRuntime extends TypertRemoteService {
     private readonly owners;
     private stopped;
     /** @param ctx Cordis context carrying agents, subagents, and settings. @param config Deployment base settings. */
-    constructor(ctx: Context, config?: ShadowMindConfig);
+    constructor(ctx: Context, config?: ShadowMindConfig | ShadowRuntimeConfig);
     /**
      * Load the current definition catalog.
      * @returns Current valid definitions and isolated file diagnostics.

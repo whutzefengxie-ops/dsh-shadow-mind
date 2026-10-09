@@ -15,7 +15,7 @@ import type { SettingsPathOp, SettingsNamespace } from '@deepseek-ai/dsh-setting
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
 import type { SubagentRun, SubagentResult } from '@deepseek-ai/dsh-subagent'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
-import { Config, resolveSettings } from './config.ts'
+import { Config, resolveSettings, runtimeSettings, type ShadowRuntimeConfig } from './config.ts'
 import { ShadowRegistry } from './registry.ts'
 import { seededRandom, type RandomSource } from './random.ts'
 import { shouldRunShadow } from './scheduler.ts'
@@ -113,7 +113,7 @@ declare module '@deepseek-ai/cordis' {
 }
 
 /** User-settings namespace for live Shadow orchestration controls. */
-export const SHADOW_MIND_SETTINGS_NAMESPACE = 'shadow-mind' as SettingsNamespace
+export const SHADOW_MIND_SETTINGS_NAMESPACE = 'shadow-mind-runtime' as SettingsNamespace
 /** Tools visible to every Shadow before definition-specific additions. */
 export const DEFAULT_SHADOW_TOOLS = Object.freeze(['read', 'grep', 'glob'] as const)
 
@@ -379,20 +379,20 @@ export class ShadowMindRuntime extends TypertRemoteService {
   private stopped = false
 
   /** @param ctx Cordis context carrying agents, subagents, and settings. @param config Deployment base settings. */
-  constructor(ctx: Context, config: ShadowMindConfig = {}) {
+  constructor(ctx: Context, config: ShadowMindConfig | ShadowRuntimeConfig = {}) {
     super(ctx, 'shadowMind')
     installShadowMindProvider(ctx)
     this.registry = new ShadowRegistry(resolveDshHome(config.dshHome))
-    this.settingsValue = resolveSettings({ ...config, ...this.readSettings() })
+    this.settingsValue = runtimeSettings(config)
     this.random = this.settingsValue.randomSeed === undefined
       ? Math.random
       : seededRandom(this.settingsValue.randomSeed)
-    this.settingsValue = resolveSettings(config)
+    ctx.effect(() => ctx.settings.configure({ auto: false }), 'shadow-mind settings presentation')
     ctx.on('settings/document-updated', (namespace) => {
       if (namespace !== SHADOW_MIND_SETTINGS_NAMESPACE) return
       const previous = this.settingsValue
       const next = this.readSettings()
-      this.settingsValue = resolveSettings({ ...config, ...next })
+      this.settingsValue = resolveSettings({ ...runtimeSettings(config), ...next })
       if (this.settingsValue.randomSeed !== previous.randomSeed) {
         this.random = this.settingsValue.randomSeed === undefined ? Math.random : seededRandom(this.settingsValue.randomSeed)
       }

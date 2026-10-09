@@ -2,6 +2,7 @@
 
 import z from '@deepseek-ai/schemastery'
 import type Schema from '@deepseek-ai/schemastery'
+import type { Volatile } from '@deepseek-ai/cordis'
 import { SHADOW_MODEL_ROUTE_PATTERN } from './model-route.ts'
 import { DEFAULT_COLLAPSED_BY_DEFAULT, type ShadowMindConfig, type ShadowMindSettings } from './types.ts'
 
@@ -35,7 +36,7 @@ export const DEFAULT_DIMINISHING_NOVELTY_THRESHOLD = 0.4
 export const DEFAULT_STAGNATION_COOLDOWN_SECONDS = 300
 
 /** User-editable Shadow Mind settings schema. */
-const SHADOW_MIND_SETTINGS_OBJECT = z.object({
+export const SHADOW_MIND_SETTINGS_OBJECT = z.object({
   defaultShadowTimeoutSeconds: z.number().min(0.001).default(DEFAULT_SHADOW_TIMEOUT_SECONDS),
   headlessDrainTimeoutSeconds: z.number().min(0.001).default(DEFAULT_HEADLESS_DRAIN_TIMEOUT_SECONDS),
   resultBatchWindowMs: z.number().min(0).default(DEFAULT_RESULT_BATCH_WINDOW_MS),
@@ -116,11 +117,26 @@ export const SHADOW_MIND_SETTINGS_SCHEMA: Schema<ShadowMindSettings> = z.transfo
   true,
 ) as Schema<ShadowMindSettings>
 
-/** Cordis plugin configuration schema. */
-export const Config = z.intersect([
-  SHADOW_MIND_SETTINGS_SCHEMA,
-  z.object({ dshHome: z.string() }),
-]) as unknown as Schema<ShadowMindConfig>
+/** Live settings references supplied by the profile configuration loader. */
+export type ShadowRuntimeConfig = {
+  [K in keyof ShadowMindSettings]-?: Volatile<ShadowMindSettings[K]>
+} & { dshHome?: string }
+
+/** Cordis projects volatile fields into profile-backed settings forms. */
+export const Config = z.object({
+  ...Object.fromEntries(Object.entries(SHADOW_MIND_SETTINGS_OBJECT.dict!).map(([key, schema]) => [
+    key, new z(schema.toJSON()).volatile(),
+  ])),
+  dshHome: z.string(),
+}) as Schema<ShadowMindConfig, ShadowRuntimeConfig>
+
+/** Resolve the current profile references before applying cross-field healing. */
+export function runtimeSettings(config: ShadowMindConfig | ShadowRuntimeConfig): ShadowMindSettings {
+  const { dshHome: _dshHome, ...fields } = config
+  return resolveSettings(Object.fromEntries(Object.entries(fields).map(([key, value]) => [
+    key, typeof value === 'object' && value !== null && 'get' in value ? value.get() : value,
+  ])))
+}
 
 /**
  * Resolve and validate settings without retaining caller aliases.
@@ -129,7 +145,9 @@ export const Config = z.intersect([
  */
 export function resolveSettings(config: ShadowMindConfig = {}): ShadowMindSettings {
   const { dshHome: _dshHome, ...settings } = config
-  return SHADOW_MIND_SETTINGS_SCHEMA(settings as ShadowMindSettings)
+  return SHADOW_MIND_SETTINGS_SCHEMA(Object.fromEntries(
+    Object.entries(settings).filter(([, value]) => value !== undefined),
+  ) as unknown as ShadowMindSettings)
 }
 
 /**

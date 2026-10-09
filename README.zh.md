@@ -129,12 +129,12 @@ node tools/shadow-debug.mjs health                                        # 体�
 
 ## 开发
 
-devDependencies 通过 `link:` 指向本仓库同级的 DeepSeek Harness `0.2.1-alpha.1` 源码（`../deepseek-harness`）。先准备 `.github/workflows/ci.yml` 固定的提交：
+devDependencies 通过 `link:` 指向本仓库同级的 DeepSeek Harness `0.2.0-rc.2` 源码（`../deepseek-harness`）。先准备 `.github/workflows/ci.yml` 固定的提交：
 
 ```sh
 corepack enable
 git clone https://github.com/deepseek-ai/deepseek-harness.git ../deepseek-harness
-git -C ../deepseek-harness checkout ddefc45fbc7f8e46dd73185e68295696d1297887
+git -C ../deepseek-harness checkout 639ed015397290b3745d163aafe02ffee4aa3f84
 pnpm --dir ../deepseek-harness install --frozen-lockfile
 pnpm --dir ../deepseek-harness run build:lib
 ```

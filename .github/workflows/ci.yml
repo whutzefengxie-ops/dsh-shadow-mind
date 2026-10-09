@@ -14,11 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Linked devDependencies use the DSH 0.1.6-alpha.2 Host and Client APIs.
+      # Build against the npm DSH 0.2.0-rc.2 release source.
       - uses: actions/checkout@v4
         with:
           repository: deepseek-ai/deepseek-harness
-          ref: ddefc45fbc7f8e46dd73185e68295696d1297887
+          ref: 639ed015397290b3745d163aafe02ffee4aa3f84
           fetch-depth: 1
           path: harness-source
       - name: Link the harness checkout where the devDeps expect it

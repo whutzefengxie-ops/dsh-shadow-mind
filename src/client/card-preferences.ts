@@ -5,11 +5,11 @@ import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { DEFAULT_COLLAPSED_BY_DEFAULT } from '../runtime/types.ts'
 
 /**
- * Settings namespace owning the card presentation preference. The Host runtime
- * registers this namespace as `SHADOW_MIND_SETTINGS_NAMESPACE`; the client
+ * Profile entry owning the card presentation preference. The Host runtime
+ * uses this id as `SHADOW_MIND_SETTINGS_NAMESPACE`; the client
  * bundle must not import the runtime module, so the string is mirrored here.
  */
-export const SHADOW_MIND_CARD_SETTINGS_NAMESPACE = 'shadow-mind'
+export const SHADOW_MIND_CARD_SETTINGS_NAMESPACE = 'shadow-mind-runtime'
 
 /** Field carrying whether new Shadow report cards start collapsed. */
 export const COLLAPSED_BY_DEFAULT_FIELD = 'collapsedByDefault'
