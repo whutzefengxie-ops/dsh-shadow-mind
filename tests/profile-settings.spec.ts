@@ -1,3 +1,4 @@
+import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -20,7 +21,7 @@ afterEach(async () => {
   for (const home of homes.splice(0)) await rm(home, { recursive: true, force: true })
 })
 
-describe('DSH 0.2.0-rc.2 profile settings', () => {
+describe('DSH 0.2.1-rc.2 profile settings', () => {
   it('saves live preferences without remounting and restores them on restart', async () => {
     const home = await mkdtemp(join(tmpdir(), 'shadow-profile-settings-'))
     homes.push(home)
@@ -46,6 +47,7 @@ describe('DSH 0.2.0-rc.2 profile settings', () => {
     }
     const start = async () => {
       const ctx = await boot('test', join(dir, 'cordis.yml'), readProfilePatches('test', profile), ctx => {
+        provideWorkingDirectoryFixture(ctx)
         ctx.provide('profileContext', profile)
         ctx.provide('appReady', { onReady: (listener: () => void) => { listener(); return () => {} } })
         Object.assign(ctx.loader.builtins, {

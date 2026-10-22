@@ -1,13 +1,13 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { mountAgentLoopTestDependencies } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import SubagentRuntime from '@deepseek-ai/dsh-subagent'
-import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
+import { defineTool, type ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
 import {
   installShadowMindProvider,
-  SHADOW_MIND_SUBAGENT_PROVIDER,
+  startShadowMindRun,
   STRUCTURED_OUTPUT_MISSING_DIAGNOSTIC,
 } from '../src/runtime/subagent-provider.ts'
 import { MockAdapter, textResponse, toolCallResponse } from './mock-adapter.ts'
@@ -34,7 +34,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
   it('restores immediate tools after planning on addition-only model routes', async () => {
     const ctx = new Context()
     contexts.push(ctx)
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SubagentRuntime)
     installShadowMindProvider(ctx)
@@ -56,7 +56,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
     ])
     ctx.llm.registerAdapter(['selected'], adapter)
     const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root' })
-    const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+    const run = await startShadowMindRun(ctx, {
       parent, prompt: [{ type: 'text', text: 'Review.' }], signal: new AbortController().signal,
       maxDepth: 1, outputSchema: OUTPUT_SCHEMA, thinkFirst: true,
     })
@@ -70,7 +70,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
   it('keeps think-first continuation, minimal context, routing, result, and disposal on one child', async () => {
     const ctx = new Context()
     contexts.push(ctx)
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SubagentRuntime)
     installShadowMindProvider(ctx)
@@ -87,7 +87,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
     ctx.llm.registerAdapter(['selected'], adapter)
     const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
-    const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+    const run = await startShadowMindRun(ctx, {
       label: 'shadow:reviewer',
       parent,
       prompt: [{ type: 'text', text: 'Plan first, then review the numbered trajectory.' }],
@@ -123,7 +123,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
   it('resolves no-structured-output when the child completes without calling the structured tool', async () => {
     const ctx = new Context()
     contexts.push(ctx)
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SubagentRuntime)
     installShadowMindProvider(ctx)
@@ -137,7 +137,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
     ctx.llm.registerAdapter(['selected'], adapter)
     const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
-    const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+    const run = await startShadowMindRun(ctx, {
       label: 'shadow:reviewer',
       parent,
       prompt: [{ type: 'text', text: 'Plan first, then review the numbered trajectory.' }],
@@ -163,7 +163,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
   it('still resolves aborted when a completed child is cancelled without a structured capture', async () => {
     const ctx = new Context()
     contexts.push(ctx)
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SubagentRuntime)
     installShadowMindProvider(ctx)
@@ -176,7 +176,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
     const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
     const controller = new AbortController()
-    const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+    const run = await startShadowMindRun(ctx, {
       label: 'shadow:reviewer',
       parent,
       prompt: [{ type: 'text', text: 'Plan first, then review the numbered trajectory.' }],
@@ -200,7 +200,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
   it('cancels a child stuck in a degenerate repetition loop as degenerate-output', async () => {
     const ctx = new Context()
     contexts.push(ctx)
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SubagentRuntime)
     installShadowMindProvider(ctx)
@@ -217,7 +217,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
     ctx.llm.registerAdapter(['selected'], adapter)
     const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
-    const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+    const run = await startShadowMindRun(ctx, {
       label: 'shadow:reviewer',
       parent,
       prompt: [{ type: 'text', text: 'Plan first, then review the numbered trajectory.' }],
@@ -246,7 +246,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
   it('still resolves error when the child fails mid-turn rather than no-structured-output', async () => {
     const ctx = new Context()
     contexts.push(ctx)
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SubagentRuntime)
     installShadowMindProvider(ctx)
@@ -258,7 +258,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
     ctx.llm.registerAdapter(['selected'], adapter)
     const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
-    const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+    const run = await startShadowMindRun(ctx, {
       label: 'shadow:reviewer',
       parent,
       prompt: [{ type: 'text', text: 'Plan first, then review the numbered trajectory.' }],
@@ -281,7 +281,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
   it('rejects a non-ascending refs payload in-turn and captures the corrected retry', async () => {
     const ctx = new Context()
     contexts.push(ctx)
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SubagentRuntime)
     installShadowMindProvider(ctx)
@@ -306,7 +306,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
     ctx.llm.registerAdapter(['selected'], adapter)
     const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
-    const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+    const run = await startShadowMindRun(ctx, {
       label: 'shadow:reviewer',
       parent,
       prompt: [{ type: 'text', text: 'Plan first, then review the numbered trajectory.' }],
@@ -343,7 +343,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
   it('rejects an anchor outside the rendered window in-turn without a structuredAnchorSeqs match', async () => {
     const ctx = new Context()
     contexts.push(ctx)
-    await mountAgentLoopTestDependencies(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SubagentRuntime)
     installShadowMindProvider(ctx)
@@ -361,7 +361,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
     ctx.llm.registerAdapter(['selected'], adapter)
     const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
 
-    const run = await ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+    const run = await startShadowMindRun(ctx, {
       label: 'shadow:reviewer',
       parent,
       prompt: [{ type: 'text', text: 'Plan first, then review the numbered trajectory.' }],
@@ -384,4 +384,117 @@ describe('Shadow Mind conditioned subagent provider', () => {
     await run.dispose()
     expect(ctx.agents.get(run.id)).toBeUndefined()
   })
+
+  it('cancels the exact managed activation when its caller aborts after publication', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SubagentRuntime)
+    installShadowMindProvider(ctx)
+    const adapter = new MockAdapter(['hang-slow'])
+    ctx.llm.registerAdapter(['selected'], adapter)
+    const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
+    const controller = new AbortController()
+    const run = await startShadowMindRun(ctx, {
+      parent, prompt: [{ type: 'text', text: 'Review.' }], signal: controller.signal, maxDepth: 1,
+    })
+    await vi.waitFor(() => { expect(adapter.requests).toHaveLength(1) })
+    controller.abort()
+    await expect(run.result).resolves.toMatchObject({ stopReason: 'aborted' })
+    await Promise.all([run.dispose(), run.dispose()])
+    expect(ctx.agents.get(run.id)).toBeUndefined()
+    expect(ctx.agents.get(parent.id)).toBe(parent)
+  })
+
+  it('isolates concurrent review routes and delivers results only to the caller', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SubagentRuntime)
+    installShadowMindProvider(ctx)
+    const response = (request: import('@deepseek-ai/dsh-llm').GenerateOptions) => toolCallResponse(
+      request.model, 'structured_output', {
+        status: 'report', content: request.model, verdict: 'challenge', refs: [],
+      },
+    )
+    const adapter = new MockAdapter([response, response])
+    ctx.llm.registerAdapter(['selected'], adapter)
+    const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' }, { cwd: process.cwd() })
+    const before = parent.session.snapshotEvents()
+    const runs = await Promise.all(['review-a', 'review-b'].map(model => startShadowMindRun(ctx, {
+      parent, prompt: [{ type: 'text', text: 'Review.' }], signal: new AbortController().signal,
+      maxDepth: 1, outputSchema: OUTPUT_SCHEMA, toolFilter: { allow: [] },
+      modelSelection: { provider: 'selected', model }, contextInheritance: 'none',
+    })))
+    const results = await Promise.all(runs.map(run => run.result))
+    expect(results.map(result => result.structured)).toEqual([
+      { status: 'report', content: 'review-a', verdict: 'challenge', refs: [] },
+      { status: 'report', content: 'review-b', verdict: 'challenge', refs: [] },
+    ])
+    expect(runs[0]?.id).not.toBe(runs[1]?.id)
+    for (const run of runs) {
+      expect(run.localAgent?.session.header.parentSession).toBe(parent.id)
+      expect(run.localAgent?.session.header.cwd).toBe(process.cwd())
+    }
+    // Catalog records are expected; an automatic completion message would wake
+    // the root outside Shadow's validation and report batching path.
+    expect(parent.session.snapshotEvents().filter(event => event.type === 'user/message')).toEqual(
+      before.filter(event => event.type === 'user/message'),
+    )
+    await Promise.all(runs.map(run => run.dispose()))
+  })
+
+  it('rejects unconditioned creation through the registered local provider', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SubagentRuntime)
+    installShadowMindProvider(ctx)
+    const parent = await ctx.agentLoop.create(SessionId('parent'))
+    await expect(ctx.subagents.startActivation({
+      provider: 'shadow-mind', label: 'unconditioned', signal: new AbortController().signal,
+      delivery: 'caller', request: { parent, prompt: [{ type: 'text', text: 'Review.' }] },
+    })).rejects.toThrow('Shadow reviews are one-shot')
+    expect(ctx.agents.list().map(agent => agent.id)).toEqual([parent.id])
+  })
+
+
+  it('blocks tools registered by a preset in the child own layer', async () => {
+    const ctx = new Context()
+    contexts.push(ctx)
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
+    await ctx.plugin(AgentLoop, { agents: [] })
+    await ctx.plugin(SubagentRuntime)
+    installShadowMindProvider(ctx)
+    const parent = await ctx.agentLoop.create(SessionId('parent'), { provider: 'selected', model: 'root-model' })
+    let executed = false
+    ctx.on('agent/created', ({ agent }) => {
+      if (agent.id === parent.id) return
+      agent.ctx.tools.register(defineTool({
+        name: 'preset_local_write', description: 'A child-local preset capability.', parameters: {},
+        output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
+        execute: async () => { executed = true; return 'must not run' },
+      }))
+    })
+    const adapter = new MockAdapter([
+      request => {
+        expect(request.tools?.map(tool => tool.name)).toEqual(['structured_output'])
+        return toolCallResponse('forbidden', 'preset_local_write', {})
+      },
+      toolCallResponse('result', 'structured_output', { status: 'report', content: 'Checked.', verdict: 'challenge', refs: [] }),
+    ])
+    ctx.llm.registerAdapter(['selected'], adapter)
+    const run = await startShadowMindRun(ctx, {
+      parent, prompt: [{ type: 'text', text: 'Review.' }], signal: new AbortController().signal,
+      outputSchema: OUTPUT_SCHEMA, toolFilter: { allow: [] },
+    })
+    await expect(run.result).resolves.toMatchObject({ stopReason: 'completed', structured: { content: 'Checked.' } })
+    expect(executed).toBe(false)
+    expect(run.localAgent?.session.snapshotEvents().some(event => event.type === 'tool/result' && event.data.message.isError)).toBe(true)
+    await run.dispose()
+  })
+
 })

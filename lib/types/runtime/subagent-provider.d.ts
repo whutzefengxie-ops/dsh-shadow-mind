@@ -1,15 +1,21 @@
 /**
- * Dedicated in-process provider for fresh Shadow children. The agent factory owns
- * unpublished setup and rollback; the returned run owns the published child through
- * result settlement and quiescent disposal.
+ * Dedicated fresh Shadow children under DSH activation ownership. Review hooks
+ * are installed before first input; caller delivery keeps reports under Shadow
+ * validation and batching rather than DSH automatic parent notification.
  * @module @whutzefengxie-ops/dsh-shadow-mind/subagent-provider
  */
 import type { Context } from '@deepseek-ai/cordis';
-import type { ModelSelection } from '@deepseek-ai/dsh-agent';
+import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent';
+import type { SubagentStartRequest, SubagentRun } from '@deepseek-ai/dsh-subagent';
+import type { ToolRestriction } from '@deepseek-ai/dsh-tools';
 import { type DegenerateOutputReason } from './degenerate-output.ts';
 export { STRUCTURED_OUTPUT_TOOL, STRUCTURED_OUTPUT_INSTRUCTION, } from './structured-output.ts';
 declare module '@deepseek-ai/dsh-subagent' {
     interface SubagentCapabilities {
+        /** Shadow provider supports a per-review tool restriction. */
+        readonly toolFilter?: boolean;
+        /** Shadow provider supports a per-review persona. */
+        readonly persona?: boolean;
         /** Complete per-run model selection; absence is equivalent to false. */
         readonly modelSelection?: boolean;
         /** Per-run runtime-context inheritance policy; absence is equivalent to false. */
@@ -18,6 +24,9 @@ declare module '@deepseek-ai/dsh-subagent' {
         readonly thinkFirst?: boolean;
     }
     interface SubagentStartRequest {
+        /** Shadow-specific composition applied before its initial prompt is delivered. */
+        readonly toolFilter?: ToolRestriction;
+        readonly persona?: string;
         /** Complete provider, model, and reasoning-effort selection for one child. */
         readonly modelSelection?: ModelSelection;
         /** Runtime-context inheritance policy for one child. */
@@ -49,5 +58,15 @@ export declare const DEGENERATE_OUTPUT_DIAGNOSTICS: Readonly<Record<DegenerateOu
 export interface DegenerateOutputState {
     reason: DegenerateOutputReason | undefined;
 }
+/** A caller-owned review receipt retaining its settled local evidence. */
+export interface ShadowMindRun extends SubagentRun {
+    readonly localAgent?: Agent | undefined;
+}
+/**
+ * Start a caller-delivered activation. DSH owns creation, policy inheritance,
+ * directory selection, capacity, and teardown. The serial agent/created hook
+ * installs review conditioning before the manager delivers the first prompt.
+ */
+export declare function startShadowMindRun(ctx: Context, request: SubagentStartRequest): Promise<ShadowMindRun>;
 /** Register the provider in the calling plugin scope. */
 export declare function installShadowMindProvider(ctx: Context): void;

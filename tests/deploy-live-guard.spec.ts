@@ -9,8 +9,8 @@ import { describe, expect, it } from 'vitest'
 /**
  * Regression net for the deploy-live safety gate. Structural assertions pin
  * the ordering of every git invocation against its exit-code check; behavior
- * tests execute the real script with a fake `git` on PATH (Windows PowerShell
- * 5.1 locally, pwsh 7 in CI) and cover both the abort paths and one complete
+ * tests execute the real script with a fake `git` on PATH (PowerShell 7
+ * locally and in CI) and cover both the abort paths and one complete
  * end-to-end deploy into a seeded temporary profile.
  */
 const scriptPath = fileURLToPath(new URL('../scripts/deploy-live.ps1', import.meta.url))
@@ -20,7 +20,7 @@ const WINDOWS = process.platform === 'win32'
 
 /** PowerShell available on this machine, or undefined to skip behavior tests. */
 function shell(): { readonly shell: string } | undefined {
-  const candidate = WINDOWS ? 'powershell' : 'pwsh'
+  const candidate = 'pwsh'
   const probe = spawnSync(candidate, ['-NoProfile', '-Command', '$PSVersionTable.PSVersion.ToString()'], { encoding: 'utf8' })
   return probe.error === undefined && probe.status === 0 ? { shell: candidate } : undefined
 }
@@ -200,8 +200,8 @@ describe.skipIf(shell() === undefined)('deploy-live safety gate (behavior)', () 
       writeFakeGit(shimDir)
       mkdirSync(join(profileDir, 'lib', 'chunks'), { recursive: true })
       writeFileSync(join(profileDir, 'lib', 'chunks', 'runtime-STALE123.js'), 'stale', 'utf8')
-      const result = runDeployScript('ok', shimDir, [], { DSH_HOME: undefined, USERPROFILE: tempHome })
-      expect(result.exit).toBe(0)
+      const result = runDeployScript('ok', shimDir, [], { DSH_HOME: join(tempHome, '.dsh'), USERPROFILE: tempHome })
+      expect(result.exit, result.output).toBe(0)
 
       // A timestamped backup was created before the copy.
       const backups = readdirSync(profileDir).filter(name => name.startsWith('lib.bak-'))

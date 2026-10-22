@@ -1,3 +1,5 @@
+import * as shadowProvider from '../src/runtime/subagent-provider.ts'
+import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -23,7 +25,7 @@ import ShadowMindRuntime, { DEFAULT_SHADOW_ID } from '../src/runtime/index.ts'
 import { MemorySettings } from './memory-settings.ts'
 
 const CAPABILITIES: SubagentCapabilities = {
-  agentOptions: true,
+  agentOptions: true, agentPreset: false,
   outputSchema: true,
   depthLimit: true,
   toolFilter: true,
@@ -86,6 +88,7 @@ Review the completed tool-using turn.
   }
 
   const ctx = new Context()
+  provideWorkingDirectoryFixture(ctx)
   const settingsFiber = ctx.plugin(MemorySettings)
   await settingsFiber
   const agentsFiber = ctx.plugin(AgentRegistry)
@@ -168,6 +171,7 @@ function emitToolTurn(harness: RuntimeHarness, turn = 1): number {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(harnesses.splice(0).map(harness => harness.dispose()))
 })
 
@@ -750,7 +754,7 @@ Review the completed turn.
         },
       },
     ]
-    const harness = await setup(() => ({
+    const createRun = (): shadowProvider.ShadowMindRun => ({
       id: SessionId('child-tool-telemetry'),
       localAgent: {
         session: {
@@ -764,7 +768,11 @@ Review the completed turn.
         stopReason: 'no-structured-output',
       }),
       dispose: () => Promise.resolve(),
-    }))
+    })
+    const harness = await setup(createRun)
+    // The public DSH receipt no longer exposes localAgent. Retain the Shadow
+    // receipt's evidence explicitly when exercising this telemetry projection.
+    vi.spyOn(shadowProvider, 'startShadowMindRun').mockResolvedValueOnce(createRun())
     emitToolTurn(harness)
 
     await vi.waitFor(() => {

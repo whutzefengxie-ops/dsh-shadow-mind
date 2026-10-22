@@ -99,9 +99,6 @@ importers:
       '@deepseek-ai/dsh-home-paths':
         specifier: link:../deepseek-harness/packages/util/home-paths
         version: link:../deepseek-harness/packages/util/home-paths
-      '@deepseek-ai/dsh-invariants':
-        specifier: link:../deepseek-harness/packages/runtime-diagnostics/invariants
-        version: link:../deepseek-harness/packages/runtime-diagnostics/invariants
       '@deepseek-ai/dsh-llm':
         specifier: link:../deepseek-harness/packages/llm/llm
         version: link:../deepseek-harness/packages/llm/llm

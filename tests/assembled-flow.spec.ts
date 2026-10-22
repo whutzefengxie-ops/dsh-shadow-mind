@@ -32,7 +32,7 @@ describe('assembled Shadow Mind flow', () => {
 
     const ctx = new Context()
     try {
-      await mountAgentLoopTestDependencies(ctx)
+      await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
       await ctx.plugin(MemorySettings)
       await ctx.plugin(AgentLoop, { agents: [] })
       await ctx.plugin(SubagentRuntime)
