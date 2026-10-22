@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.7] - Unreleased
+## [0.1.7] - 2026-10-23
 
 ### Fixed
 - Shadow children now recover once from a confirmed malformed DeepSeek tool-JSON attempt through DSH request recovery. Earlier successful steps are preserved; failed response content is never repaired or added to model history. The extra retry is bounded to one per review, respects cancellation and existing provider recovery, and records metadata beside the retained failed attempt. A terminal provider failure now includes its actual message and code.

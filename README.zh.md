@@ -8,14 +8,14 @@
 
 | dsh-shadow-mind | 所需 DSH 版本 | 说明 |
 |----------------|--------------|------|
-| v0.1.7（待发布） | `0.2.1-rc.2` | 桌面版 / Web，受管理的 Shadow activation 生命周期 |
+| v0.1.7 | `0.2.1-rc.2` | 桌面版 / Web，受管理的 Shadow activation 生命周期 |
 | v0.1.6 | `0.2.0-rc.2` | ConfigForms、Profile 设置及先思考模式工具声明修复 |
 | v0.1.3–v0.1.4 | `0.1.6-alpha.2` | 校验器工厂与 Workspace 管理的 Session 导航 |
 | v0.1.2         | `0.1.5-rc.2`（已验证基线） | 修复 subagent setup 绑定与实时退化输出看门狗 |
 | v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API 兼容性更新 |
 | v0.1.0         | `0.1.4` 及更早版本 | 旧版 Session API |
 
-**当前源码**：v0.1.7，适配 DSH `0.2.1-rc.2`，尚未创建发布标签。v0.1.6 对应旧版 DSH `0.2.0-rc.2`；其他 DSH 版本需要单独验证。
+**当前发布版本**：v0.1.7，适配 DSH `0.2.1-rc.2`。v0.1.6 对应旧版 DSH `0.2.0-rc.2`；其他 DSH 版本需要单独验证。
 
 如果你使用的是 DSH `0.1.4` 或更早版本，请安装 `dsh-shadow-mind@0.1.0`：
 ```sh
@@ -28,12 +28,10 @@ dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.0
 
 ## 安装
 
-当前适配版本尚未发布，请先构建并打包，再安装生成的 tarball：
+安装不可变的发布标签，或从 [v0.1.7 Release](https://github.com/whutzefengxie-ops/dsh-shadow-mind/releases/tag/v0.1.7) 下载 tarball 安装包：
 
 ```sh
-pnpm run check
-npm pack --pack-destination /path/to/output
-npx @deepseek-ai/dsh@0.2.1-rc.2 plugin --profile web add /path/to/output/whutzefengxie-ops-dsh-shadow-mind-0.1.7.tgz
+npx @deepseek-ai/dsh@0.2.1-rc.2 plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.7
 ```
 
 ### 桌面版
