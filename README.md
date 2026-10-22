@@ -8,13 +8,14 @@ An independently versioned DeepSeek Harness bundle that starts fresh background 
 
 | dsh-shadow-mind | DSH Version Required | Notes |
 |----------------|---------------------|-------|
+| v0.1.7 | `0.2.1-rc.2` | Desktop / Web, managed Shadow activation lifecycle |
 | v0.1.6 | `0.2.0-rc.2` | ConfigForms, profile settings, and think-first tool declaration fix |
 | v0.1.3–v0.1.4 | `0.1.6-alpha.2` | Codec factories and Workspace-owned Session navigation |
 | v0.1.2         | `0.1.5-rc.2` (verified baseline) | Subagent setup binding + live degenerate-output watchdog |
 | v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API compatibility update |
 | v0.1.0         | `0.1.4` and earlier | Legacy session API |
 
-**Latest release**: v0.1.6 targets the npm-published DSH `0.2.0-rc.2`. Older settings APIs are unsupported. Other DSH versions require separate validation.
+**Current release**: v0.1.7 targets DSH `0.2.1-rc.2`. v0.1.6 targets the older DSH `0.2.0-rc.2`; other DSH versions require separate validation.
 
 If you're using DSH `0.1.4` or earlier, please install `dsh-shadow-mind@0.1.0`:
 ```sh
@@ -27,11 +28,22 @@ The core design idea for this project comes from [pi-shadow-mind](https://github
 
 ## Install
 
-Install with the matching npm-published DSH CLI:
+Install the immutable release tag, or download the package tarball from the [v0.1.7 Release](https://github.com/whutzefengxie-ops/dsh-shadow-mind/releases/tag/v0.1.7):
 
 ```sh
-npx @deepseek-ai/dsh@0.2.0-rc.2 plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.6
+npx @deepseek-ai/dsh@0.2.1-rc.2 plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.7
 ```
+
+### Desktop
+
+Use the CLI bundled with the installed application and set `DSH_HOME` to the home actually used by Desktop. Fully quit Desktop first and reopen it after the command finishes:
+
+```powershell
+$env:DSH_HOME = '<actual Desktop DSH_HOME>'
+& 'G:\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd' plugin --profile desktop add '<absolute tarball path>'
+```
+
+Desktop independently owns `profiles/desktop`. Installing into an npm CLI Web profile does not verify Desktop installation. After restarting, open **Settings → Built-in Plugins → Shadow Mind**, then use a real file-reading tool turn to verify the review card. See the [v0.1.7 compatibility notes](docs/releases/v0.1.7.md) for installation and rollback.
 
 Or pin a reviewed commit when installing from GitHub:
 
@@ -131,12 +143,12 @@ Follow the [installation and runtime validation plan](docs/installation-runtime-
 
 ## Development
 
-The devDependencies link against DeepSeek Harness `0.2.0-rc.2` source (`../deepseek-harness`, a sibling of this checkout). Prepare the commit pinned by `.github/workflows/ci.yml`:
+The devDependencies link against DeepSeek Harness `0.2.1-rc.2` source (`../deepseek-harness`, a sibling of this checkout). Prepare the commit pinned by `.github/workflows/ci.yml`:
 
 ```sh
 corepack enable
 git clone https://github.com/deepseek-ai/deepseek-harness.git ../deepseek-harness
-git -C ../deepseek-harness checkout 639ed015397290b3745d163aafe02ffee4aa3f84
+git -C ../deepseek-harness checkout 687f282e8625c6b8d11ff58211a90524be2e4317
 pnpm --dir ../deepseek-harness install --frozen-lockfile
 pnpm --dir ../deepseek-harness run build:lib
 ```

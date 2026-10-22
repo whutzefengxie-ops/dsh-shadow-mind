@@ -1,38 +1,32 @@
 /**
- * Dedicated in-process provider for fresh Shadow children. The agent factory owns
- * unpublished setup and rollback; the returned run owns the published child through
- * result settlement and quiescent disposal.
+ * Dedicated fresh Shadow children under DSH activation ownership. Review hooks
+ * are installed before first input; caller delivery keeps reports under Shadow
+ * validation and batching rather than DSH automatic parent notification.
  * @module @whutzefengxie-ops/dsh-shadow-mind/subagent-provider
  */
 
 import { randomUUID } from 'node:crypto'
+import { attachMalformedToolRecovery } from './request-recovery.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { foldConsumedWork, installModelSelection } from '@deepseek-ai/dsh-agent'
-import type { Agent, AgentHandle, ModelSelection } from '@deepseek-ai/dsh-agent'
+import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { SessionId, type Session, type SessionEvent, type TurnEndReason } from '@deepseek-ai/dsh-session'
 import { createUserMessage, type ContentBlock } from '@deepseek-ai/dsh-llm'
-import {
-  appendDelegatedPolicyOverrides,
-  applyChildComposition,
-  assertSubagentMaxDepth,
-  captureDelegatedPolicyOverrides,
-  childSessionMeta,
-  finalAssistantOutput,
-  resolveChildAgentOptions,
-  resolveChildDepth,
-} from '@deepseek-ai/dsh-subagent'
+import { finalAssistantOutput, foldSubagentDescriptor } from '@deepseek-ai/dsh-subagent'
 import type {
-  ResolvedSubagentStartRequest,
+  ContinuableCreateSpec,
+  SubagentStartRequest,
   SubagentCapabilities,
-  SubagentDescriptorData,
   SubagentProvider,
   SubagentResult,
   SubagentRun,
   SubagentStopReason,
 } from '@deepseek-ai/dsh-subagent'
+import type { ToolRestriction } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import {
   attachStructuredRuntime,
+  STRUCTURED_OUTPUT_TOOL,
   type StructuredAttachment,
 } from './structured-output.ts'
 import {
@@ -48,6 +42,10 @@ export {
 
 declare module '@deepseek-ai/dsh-subagent' {
   interface SubagentCapabilities {
+    /** Shadow provider supports a per-review tool restriction. */
+    readonly toolFilter?: boolean
+    /** Shadow provider supports a per-review persona. */
+    readonly persona?: boolean
     /** Complete per-run model selection; absence is equivalent to false. */
     readonly modelSelection?: boolean
     /** Per-run runtime-context inheritance policy; absence is equivalent to false. */
@@ -57,6 +55,9 @@ declare module '@deepseek-ai/dsh-subagent' {
   }
 
   interface SubagentStartRequest {
+    /** Shadow-specific composition applied before its initial prompt is delivered. */
+    readonly toolFilter?: ToolRestriction
+    readonly persona?: string
     /** Complete provider, model, and reasoning-effort selection for one child. */
     readonly modelSelection?: ModelSelection
     /** Runtime-context inheritance policy for one child. */
@@ -80,6 +81,9 @@ declare module '@deepseek-ai/dsh-subagent' {
 
 /** Provider name reserved for Shadow Mind's conditioned fresh children. */
 export const SHADOW_MIND_SUBAGENT_PROVIDER = 'shadow-mind'
+
+/** Reserved review identities whose initial conditioning is being installed. */
+const pendingReviews = new Set<SessionId>()
 
 /** Model-visible continuation injected after the tool-free planning request. */
 export const THINK_FIRST_CONTINUATION
@@ -118,24 +122,6 @@ function toStopReason(reason: TurnEndReason | undefined): SubagentStopReason {
     default:
       return 'error'
   }
-}
-
-/** Error used when cancellation wins before the child publication boundary. */
-function prePublicationAbort(): Error {
-  return new Error('subagent request was aborted before child publication')
-}
-
-/** Append one one-shot descriptor inside the child's initial turn before its first request. */
-function attachDescriptorAppend(childCtx: Context, descriptor: SubagentDescriptorData): void {
-  let appended = false
-  childCtx.on('agent/pre-step', async ({ agent }, next) => {
-    const decision = await next()
-    if (!appended && decision.kind === 'enter') {
-      appended = true
-      agent.session.append('subagent/descriptor', descriptor)
-    }
-    return decision
-  })
 }
 
 /** Remove ordinary runtime context and pre-step additions from one child scope. */
@@ -244,139 +230,113 @@ function attachDegenerateOutputGuard(
   })
 }
 
+/** Constrain preset-local tools as well as inherited tools on DSH rc.2. */
+function attachReviewToolRestriction(childCtx: Context, filter: ToolRestriction): void {
+  childCtx.tools.restrict(filter)
+  const allow = filter.allow === undefined ? undefined : new Set(filter.allow)
+  const deny = new Set(filter.deny)
+  const permitted = (name: string): boolean => name === STRUCTURED_OUTPUT_TOOL
+    || name === 'run_code' // PTC transport; every nested end-capability still passes the guard.
+    || ((allow === undefined || allow.has(name)) && !deny.has(name))
+  // New presets may register tools directly in the child's own layer. DSH's
+  // inherited-surface restriction deliberately exempts that layer, so enforce
+  // the review allowlist both on the final prompt and at actual dispatch.
+  childCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
+    const transformed = await next()
+    return { ...transformed, tools: transformed.tools.filter(tool => permitted(tool.name)) }
+  })
+  childCtx.tools.guard(exec => permitted(exec.name)
+    ? undefined : 'This tool is outside the Shadow review allowlist.')
+}
+
+/** A caller-owned review receipt retaining its settled local evidence. */
+export interface ShadowMindRun extends SubagentRun {
+  readonly localAgent?: Agent | undefined
+}
+
 /**
- * Establish and drive one in-process one-shot child. Fulfillment means the agent
- * is already published in the registry and transfers its turn, cancellation,
- * and disposal work through the returned run. Rejection means the agent
- * factory's unpublished creation transaction reached quiescence without
- * publishing a child. Every start appends its resolved descriptor inside the
- * child's initial turn.
- * @param request - the trusted typed start request, including its required signal.
- * @param options - the optional fork seed.
- * @returns a published holder-owned run.
+ * Start a caller-delivered activation. DSH owns creation, policy inheritance,
+ * directory selection, capacity, and teardown. The serial agent/created hook
+ * installs review conditioning before the manager delivers the first prompt.
  */
-async function startInProcessRun(request: ResolvedSubagentStartRequest): Promise<SubagentRun> {
-  assertSubagentMaxDepth(request.maxDepth)
-  if (request.signal.aborted) throw prePublicationAbort()
-  const parent = request.parent
-  const childDepth = resolveChildDepth(parent, request.maxDepth)
-
+export async function startShadowMindRun(ctx: Context, request: SubagentStartRequest): Promise<ShadowMindRun> {
+  const provider = ctx.subagents.getProvider(SHADOW_MIND_SUBAGENT_PROVIDER)
+  if (provider === undefined) throw new Error('Shadow Mind subagent provider is not registered')
+  const local = provider.prepareContinuable !== undefined
   const childId = SessionId(randomUUID())
-  const activationBoundary = 0
-
-  // Capture before the first await: a later parent switch belongs to the
-  // parent's future.
-  const inherited = captureDelegatedPolicyOverrides(parent)
-
+  let child: Agent | undefined
   let structured: StructuredAttachment | undefined
   const degenerateState: DegenerateOutputState = { reason: undefined }
-  const setup = (childCtx: Context, child: Agent): void => {
-    appendDelegatedPolicyOverrides(child.session, inherited)
-    applyChildComposition(childCtx, parent, {
-      persona: request.persona,
-      toolFilter: request.toolFilter,
-    })
-    if (request.modelSelection !== undefined) {
-      installModelSelection(childCtx, {
-        current: request.modelSelection,
-        assembled: undefined,
+  const detach = local ? ctx.on('agent/created', ({ agent }) => {
+    if (agent.id !== childId) return
+    child = agent
+    const childCtx = agent.ctx
+    attachMalformedToolRecovery(childCtx)
+    if (request.persona !== undefined) {
+      childCtx.systemPrompt.section({
+        name: 'deployment:persona-prefix',
+        order: childCtx.systemPrompt.getSectionOrder('DEPLOYMENT_PERSONA_PREFIX'),
+        text: request.persona,
       })
+    }
+    if (request.toolFilter !== undefined) attachReviewToolRestriction(childCtx, request.toolFilter)
+    if (request.modelSelection !== undefined) {
+      installModelSelection(childCtx, { current: request.modelSelection, assembled: undefined })
     }
     if (request.outputSchema !== undefined) {
       structured = attachStructuredRuntime(childCtx, request.outputSchema, request.structuredAnchorSeqs)
     }
     if (request.contextInheritance === 'none') attachMinimalContext(childCtx)
     if (request.thinkFirst === true) {
-      attachThinkFirst(childCtx, child, activationBoundary, () => degenerateState.reason !== undefined)
+      attachThinkFirst(childCtx, agent, 0, () => degenerateState.reason !== undefined)
     }
-    attachDegenerateOutputGuard(
-      childCtx,
-      child,
-      childId,
-      degenerateState,
-      resolveReasoningBudget(request.modelSelection?.reasoningEffort),
-    )
-    attachDescriptorAppend(childCtx, request.descriptor)
+    attachDegenerateOutputGuard(childCtx, agent, childId, degenerateState,
+      resolveReasoningBudget(request.modelSelection?.reasoningEffort))
+  }) : () => {}
+  const { signal, label, outputSchema, modelSelection, ...options } = request
+  if (local) pendingReviews.add(childId)
+  let activation
+  try {
+    activation = await ctx.subagents.startActivation({
+      provider: SHADOW_MIND_SUBAGENT_PROVIDER,
+      ...local ? { childId } : {},
+      label: label ?? 'shadow',
+      delivery: 'caller',
+      signal,
+      request: {
+        ...options,
+        ...!local && outputSchema !== undefined ? { outputSchema } : {},
+        ...modelSelection === undefined ? {} : {
+          modelSelection,
+          agentOptions: { ...options.agentOptions, ...modelSelection },
+        },
+      },
+    })
+  } finally {
+    pendingReviews.delete(childId)
+    detach()
   }
-
-  const handle = await parent.ctx.agents.create({
-    sessionId: childId,
-    meta: childSessionMeta(parent, childDepth, false),
-    agentOptions: resolveChildAgentOptions(parent, {
-      ...request.agentOptions,
-      ...request.modelSelection === undefined
-        ? {}
-        : { provider: request.modelSelection.provider, model: request.modelSelection.model },
-    }, childDepth),
-    signal: request.signal,
-    setup,
-  })
-  return drivePublishedRun(
-    handle,
-    request.signal,
-    request.prompt,
-    childId,
-    activationBoundary,
-    structured,
-    degenerateState,
-  )
-}
-
-/**
- * Wrap a published child in the single run lifecycle that owns signal handoff,
- * one turn, result settlement, and quiescent disposal.
- */
-function drivePublishedRun(
-  handle: AgentHandle,
-  signal: AbortSignal,
-  prompt: ContentBlock[],
-  childId: SessionId,
-  boundary: number,
-  structured: StructuredAttachment | undefined,
-  degenerateState: DegenerateOutputState,
-): SubagentRun {
-  const child = handle.agent
-  const flags = { cancelled: false }
+  let cancelled = false
   const onAbort = (): void => {
-    flags.cancelled = true
-    child.cancel({ kind: 'parent' })
+    cancelled = true
+    // The startup signal stops owning work after publication in DSH rc.2.
+    // Keep the caller's cancellation connected to this exact activation.
+    void activation.dispose().catch(() => {})
   }
   signal.addEventListener('abort', onAbort, { once: true })
-  // Agent creation detaches its creation-only listener before returning. The
-  // post-registration check closes that handoff without treating an already
-  // published child as a failed start.
   if (signal.aborted) onAbort()
-
-  const result: Promise<SubagentResult> = (async () => {
-    try {
-      if (!flags.cancelled) {
-        child.followup(createUserMessage({ content: prompt, source: { kind: 'user' } }))
-        await child.whenIdle()
-      }
-      return readResult(
-        child,
-        boundary,
-        flags.cancelled,
-        structured ? { captured: structured.captured() } : undefined,
-        degenerateState.reason,
-      )
-    } finally {
-      signal.removeEventListener('abort', onAbort)
-    }
-  })()
-
+  const result = activation.result.then(result => child === undefined ? result : readResult(
+    child, 0, cancelled,
+    structured === undefined ? undefined : { captured: structured.captured() },
+    degenerateState.reason,
+  )).finally(() => { signal.removeEventListener('abort', onAbort) })
   return {
-    id: childId,
+    id: activation.childId,
     localAgent: child,
     result,
     async dispose(): Promise<void> {
       signal.removeEventListener('abort', onAbort)
-      flags.cancelled = true
-      const settlements = await Promise.allSettled([handle.dispose(), result])
-      const disposal = settlements[0]
-      // The result channel owns run faults; disposal reports only failure to
-      // release the published handle after both operations settle.
-      if (disposal.status === 'rejected') throw disposal.reason
+      await activation.dispose()
     },
   }
 }
@@ -426,7 +386,12 @@ function readResult(
       return { output, diagnostic: STRUCTURED_OUTPUT_MISSING_DIAGNOSTIC, stopReason: 'no-structured-output' }
     }
   }
-  return { output, stopReason }
+  return {
+    output, stopReason,
+    ...lastEnd?.data.reason.kind === 'error' ? {
+      diagnostic: lastEnd.data.reason.error.message + ' (' + lastEnd.data.reason.error.code + ')',
+    } : {},
+  }
 }
 
 /** Dedicated fresh-child provider with Shadow Mind conditioning semantics. */
@@ -434,6 +399,7 @@ class ShadowMindInProcessProvider implements SubagentProvider {
   readonly name = SHADOW_MIND_SUBAGENT_PROVIDER
   readonly capabilities: SubagentCapabilities = {
     agentOptions: true,
+    agentPreset: false,
     outputSchema: true,
     depthLimit: true,
     toolFilter: true,
@@ -444,15 +410,24 @@ class ShadowMindInProcessProvider implements SubagentProvider {
   }
   readonly inheritsParentContext = false
 
-  /** Start one fresh, conditioned in-process child. */
-  start(request: ResolvedSubagentStartRequest): Promise<SubagentRun> {
-    return startInProcessRun(request)
+  /** Let the DSH manager create a fresh session with no parent-history seed. */
+  prepareContinuable(): Promise<ContinuableCreateSpec> {
+    return Promise.resolve({})
   }
 }
 
 /** Register the provider in the calling plugin scope. */
 export function installShadowMindProvider(ctx: Context): void {
   if (ctx.subagents.getProvider(SHADOW_MIND_SUBAGENT_PROVIDER) !== undefined) return
+  // DSH local activations have a continuable descriptor. A settled review must
+  // never cold-resume without its per-run tool, model, and output constraints.
+  ctx.on('agent/created', ({ agent }) => {
+    if (pendingReviews.has(agent.id)) return
+    const descriptor = foldSubagentDescriptor(agent.session.snapshotEvents())
+    if (descriptor?.provider === SHADOW_MIND_SUBAGENT_PROVIDER) {
+      throw new Error('Shadow reviews are one-shot; start or retry a review from its parent session.')
+    }
+  })
   ctx.effect(
     () => ctx.subagents.registerProvider(new ShadowMindInProcessProvider()),
     'shadow-mind conditioned subagent provider',

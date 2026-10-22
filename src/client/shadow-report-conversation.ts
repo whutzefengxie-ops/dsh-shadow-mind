@@ -55,6 +55,7 @@ export const shadowRelayMarkerDefinition: ConversationNodeDefinition<ShadowMindR
     kind: 'shadow-mind-relay-marker',
     id: context.id,
     target: 'chat',
+    groupTree: 'turn',
     anchorSeq: context.start.event.seq,
     location: context.start.location,
     visibility: 'visible',

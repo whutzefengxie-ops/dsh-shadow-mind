@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2026-10-23
+
+### Fixed
+- Shadow children now recover once from a confirmed malformed DeepSeek tool-JSON attempt through DSH request recovery. Earlier successful steps are preserved; failed response content is never repaired or added to model history. The extra retry is bounded to one per review, respects cancellation and existing provider recovery, and records metadata beside the retained failed attempt. A terminal provider failure now includes its actual message and code.
+- Enforce the Shadow tool allowlist on preset-local capabilities as well as inherited tools, including dispatch-time checks.
+- Place review cards and relay markers outside DSH's collapsible process groups, so completed reviews remain visible in Desktop and Web chat.
+- Support DSH `0.2.1-rc.2` with caller-delivered managed activations, preserving review-only structured output, think-first tools, model selection, and cancellation after publication.
+- Keep per-review conditioning isolated between concurrent children and reject unconditioned cold resumes.
+- Retain settled local evidence for diagnostics after DSH disposes an activation; avoid automatic duplicate parent notifications.
+
+### Compatibility
+- Exact DSH peers and `engines.dsh`: `0.2.1-rc.2`; CI source commit `687f282e8625c6b8d11ff58211a90524be2e4317`.
+- Document Desktop's bundled CLI and independent profile. Remove the deleted invariant-package development dependency.
+
 ## [0.1.6] - 2026-10-09
 
 ### Fixed

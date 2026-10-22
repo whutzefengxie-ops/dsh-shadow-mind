@@ -16,7 +16,7 @@ describe('built plugin entry points', () => {
     const dshHome = await mkdtemp(join(tmpdir(), 'dsh-shadow-loader-'))
     const ctx = new Context()
     try {
-      await mountAgentLoopTestDependencies(ctx)
+      await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
       await ctx.plugin(MemorySettings)
       await ctx.plugin(SubagentRuntime)
       await ctx.plugin(CommandRuntime)

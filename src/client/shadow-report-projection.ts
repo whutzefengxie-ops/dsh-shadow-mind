@@ -135,6 +135,8 @@ export function buildShadowReviewChatNode(
     kind: 'shadow-mind-review',
     id: context.id,
     target: 'chat',
+    // Completed review cards remain outside DSH's collapsible process groups.
+    groupTree: 'turn',
     anchorSeq: anchor.event.seq,
     location: anchor.location,
     visibility: 'visible',

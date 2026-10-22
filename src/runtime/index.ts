@@ -13,7 +13,7 @@ import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
 import { resolveDshHome } from '@deepseek-ai/dsh-home-paths'
 import type { SettingsPathOp, SettingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
-import type { SubagentRun, SubagentResult } from '@deepseek-ai/dsh-subagent'
+import type { SubagentResult } from '@deepseek-ai/dsh-subagent'
 import { Remote, TypertRemoteService } from '@deepseek-ai/dsh-typert-protocol'
 import { Config, resolveSettings, runtimeSettings, type ShadowRuntimeConfig } from './config.ts'
 import { ShadowRegistry } from './registry.ts'
@@ -22,7 +22,7 @@ import { shouldRunShadow } from './scheduler.ts'
 import { buildShadowPrompt, projectTrajectoryWithAnchors } from './trajectory.ts'
 import { ReportBatcher, type AcceptedShadowReport } from './report-batcher.ts'
 import { failureAt, safeError, type ShadowCancellation, type ShadowFailure } from './run-diagnostics.ts'
-import { installShadowMindProvider, SHADOW_MIND_SUBAGENT_PROVIDER } from './subagent-provider.ts'
+import { installShadowMindProvider, startShadowMindRun, type ShadowMindRun, SHADOW_MIND_SUBAGENT_PROVIDER } from './subagent-provider.ts'
 import { resolveIndependence } from './vendor.ts'
 import { containsHoldoutLiteral, redactHoldoutLiterals } from './holdout.ts'
 import { buildShadowModelCatalog } from './model-catalog.ts'
@@ -1016,7 +1016,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
     let holdoutKeys: readonly string[] = []
     let projection: ReturnType<typeof projectTrajectoryWithAnchors> | undefined
     let prompt = ''
-    let run: SubagentRun | undefined
+    let run: ShadowMindRun | undefined
     let result: SubagentResult | undefined
     let failure: ShadowFailure | undefined
     let rawFailure: Error | undefined
@@ -1070,7 +1070,7 @@ export class ShadowMindRuntime extends TypertRemoteService {
       stage = 'start'
       nextFailureCode = 'SUBAGENT_START_FAILED'
       entry.view = { ...entry.view, stage }
-      run = await this.ctx.subagents.start(SHADOW_MIND_SUBAGENT_PROVIDER, {
+      run = await startShadowMindRun(this.ctx, {
         label: `shadow:${definition.id}`,
         parent: agent,
         prompt: [{ type: 'text', text: prompt }],

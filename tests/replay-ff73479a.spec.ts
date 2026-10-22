@@ -1,3 +1,4 @@
+import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 /**
  * Headless replay of the ff73479a failure against the current runtime: a
  * Shadow child returns status "silent" with a long explanatory body. Pre-fix
@@ -46,6 +47,7 @@ Review the completed tool-using turn.
     const body = 'Completed root task reviewed. Prior acceptance rounds (seq 25504, 29541, 47299) accepted root answers 25497/29534/30127/47292 with source-level verification; independent re-check of the final closure answer 48700 claim matches both files exactly. No RELEASE.md scope exists in this session.'
 
     const ctx = new Context()
+  provideWorkingDirectoryFixture(ctx)
     try {
       const warn = vi.spyOn(ctx.logger, 'warn')
       await ctx.plugin(MemorySettings)
@@ -53,7 +55,7 @@ Review the completed tool-using turn.
       await ctx.plugin(SubagentRuntime)
       ctx.subagents.registerProvider({
         name: 'shadow-mind',
-        capabilities: { agentOptions: true, outputSchema: true, depthLimit: true, toolFilter: true, persona: true },
+        capabilities: { agentOptions: true, agentPreset: false, outputSchema: true, depthLimit: true, toolFilter: true, persona: true },
         inheritsParentContext: false,
         start: () => Promise.resolve({
           id: SessionId('child-ff73479a'),

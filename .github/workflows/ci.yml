@@ -14,11 +14,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Build against the npm DSH 0.2.0-rc.2 release source.
+      # Build against the npm DSH 0.2.1-rc.2 release source.
       - uses: actions/checkout@v4
         with:
           repository: deepseek-ai/deepseek-harness
-          ref: 639ed015397290b3745d163aafe02ffee4aa3f84
+          ref: 687f282e8625c6b8d11ff58211a90524be2e4317
           fetch-depth: 1
           path: harness-source
       - name: Link the harness checkout where the devDeps expect it
@@ -30,7 +30,7 @@ jobs:
       - run: corepack enable
 
       # corepack picks each repo's packageManager from its package.json
-      # (pnpm 11.7.0 for the harness, 10.15.1 for this repo).
+      # (pnpm 11.28.5 for the harness, 10.15.1 for this repo).
       - name: Install the pinned harness
         run: cd ../deepseek-harness && pnpm install --frozen-lockfile
       - name: Build the harness host and client faces
