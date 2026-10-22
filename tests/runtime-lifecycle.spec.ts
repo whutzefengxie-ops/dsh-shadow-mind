@@ -496,6 +496,8 @@ Review the completed turn.
         phase: 'aborted',
         reasonCode: 'USER_MESSAGE_RECEIVED',
       })
+      // The aborted state is published before asynchronous teardown releases its slot.
+      expect(harness.runtime.status(harness.agent).active).toHaveLength(0)
     })
     expect(harness.runtime.reviewCycles(harness.agent)[1]?.runs).toEqual([])
     expect(harness.runtime.reviewCycles(harness.agent)[1]?.scheduling).toBe(false)

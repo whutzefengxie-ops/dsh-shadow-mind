@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.1.7] - Unreleased
 
 ### Fixed
+- Shadow children now recover once from a confirmed malformed DeepSeek tool-JSON attempt through DSH request recovery. Earlier successful steps are preserved; failed response content is never repaired or added to model history. The extra retry is bounded to one per review, respects cancellation and existing provider recovery, and records metadata beside the retained failed attempt. A terminal provider failure now includes its actual message and code.
 - Enforce the Shadow tool allowlist on preset-local capabilities as well as inherited tools, including dispatch-time checks.
 - Place review cards and relay markers outside DSH's collapsible process groups, so completed reviews remain visible in Desktop and Web chat.
 - Support DSH `0.2.1-rc.2` with caller-delivered managed activations, preserving review-only structured output, think-first tools, model selection, and cancellation after publication.

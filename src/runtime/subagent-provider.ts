@@ -6,6 +6,7 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import { attachMalformedToolRecovery } from './request-recovery.ts'
 import type { Context } from '@deepseek-ai/cordis'
 import { foldConsumedWork, installModelSelection } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
@@ -270,6 +271,7 @@ export async function startShadowMindRun(ctx: Context, request: SubagentStartReq
     if (agent.id !== childId) return
     child = agent
     const childCtx = agent.ctx
+    attachMalformedToolRecovery(childCtx)
     if (request.persona !== undefined) {
       childCtx.systemPrompt.section({
         name: 'deployment:persona-prefix',
@@ -384,7 +386,12 @@ function readResult(
       return { output, diagnostic: STRUCTURED_OUTPUT_MISSING_DIAGNOSTIC, stopReason: 'no-structured-output' }
     }
   }
-  return { output, stopReason }
+  return {
+    output, stopReason,
+    ...lastEnd?.data.reason.kind === 'error' ? {
+      diagnostic: lastEnd.data.reason.error.message + ' (' + lastEnd.data.reason.error.code + ')',
+    } : {},
+  }
 }
 
 /** Dedicated fresh-child provider with Shadow Mind conditioning semantics. */
