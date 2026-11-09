@@ -31,10 +31,10 @@ const OUTPUT_SCHEMA: ObjectJsonSchema = {
 }
 
 describe('Shadow Mind conditioned subagent provider', () => {
-  it('restores immediate tools after planning on addition-only model routes', async () => {
+  it.each(['native', 'ptc'] as const)('restores immediate review tools after planning with a %s parent', async mode => {
     const ctx = new Context()
     contexts.push(ctx)
-    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
+    await mountAgentLoopTestDependencies(ctx, { workingDirectory: true, tools: { mode } })
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SubagentRuntime)
     installShadowMindProvider(ctx)

@@ -13,6 +13,7 @@ import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import SessionProjections from '@deepseek-ai/dsh-session-projection'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import { createUserMessage, createMessage, createToolResultMessage, ToolCallId } from '@deepseek-ai/dsh-llm'
 import { Session, SessionId } from '@deepseek-ai/dsh-session'
@@ -47,7 +48,8 @@ Review the completed tool-using turn.
     const body = 'Completed root task reviewed. Prior acceptance rounds (seq 25504, 29541, 47299) accepted root answers 25497/29534/30127/47292 with source-level verification; independent re-check of the final closure answer 48700 claim matches both files exactly. No RELEASE.md scope exists in this session.'
 
     const ctx = new Context()
-  provideWorkingDirectoryFixture(ctx)
+    await ctx.plugin(SessionProjections)
+    provideWorkingDirectoryFixture(ctx)
     try {
       const warn = vi.spyOn(ctx.logger, 'warn')
       await ctx.plugin(MemorySettings)

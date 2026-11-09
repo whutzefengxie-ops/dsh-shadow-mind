@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import SessionProjections from '@deepseek-ai/dsh-session-projection'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import {
@@ -88,6 +89,7 @@ Review the completed tool-using turn.
   }
 
   const ctx = new Context()
+  await ctx.plugin(SessionProjections)
   provideWorkingDirectoryFixture(ctx)
   const settingsFiber = ctx.plugin(MemorySettings)
   await settingsFiber

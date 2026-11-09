@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import SessionProjections from '@deepseek-ai/dsh-session-projection'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import { boot, initProfile, readProfilePatches, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
 import ConfigEditor from '@deepseek-ai/dsh-config-editor'
@@ -21,7 +22,7 @@ afterEach(async () => {
   for (const home of homes.splice(0)) await rm(home, { recursive: true, force: true })
 })
 
-describe('DSH 0.2.1-rc.2 profile settings', () => {
+describe('DSH 0.2.2-rc.1 profile settings', () => {
   it('saves live preferences without remounting and restores them on restart', async () => {
     const home = await mkdtemp(join(tmpdir(), 'shadow-profile-settings-'))
     homes.push(home)
@@ -36,6 +37,7 @@ describe('DSH 0.2.1-rc.2 profile settings', () => {
     await writeFile(join(bundle, 'cordis.patch.yml'), JSON.stringify([{ insert: [
       { id: 'config-editor', name: 'cordis:editor' },
       { id: 'settings', name: 'cordis:settings' },
+      { id: 'projections', name: 'cordis:projections' },
       { id: 'agents', name: 'cordis:agents' },
       { id: 'subagents', name: 'cordis:subagents' },
       { id: 'shadow-mind-runtime', name: 'cordis:shadow', config: { dshHome: home, defaultShadowTimeoutSeconds: 45 } },
@@ -51,7 +53,7 @@ describe('DSH 0.2.1-rc.2 profile settings', () => {
         ctx.provide('profileContext', profile)
         ctx.provide('appReady', { onReady: (listener: () => void) => { listener(); return () => {} } })
         Object.assign(ctx.loader.builtins, {
-          editor: ConfigEditor, settings: Settings, agents: AgentRegistry, subagents: SubagentRuntime, shadow: ShadowMindRuntime,
+          projections: SessionProjections, editor: ConfigEditor, settings: Settings, agents: AgentRegistry, subagents: SubagentRuntime, shadow: ShadowMindRuntime,
         })
       })
       contexts.push(ctx)

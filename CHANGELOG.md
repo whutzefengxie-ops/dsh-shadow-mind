@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.8] - 2026-11-09
+
+### Fixed
+- Adapt Shadow tool declarations to the DSH executor contract: native review calls, a tool-free think-first step, and the same allowlist at presentation and dispatch.
+- Select child models through `agent.model.select()` before the step fixes its route.
+
+### Compatibility
+- DSH `0.2.2-rc.1`, source commit `66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db`; Node.js `>=24.9.0`.
+- CI, peers, built artifacts, and test compositions use the exact target baseline.
+
 ## [0.1.7] - 2026-10-23
 
 ### Fixed

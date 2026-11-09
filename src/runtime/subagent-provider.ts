@@ -8,7 +8,7 @@
 import { randomUUID } from 'node:crypto'
 import { attachMalformedToolRecovery } from './request-recovery.ts'
 import type { Context } from '@deepseek-ai/cordis'
-import { foldConsumedWork, installModelSelection } from '@deepseek-ai/dsh-agent'
+import { foldConsumedWork } from '@deepseek-ai/dsh-agent'
 import type { Agent, ModelSelection } from '@deepseek-ai/dsh-agent'
 import { SessionId, type Session, type SessionEvent, type TurnEndReason } from '@deepseek-ai/dsh-session'
 import { createUserMessage, type ContentBlock } from '@deepseek-ai/dsh-llm'
@@ -23,6 +23,7 @@ import type {
   SubagentStopReason,
 } from '@deepseek-ai/dsh-subagent'
 import type { ToolRestriction } from '@deepseek-ai/dsh-tools'
+import { NativeToolExecutor } from '@deepseek-ai/dsh-tool-executor-native'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import {
   attachStructuredRuntime,
@@ -157,12 +158,6 @@ function attachThinkFirst(
     // Restored tools must be immediate declarations, not an all-deferred addition.
     return { ...decision, startsRequestSeries: true }
   })
-  childCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
-    const transformed = await next()
-    const planned = child.session.snapshotEvents().some(event =>
-      event.seq >= activationBoundary && event.type === 'assistant/message')
-    return planned ? transformed : { ...transformed, tools: [] }
-  })
   let continued = false
   childCtx.on('agent/turn-stopping', ({ agent }) => {
     if (continued || skipSteer()) return
@@ -230,21 +225,25 @@ function attachDegenerateOutputGuard(
   })
 }
 
-/** Constrain preset-local tools as well as inherited tools on DSH rc.2. */
-function attachReviewToolRestriction(childCtx: Context, filter: ToolRestriction): void {
-  childCtx.tools.restrict(filter)
-  const allow = filter.allow === undefined ? undefined : new Set(filter.allow)
-  const deny = new Set(filter.deny)
+/** Own native review tool declarations and dispatch under the DSH executor contract. */
+function attachReviewTools(childCtx: Context, child: Agent, request: SubagentStartRequest): void {
+  const filter = request.toolFilter
+  if (filter !== undefined) childCtx.tools.restrict(filter)
+  const allow = filter?.allow === undefined ? undefined : new Set(filter.allow)
+  const deny = new Set(filter?.deny)
   const permitted = (name: string): boolean => name === STRUCTURED_OUTPUT_TOOL
-    || name === 'run_code' // PTC transport; every nested end-capability still passes the guard.
     || ((allow === undefined || allow.has(name)) && !deny.has(name))
-  // New presets may register tools directly in the child's own layer. DSH's
-  // inherited-surface restriction deliberately exempts that layer, so enforce
-  // the review allowlist both on the final prompt and at actual dispatch.
-  childCtx.on('system-prompt/assemble', async (_assembly, _context, next) => {
-    const transformed = await next()
-    return { ...transformed, tools: transformed.tools.filter(tool => permitted(tool.name)) }
+  // Each Shadow uses native calls. DSH rc.1 keeps tool declarations outside
+  // the prompt presentation waterfall, so the executor owns this projection.
+  const executor = new NativeToolExecutor(childCtx)
+  childCtx.tools.setExecutor({
+    describe: tools => executor.describe(request.thinkFirst === true
+      && !child.session.snapshotEvents().some(event => event.type === 'assistant/message')
+      ? [] : tools.filter(tool => permitted(tool.name))),
+    execute: input => executor.execute(input),
   })
+  // Preset-local tools are exempt from DSH's inherited-surface restrictions.
+  // Enforce the same allowlist when a model calls an undeclared tool.
   childCtx.tools.guard(exec => permitted(exec.name)
     ? undefined : 'This tool is outside the Shadow review allowlist.')
 }
@@ -279,9 +278,9 @@ export async function startShadowMindRun(ctx: Context, request: SubagentStartReq
         text: request.persona,
       })
     }
-    if (request.toolFilter !== undefined) attachReviewToolRestriction(childCtx, request.toolFilter)
+    attachReviewTools(childCtx, agent, request)
     if (request.modelSelection !== undefined) {
-      installModelSelection(childCtx, { current: request.modelSelection, assembled: undefined })
+      agent.model.select(request.modelSelection)
     }
     if (request.outputSchema !== undefined) {
       structured = attachStructuredRuntime(childCtx, request.outputSchema, request.structuredAnchorSeqs)
