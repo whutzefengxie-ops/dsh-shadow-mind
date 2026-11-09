@@ -8,6 +8,7 @@
 
 | dsh-shadow-mind | 所需 DSH 版本 | 说明 |
 |----------------|--------------|------|
+| v0.1.8 | `0.2.2-rc.1` | 桌面版 / Web，原生审查执行器与 Agent 模型选择 |
 | v0.1.7 | `0.2.1-rc.2` | 桌面版 / Web，受管理的 Shadow activation 生命周期 |
 | v0.1.6 | `0.2.0-rc.2` | ConfigForms、Profile 设置及先思考模式工具声明修复 |
 | v0.1.3–v0.1.4 | `0.1.6-alpha.2` | 校验器工厂与 Workspace 管理的 Session 导航 |
@@ -15,7 +16,7 @@
 | v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API 兼容性更新 |
 | v0.1.0         | `0.1.4` 及更早版本 | 旧版 Session API |
 
-**当前发布版本**：v0.1.7，适配 DSH `0.2.1-rc.2`。v0.1.6 对应旧版 DSH `0.2.0-rc.2`；其他 DSH 版本需要单独验证。
+**当前发布版本**：v0.1.8，适配 DSH `0.2.2-rc.1`，要求 Node.js `>=24.9.0`。旧版 DSH 请使用对应插件版本，其他版本需要单独验证。
 
 如果你使用的是 DSH `0.1.4` 或更早版本，请安装 `dsh-shadow-mind@0.1.0`：
 ```sh
@@ -28,10 +29,10 @@ dsh plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.0
 
 ## 安装
 
-安装不可变的发布标签，或从 [v0.1.7 Release](https://github.com/whutzefengxie-ops/dsh-shadow-mind/releases/tag/v0.1.7) 下载 tarball 安装包：
+安装不可变的发布标签，或从 [v0.1.8 Release](https://github.com/whutzefengxie-ops/dsh-shadow-mind/releases/tag/v0.1.8) 下载 tarball 安装包：
 
 ```sh
-npx @deepseek-ai/dsh@0.2.1-rc.2 plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.7
+npx @deepseek-ai/dsh@0.2.2-rc.1 plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.8
 ```
 
 ### 桌面版
@@ -43,7 +44,7 @@ $env:DSH_HOME = '<桌面版实际使用的 DSH_HOME>'
 & 'G:\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd' plugin --profile desktop add '<tarball 的绝对路径>'
 ```
 
-桌面版独立管理 `profiles/desktop`。npm CLI 的 Web profile 安装不能证明桌面版安装成功。重启后在 **设置 → 内置插件 → Shadow Mind** 检查设置，再用读取文件的真实工具轮次验证审查卡片。完整安装与回滚步骤见 [v0.1.7 适配说明](docs/releases/v0.1.7.md)。
+桌面版独立管理 `profiles/desktop`。npm CLI 的 Web profile 安装不能证明桌面版安装成功。重启后先在 **插件** 确认组合包正常启用，再在 **设置 → 内置插件 → Shadow Mind** 检查设置，再用读取文件的真实工具轮次验证审查卡片。完整安装与回滚步骤见 [v0.1.8 适配说明](docs/releases/v0.1.8.md)。
 
 或者从 GitHub 安装时固定已经审查的 commit：
 
@@ -141,12 +142,12 @@ node tools/shadow-debug.mjs health                                        # 体�
 
 ## 开发
 
-devDependencies 通过 `link:` 指向本仓库同级的 DeepSeek Harness `0.2.1-rc.2` 源码（`../deepseek-harness`）。先准备 `.github/workflows/ci.yml` 固定的提交：
+devDependencies 通过 `link:` 指向本仓库同级的 DeepSeek Harness `0.2.2-rc.1` 源码（`../deepseek-harness`）。先准备 `.github/workflows/ci.yml` 固定的提交：
 
 ```sh
 corepack enable
 git clone https://github.com/deepseek-ai/deepseek-harness.git ../deepseek-harness
-git -C ../deepseek-harness checkout 687f282e8625c6b8d11ff58211a90524be2e4317
+git -C ../deepseek-harness checkout 66491b05e3f05ad35bcdd4f6cd7ed26041d9e3db
 pnpm --dir ../deepseek-harness install --frozen-lockfile
 pnpm --dir ../deepseek-harness run build:lib
 ```

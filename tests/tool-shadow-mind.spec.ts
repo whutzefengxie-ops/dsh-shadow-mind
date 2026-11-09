@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
+import SessionProjections from '@deepseek-ai/dsh-session-projection'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import CommandRuntime from '@deepseek-ai/dsh-commands'
@@ -17,6 +18,7 @@ import type {
 import { DEFAULT_SHADOW_ID } from '../src/runtime/index.ts'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
+import * as NativeToolExecutor from '@deepseek-ai/dsh-tool-executor-native'
 import ApprovalService, { type ApprovalOutcome } from '@deepseek-ai/dsh-user-approval'
 import * as toolShadowMind from '../src/tool/index.ts'
 
@@ -129,9 +131,11 @@ class RuntimeStub {
 
 async function setup(outcome: ApprovalOutcome = 'allowed-once') {
   const ctx = new Context()
+  await ctx.plugin(SessionProjections)
   await ctx.plugin(SessionStore)
   await ctx.plugin(SystemPrompt)
   await ctx.plugin(ToolRuntime)
+  await ctx.plugin(NativeToolExecutor)
   await ctx.plugin(CommandRuntime)
   await ctx.plugin(ApprovalService, { policy: 'ask' })
   const runtime = new RuntimeStub()
@@ -150,13 +154,12 @@ async function execute(
   name: string,
   args: Record<string, unknown>,
 ) {
-  return ctx.tools.execute({
+  const batch = await ctx.tools.execute({
     signal: testSignal,
-    callId: ToolCallId(`call-${name}`),
-    name,
-    arguments: args,
+    calls: [{ type: 'tool-call', id: ToolCallId(`call-${name}`), name, arguments: JSON.stringify(args) }],
     ...agent === undefined ? {} : { agent },
   })
+  return batch.results[0]!.result
 }
 
 function present(ctx: Context, agent: Agent, name: string, args: Record<string, unknown>) {

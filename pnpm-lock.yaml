@@ -108,6 +108,9 @@ importers:
       '@deepseek-ai/dsh-session':
         specifier: link:../deepseek-harness/packages/core/session
         version: link:../deepseek-harness/packages/core/session
+      '@deepseek-ai/dsh-session-projection':
+        specifier: link:../deepseek-harness/packages/session/session-projection
+        version: link:../deepseek-harness/packages/session/session-projection
       '@deepseek-ai/dsh-settings':
         specifier: link:../deepseek-harness/packages/settings/settings
         version: link:../deepseek-harness/packages/settings/settings
@@ -117,6 +120,9 @@ importers:
       '@deepseek-ai/dsh-system-prompt':
         specifier: link:../deepseek-harness/packages/core/system-prompt
         version: link:../deepseek-harness/packages/core/system-prompt
+      '@deepseek-ai/dsh-tool-executor-native':
+        specifier: link:../deepseek-harness/packages/core/tool-executor-native
+        version: link:../deepseek-harness/packages/core/tool-executor-native
       '@deepseek-ai/dsh-tools':
         specifier: link:../deepseek-harness/packages/core/tools
         version: link:../deepseek-harness/packages/core/tools

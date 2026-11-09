@@ -1,6 +1,6 @@
 {
   "name": "@whutzefengxie-ops/dsh-shadow-mind",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Probabilistic background Shadow agent reviews for DeepSeek Harness",
   "keywords": [
     "deepseek-harness",
@@ -20,8 +20,8 @@
   "license": "MIT",
   "type": "module",
   "engines": {
-    "node": "^22.19.0 || >=24.0.0",
-    "dsh": "0.2.1-rc.2"
+    "node": ">=24.9.0",
+    "dsh": "0.2.2-rc.1"
   },
   "packageManager": "pnpm@10.15.1",
   "main": "./lib/index.js",
@@ -87,23 +87,24 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
-    "@deepseek-ai/dsh-agent": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-atomic-write": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-primitives": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-chat": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-client-ui-session": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-commands": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-compaction": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-home-paths": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-session": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-settings": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-subagent": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-system-prompt": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-tools": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.2",
-    "@deepseek-ai/dsh-user-approval": "0.2.1-rc.2",
+    "@deepseek-ai/dsh-agent": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-atomic-write": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-primitives": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-chat": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-client-ui-session": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-commands": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-compaction": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-home-paths": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-session": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-settings": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-subagent": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-system-prompt": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tools": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-tool-executor-native": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.2-rc.1",
+    "@deepseek-ai/dsh-user-approval": "0.2.2-rc.1",
     "@deepseek-ai/schemastery": "^3.18.1",
     "react": "^18.2.0"
   },
@@ -156,6 +157,9 @@
     "@deepseek-ai/dsh-system-prompt": {
       "optional": true
     },
+    "@deepseek-ai/dsh-tool-executor-native": {
+      "optional": true
+    },
     "@deepseek-ai/dsh-tools": {
       "optional": true
     },
@@ -197,10 +201,12 @@
     "@deepseek-ai/dsh-home-paths": "link:../deepseek-harness/packages/util/home-paths",
     "@deepseek-ai/dsh-llm": "link:../deepseek-harness/packages/llm/llm",
     "@deepseek-ai/dsh-sandbox": "link:../deepseek-harness/packages/sandbox/sandbox",
+    "@deepseek-ai/dsh-session-projection": "link:../deepseek-harness/packages/session/session-projection",
     "@deepseek-ai/dsh-session": "link:../deepseek-harness/packages/core/session",
     "@deepseek-ai/dsh-settings": "link:../deepseek-harness/packages/settings/settings",
     "@deepseek-ai/dsh-subagent": "link:../deepseek-harness/packages/subagent/subagent",
     "@deepseek-ai/dsh-system-prompt": "link:../deepseek-harness/packages/core/system-prompt",
+    "@deepseek-ai/dsh-tool-executor-native": "link:../deepseek-harness/packages/core/tool-executor-native",
     "@deepseek-ai/dsh-tools": "link:../deepseek-harness/packages/core/tools",
     "@deepseek-ai/dsh-typert-protocol": "link:../deepseek-harness/packages/typert/protocol",
     "@deepseek-ai/dsh-user-approval": "link:../deepseek-harness/packages/interaction/user-approval",
