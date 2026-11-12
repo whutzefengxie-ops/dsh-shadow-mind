@@ -302,13 +302,11 @@ export async function startShadowMindRun(ctx: Context, request: SubagentStartReq
       label: label ?? 'shadow',
       delivery: 'caller',
       signal,
-      request: {
-        ...options,
-        ...!local && outputSchema !== undefined ? { outputSchema } : {},
-        ...modelSelection === undefined ? {} : {
-          modelSelection,
-          agentOptions: { ...options.agentOptions, ...modelSelection },
-        },
+      ...options,
+      ...!local && outputSchema !== undefined ? { outputSchema } : {},
+      ...modelSelection === undefined ? {} : {
+        modelSelection,
+        agentOptions: { ...options.agentOptions, ...modelSelection },
       },
     })
   } finally {
