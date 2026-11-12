@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.9] - 2026-11-12
+
+### Fixed
+- Start Shadow reviews with the flattened DSH 0.2.2-rc.2 activation contract, preserving parent identity, review conditioning, caller-owned cancellation, tool restrictions, and validated report delivery.
+
+### Compatibility
+- Exact DSH peers, engine, and CI source baseline: `0.2.2-rc.2`, commit `ddac96760b6edf8fa0fe17cbdcf0b512f4c12b2c`.
+- Requires Node.js `>=24.9.0`; use v0.1.8 with DSH 0.2.2-rc.1.
+
 ## [0.1.8] - 2026-11-09
 
 ### Fixed

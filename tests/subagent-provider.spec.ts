@@ -456,7 +456,7 @@ describe('Shadow Mind conditioned subagent provider', () => {
     const parent = await ctx.agentLoop.create(SessionId('parent'))
     await expect(ctx.subagents.startActivation({
       provider: 'shadow-mind', label: 'unconditioned', signal: new AbortController().signal,
-      delivery: 'caller', request: { parent, prompt: [{ type: 'text', text: 'Review.' }] },
+      delivery: 'caller', parent, prompt: [{ type: 'text', text: 'Review.' }],
     })).rejects.toThrow('Shadow reviews are one-shot')
     expect(ctx.agents.list().map(agent => agent.id)).toEqual([parent.id])
   })
