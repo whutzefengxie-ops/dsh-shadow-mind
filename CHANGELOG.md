@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.10] - 2026-11-14
+
+### Compatibility
+- Target DSH `0.2.2-rc.3`, commit `38a6a5c965aa99ab525161efb7cc5cf1fe62fced`, in the exact engine and peer requirements and CI source pin. This admits the plugin without a version exemption.
+- Retain the v0.1.9 runtime and client implementation; the consumed Agent, Subagent, tool, and conversation contracts are unchanged in rc.3.
+- Requires Node.js `>=24.9.0`. Use v0.1.9 with DSH 0.2.2-rc.2.
+
 ## [0.1.9] - 2026-11-12
 
 ### Fixed
