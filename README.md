@@ -8,6 +8,7 @@ An independently versioned DeepSeek Harness bundle that starts fresh background 
 
 | dsh-shadow-mind | DSH Version Required | Notes |
 |----------------|---------------------|-------|
+| v0.1.11 | `0.2.2-rc.5` | Desktop and Web compatibility |
 | v0.1.10 | `0.2.2-rc.3` | Exact-version admission and runtime validation |
 | v0.1.9 | `0.2.2-rc.2` | Flattened activation API, isolated review tools and report relay |
 | v0.1.8 | `0.2.2-rc.1` | Desktop / Web, native review executor and Agent model selection |
@@ -18,7 +19,7 @@ An independently versioned DeepSeek Harness bundle that starts fresh background 
 | v0.1.1         | `>=0.1.5-rc.1 <0.2.0` | Session API compatibility update |
 | v0.1.0         | `0.1.4` and earlier | Legacy session API |
 
-**Current release**: v0.1.10 targets DSH `0.2.2-rc.3` and Node.js `>=24.9.0`. Older DSH versions require their matching plugin release; other versions require separate validation.
+**Current release**: v0.1.11 targets DSH `0.2.2-rc.5` and Node.js `>=24.9.0`. Older DSH versions require their matching plugin release; other versions require separate validation.
 
 If you're using DSH `0.1.4` or earlier, please install `dsh-shadow-mind@0.1.0`:
 ```sh
@@ -31,10 +32,10 @@ The core design idea for this project comes from [pi-shadow-mind](https://github
 
 ## Install
 
-Install the immutable release tag, or download the package tarball from the [v0.1.10 Release](https://github.com/whutzefengxie-ops/dsh-shadow-mind/releases/tag/v0.1.10):
+Install the immutable release tag, or download the package tarball from the [v0.1.11 Release](https://github.com/whutzefengxie-ops/dsh-shadow-mind/releases/tag/v0.1.11):
 
 ```sh
-npx @deepseek-ai/dsh@0.2.2-rc.3 plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.10
+npx @deepseek-ai/dsh@0.2.2-rc.5 plugin --profile web add github:whutzefengxie-ops/dsh-shadow-mind#v0.1.11
 ```
 
 ### Desktop
@@ -46,7 +47,7 @@ $env:DSH_HOME = '<actual Desktop DSH_HOME>'
 & 'G:\DeepSeek Harness\resources\runtime\cli\bin\dsh.cmd' plugin --profile desktop add '<absolute tarball path>'
 ```
 
-Desktop independently owns `profiles/desktop`. Installing into an npm CLI Web profile does not verify Desktop installation. After restarting, confirm the installed bundle on **Plugins**, then open **Settings → Built-in Plugins → Shadow Mind**, then use a real file-reading tool turn to verify the review card. See the [v0.1.10 compatibility notes](docs/releases/v0.1.10.md) for installation and rollback.
+Desktop independently owns `profiles/desktop`. Installing into an npm CLI Web profile does not verify Desktop installation. After restarting, confirm the installed bundle on **Plugins**, then open **Settings → Built-in Plugins → Shadow Mind**, then use a real file-reading tool turn to verify the review card. See the [v0.1.11 compatibility notes](docs/releases/v0.1.11.md) for installation and rollback.
 
 Or pin a reviewed commit when installing from GitHub:
 
@@ -146,7 +147,7 @@ Follow the [installation and runtime validation plan](docs/installation-runtime-
 
 ## Development
 
-The devDependencies link against DeepSeek Harness `0.2.2-rc.3` source (`../deepseek-harness`, a sibling of this checkout). Prepare the commit pinned by `.github/workflows/ci.yml`:
+The devDependencies link against DeepSeek Harness `0.2.2-rc.5` source (`../deepseek-harness`, a sibling of this checkout). Prepare the commit pinned by `.github/workflows/ci.yml`:
 
 ```sh
 corepack enable
